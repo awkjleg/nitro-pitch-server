@@ -1,0 +1,41 @@
+# Nitro Pitch server
+
+This folder is the whole `nitropitch` site **plus** its online server. Cloudflare builds it straight from GitHub, so
+everything happens in the browser (works on a Chromebook, nothing to install).
+
+- `public/`: the game (the same files as the zip you upload to Cloudflare).
+- `src/worker.js`: the online server. It runs the lobby, chat, matchmaking and matches.
+- `wrangler.jsonc`: tells Cloudflare how to put it together. Its `"name"` must stay `nitropitch`.
+
+## One-time setup (about 10 minutes)
+
+1. **GitHub account.** Go to [github.com](https://github.com) and sign up (free) if you don't have an account.
+2. **New repository.** Click **+** (top right) → **New repository**. Name it `nitro-pitch-server`. Private is fine.
+   Click **Create repository**.
+3. **Upload the files.** Unzip `nitro-pitch-server-v5.2.zip` (open it in the Files app and copy the folder out).
+   On the new repository's page, click **uploading an existing file**. Open the `nitro-pitch-server` folder and drag
+   **everything inside it** (`wrangler.jsonc`, `README.md`, and the `src` and `public` folders) onto the page.
+   Click **Commit changes**.
+4. **Connect it to Cloudflare.** In the Cloudflare dashboard: **Workers & Pages** → **nitropitch** → **Settings** →
+   **Build** → **Connect** (Git repository) → **GitHub**. Allow Cloudflare to see the repository when GitHub asks, pick
+   `nitro-pitch-server`, branch `main`. Leave the build command empty and the deploy command as `npx wrangler deploy`.
+   Click **Connect** / **Save and deploy**.
+5. **Wait 1–2 minutes.** The **Deployments** tab shows the build. When it's done, open
+   [nitropitch.bibleway.workers.dev](https://nitropitch.bibleway.workers.dev): online should connect, even on a work or
+   school network.
+6. **Your other sites** (`yo`, `hi`, `nitro-pitch`): keep uploading the normal game zip there. They use the server on
+   `nitropitch` too.
+
+If the build fails, send Claude a screenshot of the build log (Deployments → the failed build).
+
+## Updating later
+
+Upload the new files to the GitHub repository (usually just `public/index.html` and `public/version.txt`; open the
+`public` folder on GitHub → **Add file** → **Upload files** → drop them in → **Commit changes**). Cloudflare redeploys by
+itself in a minute or two. Don't upload the game zip to `nitropitch` in the dashboard any more: GitHub is its source now.
+
+## Cost
+
+Cloudflare's free plan includes Durable Objects (what the server uses) with daily limits. If a busy day uses them up,
+online stops working on the server until midnight UTC, and the game switches to the old peer-to-peer online by itself
+(which doesn't work on networks that block it). The Workers Paid plan ($5/month) raises the limits a lot.
