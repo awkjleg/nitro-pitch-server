@@ -39,3 +39,4 @@ itself in a minute or two. Don't upload the game zip to `nitropitch` in the dash
 Cloudflare's free plan includes Durable Objects (what the server uses) with daily limits. If a busy day uses them up,
 online stops working on the server until midnight UTC, and the game switches to the old peer-to-peer online by itself
 (which doesn't work on networks that block it). The Workers Paid plan ($5/month) raises the limits a lot.
+
