@@ -1814,7 +1814,9 @@ input[type=range]{width:100%;accent-color:var(--gold)}
   const P2P = window.claude && window.claude.__np ? window.claude : null;      // peer-room.js (null inside Claude)
   if (!P2P || typeof WebSocket !== "function") return;
   const DEFAULT_URL = "wss://nitropitch.bibleway.workers.dev/ws";
-  const FIRST_WAIT = 6000;                        // the lobby falls back to peer-to-peer if the server doesn't answer by then
+  // the lobby falls back to peer-to-peer only if the server can't be reached: no connection within OPEN_WAIT, or it
+  // connected but never sent the room (STATE_WAIT; generous, a slow device can be busy loading the game meanwhile)
+  const OPEN_WAIT = 8000, STATE_WAIT = 30000;
   const PING = 10000, PONG_WAIT = 7000;           // keepalive (answered by the server without waking the room)
   const clone = o => JSON.parse(JSON.stringify(o));
   const applyPatch = (dst, p) => { for (const k in p) { if (p[k] === null) delete dst[k]; else dst[k] = p[k]; } return dst; };
@@ -1858,8 +1860,9 @@ input[type=range]{width:100%;accent-color:var(--gold)}
       let ws;
       try { ws = new WebSocket(serverUrl() + "?room=" + encodeURIComponent(this.name) + "&id=" + ME); } catch { this.lost(null); return; }
       this.ws = ws; let pongT = 0;
-      const first = setTimeout(() => { if (!this.openDone) { this.openDone = true; this.openRej({ code: "network" }); this.leave(); } }, FIRST_WAIT);
-      ws.onopen = () => { ws.send(JSON.stringify({ t: "hello", p: this.pres })); };
+      const giveUp = () => { if (!this.openDone) { this.openDone = true; this.openRej({ code: "network" }); this.leave(); } };
+      let first = setTimeout(giveUp, OPEN_WAIT);
+      ws.onopen = () => { clearTimeout(first); first = setTimeout(giveUp, STATE_WAIT); ws.send(JSON.stringify({ t: "hello", p: this.pres })); };
       ws.onmessage = e => {
         if (e.data === "pong") { clearTimeout(pongT); pongT = 0; return; }
         let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -1882,7 +1885,7 @@ input[type=range]{width:100%;accent-color:var(--gold)}
         }
         if (m.t === "resync") ws.send(JSON.stringify({ t: "full", p: this.pres }));   // the room forgot us while it slept
       };
-      ws.onclose = ws.onerror = () => { clearTimeout(first); clearInterval(ws._ping); clearTimeout(pongT); if (this.ws === ws) this.lost(ws); };
+      ws.onclose = ws.onerror = () => { clearTimeout(first); clearInterval(ws._ping); clearTimeout(pongT); if (this.ws === ws) { if (!this.openDone) giveUp(); else this.lost(ws); } };
       ws._ping = setInterval(() => {
         if (ws.readyState !== 1) return;
         try { ws.send("ping"); } catch {}
@@ -2859,9 +2862,13 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 const V3 = THREE.Vector3, Q = THREE.Quaternion;
 const $ = id => document.getElementById(id);
 // release number: goes up with every update (the website also serves it in version.txt)
-const BUILD = 2026110801;
+const BUILD = 2026110901;
 // patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)
-const PATCH_NOTES = { v: "5.2", title: "Update 5.2: Nitro Pitch servers", notes: [
+const PATCH_NOTES = { v: "5.3", title: "Update 5.3: Nitro Pitch servers are live", notes: [
+  "Online play runs on Nitro Pitch's own server: it works on school and work networks, and nobody's browser has to host the lobby",
+  "Slow computers no longer drop to the backup online system while the game is still loading, so everyone ends up in the same lobby",
+] };
+const PATCH_NOTES_52 = { v: "5.2", title: "Update 5.2: Nitro Pitch servers", notes: [
   "Online play now runs through Nitro Pitch's own server: it works on school and work networks that blocked it before, and nobody's browser has to host the lobby any more",
   "If the server can't be reached, the game switches to the old peer-to-peer online by itself",
 ] };
