@@ -2124,8 +2124,10 @@ input[type=range]{width:100%;accent-color:var(--gold)}
       },
       async deleteFeedback(id) { await ready; try { await fs.collection("feedback").doc(id).delete(); } catch (e) { fail(e); } },
       // give a player a cosmetic ("kind:index"); their game adds it to their garage
-      async giftItem(uid, item, note) {
+      async giftItem(uid, item, note, adminItem) {
         await ready;
+        // an ADMIN item also goes on the player's public list of ADMIN items the admin gave (adminItems/{uid})
+        if (adminItem) { try { await fs.collection("adminItems").doc(String(uid)).set({ items: firebase.firestore.FieldValue.arrayUnion(String(item)) }, { merge: true }); } catch (e) { fail(e); } }
         try { await fs.collection("gifts").add({ to: String(uid), xp: 0, item: String(item), note: String(note || "").slice(0, 120), claimed: false, at: firebase.firestore.FieldValue.serverTimestamp() }); } catch (e) { fail(e); }
       },
       // a reply to a report: the player who sent it gets it like a feedback reply
@@ -2304,6 +2306,8 @@ input[type=range]{width:100%;accent-color:var(--gold)}
       };
     })(),
     // public leaderboards: anyone can read the top rows, each player writes only their own row (see firestore.rules)
+    // the ADMIN items the admin gave a player (anyone can read the list; only the admin writes it)
+    async adminItems(uid) { await ready; try { const d = await fs.collection("adminItems").doc(String(uid)).get(); return d.exists && Array.isArray(d.data().items) ? d.data().items : []; } catch { return []; } },
     leaderboard: {
       async post(e) {
         await ready;
@@ -2862,9 +2866,12 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 const V3 = THREE.Vector3, Q = THREE.Quaternion;
 const $ = id => document.getElementById(id);
 // release number: goes up with every update (the website also serves it in version.txt)
-const BUILD = 2026110901;
+const BUILD = 2026111001;
 // patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)
-const PATCH_NOTES = { v: "5.3", title: "Update 5.3: Nitro Pitch servers are live", notes: [
+const PATCH_NOTES = { v: "5.4", title: "Update 5.4: ADMIN items are the admin's", notes: [
+  "ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone",
+] };
+const PATCH_NOTES_53 = { v: "5.3", title: "Update 5.3: Nitro Pitch servers are live", notes: [
   "Online play runs on Nitro Pitch's own server: it works on school and work networks, and nobody's browser has to host the lobby",
   "Slow computers no longer drop to the backup online system while the game is still loading, so everyone ends up in the same lobby",
 ] };
@@ -10517,6 +10524,35 @@ function toneCar(root) {
     }
   });
 }
+// ADMIN items: only the admin, or a player the admin gifted one to (adminItems/{uid}, which only the admin can write).
+// A save or a lobby presence can claim anything, so every page checks that list before drawing someone's ADMIN item.
+const adminVet = new Map();          // uid -> Set of "kind:index" the admin gave them (filled from the database)
+function adminItemsOf(uid) {
+  if (!uid || !UID_RE.test(uid)) return new Set();
+  if (uid === window.NP_ADMIN_UID) return { has: () => true };
+  const have = adminVet.get(uid);
+  if (have) return have instanceof Set ? have : new Set();
+  adminVet.set(uid, "pending");
+  const A = window.npAccounts;
+  Promise.resolve(A && A.adminItems ? A.adminItems(uid) : []).then(list => {
+    adminVet.set(uid, new Set(Array.isArray(list) ? list.filter(x => typeof x === "string") : []));
+    if (uid === myUid()) { enforceUnlocks(); applyProfileToMe(); lobbyPresence(); }
+    rosterKey = boardKey = "";
+  }).catch(() => adminVet.delete(uid));
+  return new Set();
+}
+// someone else's look: their ADMIN items are dropped unless the admin gave them those
+function vetLook(uid, o) {
+  const ok = (kind, i) => { const it = listOf(kind)[i]; return !it || !it.admin || adminItemsOf(uid).has(kind + ":" + i); };
+  if ("body" in o && !ok("body", o.body)) o.body = 0;
+  if ("decal" in o && !ok("decal", o.decal)) o.decal = 0;
+  if ("wheel" in o && !ok("wheel", o.wheel)) o.wheel = 0;
+  if ("topper" in o && !ok("topper", o.topper)) o.topper = 0;
+  if ("antenna" in o && !ok("antenna", o.antenna)) o.antenna = 0;
+  if ("ti" in o && !ok("title", o.ti)) o.ti = 0;
+  if ("bn" in o && !ok("banner", o.bn)) o.bn = 0;
+  return o;
+}
 const okTop = i => fin(i) && i >= 0 && i < TOPPERS.length ? i | 0 : 0, okAnt = i => fin(i) && i >= 0 && i < ANTENNAS.length ? i | 0 : 0;
 // antenna sway: the car's acceleration in its own frame (from its velocity change)
 const _aV = new V3(), _aQ = new Q();
@@ -12199,8 +12235,8 @@ const COS_KINDS = ["body", "decal", "wheel", "boost", "boom", "paint", "topper",
 function lockOf(kind, i) {
   const it = listOf(kind)[i];
   if (!it) return "Locked";
+  if (it.admin) return isAdminNow() || adminItemsOf(myUid()).has(kind + ":" + i) ? "" : "Admin only";   // (not the save: it can be edited)
   if (owns(kind, i)) return "";                         // the developer gave it to you
-  if (it.admin) return isAdminNow() ? "" : "Admin only";
   if (kind === "decal" && it.clan) return myClanLv() >= it.clan ? "" : "Clan level " + it.clan;
   if (it.tier >= 0) return profile.rt >= it.tier ? "" : "Reach " + Ranked.TIERS[it.tier].name;
   if (it.qn) return (profile.qn | 0) >= it.qn ? "" : "Complete " + it.qn + " quests";
@@ -12568,7 +12604,7 @@ function teamRoster() {
       if (!fin(pr.j)) continue;
       const tm = p.sameTab ? me.team : pr.tm;
       if (tm !== 0 && tm !== 1) continue;
-      list.push({ key: p.peer, team: tm, ti: p.sameTab ? myTi() : okTitle(pr.ti), bn: p.sameTab ? myBn() : okBanner(pr.bn), name: p.sameTab ? me.name : cleanName(pr.nm), ct: p.sameTab ? myClanTag() : typeof pr.ct === "string" && CT_RE.test(pr.ct) ? pr.ct : "", cid: p.sameTab ? clan.id : typeof pr.cid === "string" ? pr.cid.slice(0, 40) : "", j: pr.j, me: p.sameTab, host: !!(hostPeer && p.peer === hostPeer.peer), guest: p.guest, lv: p.sameTab ? myLevel() : clamp(pr.lv | 0, 1, MAXLV), body: p.sameTab ? me.body : clamp(pr.bd | 0, 0, CARS.length - 1), trail: p.sameTab ? me.trail : clamp(pr.tr | 0, 0, TRAILS.length - 1), mr: p.sameTab ? myMatchMmr() : fin(pr.mr) ? clamp(pr.mr, 0, MMR_MAX) : null, rb: p.sameTab ? bestRankIdx() : fin(pr.rb) ? int(pr.rb, -1, Ranked.RANKS.length - 1) : -1 });
+      list.push({ key: p.peer, team: tm, ...(p.sameTab ? { ti: myTi(), bn: myBn() } : vetLook(typeof pr.ui === "string" ? pr.ui : "", { ti: okTitle(pr.ti), bn: okBanner(pr.bn) })), name: p.sameTab ? me.name : cleanName(pr.nm), ct: p.sameTab ? myClanTag() : typeof pr.ct === "string" && CT_RE.test(pr.ct) ? pr.ct : "", cid: p.sameTab ? clan.id : typeof pr.cid === "string" ? pr.cid.slice(0, 40) : "", j: pr.j, me: p.sameTab, host: !!(hostPeer && p.peer === hostPeer.peer), guest: p.guest, lv: p.sameTab ? myLevel() : clamp(pr.lv | 0, 1, MAXLV), body: p.sameTab ? me.body : clamp(pr.bd | 0, 0, CARS.length - 1), trail: p.sameTab ? me.trail : clamp(pr.tr | 0, 0, TRAILS.length - 1), mr: p.sameTab ? myMatchMmr() : fin(pr.mr) ? clamp(pr.mr, 0, MMR_MAX) : null, rb: p.sameTab ? bestRankIdx() : fin(pr.rb) ? int(pr.rb, -1, Ranked.RANKS.length - 1) : -1 });
     }
     list.sort((a, b) => a.j - b.j || (a.key < b.key ? -1 : 1));
     if (!list.some(r => r.me) && (me.team === 0 || me.team === 1)) list.push({ key: myKey(), team: me.team, ti: myTi(), bn: myBn(), name: me.name, me: true, j: me.joinedAt, lv: myLevel(), body: me.body, trail: me.trail, host: isAuthority, mr: myMatchMmr(), rb: bestRankIdx() });
@@ -13171,6 +13207,7 @@ function lobbyPlayers() {
       un: typeof pr.un === "string" ? pr.un.slice(0, 14).toLowerCase() : "", ui: typeof pr.ui === "string" && UID_RE.test(pr.ui) ? pr.ui : "",
       pc: typeof pr.pc === "string" && PC_RE.test(pr.pc) ? pr.pc : "", pty: typeof pr.pty === "string" ? pr.pty.slice(0, 64) : "", pr,
       rm: typeof pr.rm === "string" && /^([ms][a-z0-9]{1,16}|p)$/.test(pr.rm) ? pr.rm : "" });
+    vetLook(out[out.length - 1].ui, out[out.length - 1]);
   }
   return out;
 }
@@ -14324,6 +14361,7 @@ function netPre(now) {
     r.body = clamp(pr.c[12] | 0, 0, CARS.length - 1); r.trail = clamp(pr.c[13] | 0, 0, TRAILS.length - 1); r.superS = !!pr.c[14];
     r.decal = clamp(pr.c[15] | 0, 0, DECALS.length - 1); r.wheel = clamp(pr.c[16] | 0, 0, WHEELS.length - 1); r.paint = okPaint(pr.c[17]); r.finish = okFinish(pr.c[18]); r.topper = okTop(pr.c[19]); r.antenna = okAnt(pr.c[20]);
     r.ti = okTitle(pr.ti); r.bn = okBanner(pr.bn);
+    vetLook(typeof pr.ui === "string" ? pr.ui : "", r);
     r.ex = clamp(pr.ex | 0, 0, BOOMS.length - 1);
     r.key = p.peer;
     const hn = pr.h && fin(pr.h.n) ? pr.h.n : 0;
@@ -14407,7 +14445,7 @@ function netSend(dt) {
   if (spec) { lobbyPresT -= 1 / 30; if (lobbyPresT <= 0) { lobbyPresT = 2; lobbyPresence(); } return; }   // spectators send nothing to the match
   beat = (beat + 1) % 1000;
   const onTeam = me.team === 0 || me.team === 1;
-  const patch = { nm: me.name, lv: myLevel(), ct: myClanTag() || null, cc: myClanColor() || null, cid: clan.id || null, tm: onTeam ? me.team : null, j: joinPending ? null : me.joinedAt, bd: me.body, tr: me.trail, ex: me.boom, c: onTeam ? carArr(me.car, me.trail, me) : null, h: me.hit, dm: me.dms.length ? me.dms : null, qc: me.qc, sk: me.sk === match.k ? match.k : null, t: beat, ts: Math.round(performance.now()), mr: Math.round(myMatchMmr()), rb: bestRankIdx(), ti: myTi(), bn: myBn(), pe: me.pe && me.pe.length ? me.pe : null };
+  const patch = { nm: me.name, lv: myLevel(), ct: myClanTag() || null, cc: myClanColor() || null, cid: clan.id || null, tm: onTeam ? me.team : null, j: joinPending ? null : me.joinedAt, bd: me.body, tr: me.trail, ex: me.boom, c: onTeam ? carArr(me.car, me.trail, me) : null, h: me.hit, dm: me.dms.length ? me.dms : null, qc: me.qc, sk: me.sk === match.k ? match.k : null, ui: myUid(), t: beat, ts: Math.round(performance.now()), mr: Math.round(myMatchMmr()), rb: bestRankIdx(), ti: myTi(), bn: myBn(), pe: me.pe && me.pe.length ? me.pe : null };
   if (isAuthority) {
     patch.g = {
       b: [r2(ball.p.x), r2(ball.p.y), r2(ball.p.z), r2(ball.v.x), r2(ball.v.y), r2(ball.v.z), r2(ball.w.x), r2(ball.w.y), r2(ball.w.z)],
@@ -14851,6 +14889,7 @@ async function statsForUid(uid, name) {
   const A = window.npAccounts;
   let r = null; try { r = A && A.leaderboard && A.leaderboard.get ? await A.leaderboard.get(uid) : null; } catch {}
   if (!r) { showStats({ name: name || "Player", lv: 1, rb: -1, lb: { wins: 0, goals: 0, mmr: 0 }, uid }); return; }
+  if (r) vetLook(uid, Object.assign(r, { ti: okTitle(r.ti), bn: okBanner(r.bn) }));
   showStats({ name: cleanName(r.name || name || "Player"), lv: clamp(r.level | 0, 1, MAXLV), rb: fin(r.rank) ? int(r.rank, -1, Ranked.RANKS.length - 1) : -1, lb: r, uid });
 }
 $("cmStats").onclick = () => { const e = carMenuEntry(); $("carMenu").hidden = true; if (e) showStats(e); };
@@ -17749,7 +17788,7 @@ setInterval(patchNotesTick, 400);
 let lbKind = "mmr", lbPostT = 0;
 function lbEntry() {
   const placed = profile.rk.filter(e => e[1] >= Ranked.PLACEMENTS), best = placed.length ? Math.max(...placed.map(e => e[0])) : 0;
-  return { name: me.name, mmr: best, rank: best ? Ranked.info(best).idx : -1, wins: profile.wins, goals: profile.goals, level: myLevel(), clanId: clan.id || "", ti: myTi(), bn: myBn(), rankOf: v => v ? Ranked.info(v).idx : -1 };
+  return { name: me.name, mmr: best, rank: best ? Ranked.info(best).idx : -1, wins: profile.wins, goals: profile.goals, level: myLevel(), clanId: clan.id || "", ti: isAdminNow() || !TITLES[myTi()].admin ? myTi() : 0, bn: isAdminNow() || !BANNERS[myBn()].admin ? myBn() : 0, rankOf: v => v ? Ranked.info(v).idx : -1 };
 }
 function postLeaderboard() {
   const A = window.npAccounts;
@@ -17788,7 +17827,7 @@ async function renderLeaderboard() {
     const li = document.createElement("li"); if (u && r.uid === u.uid) li.className = "me";
     const n = document.createElement("span"); n.className = "n"; n.textContent = "#" + (i + 1);
     const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = cleanName(r.name) + (u && r.uid === u.uid ? " (you)" : "");
-    namePlate(nm, r.ti, r.bn);
+    { const v = vetLook(r.uid, { ti: okTitle(r.ti), bn: okBanner(r.bn) }); namePlate(nm, v.ti, v.bn); }
     if (r.clanId && lbClans[r.clanId]) { const c = lbClans[r.clanId]; nm.prepend(tagEl(c.tag, clanLevel(c.xp).lv >= 2 && /^#[0-9a-f]{6}$/i.test(c.color || "") ? c.color : "")); }
     const v = document.createElement("span"); v.className = "v";
     // click a player for their stats (the admin also gets the XP / mute tools there)
@@ -17937,7 +17976,7 @@ async function renderAdmin() {
         const uid = idIn.value.trim() || who.value;
         if (!UID_RE.test(uid)) { adMsg("Pick a player or paste their account id."); return; }
         const it = listOf(kindSel.value)[+itemSel.value];
-        try { await A.admin.giftItem(uid, kindSel.value + ":" + itemSel.value, note.value.trim()); adMsg("Sent " + it.name + " to " + (who.selectedOptions[0] && who.value === uid ? who.selectedOptions[0].textContent : uid) + ". They get it next time they're online."); toast("Gift sent"); }
+        try { await A.admin.giftItem(uid, kindSel.value + ":" + itemSel.value, note.value.trim(), !!(it && it.admin)); adMsg("Sent " + it.name + " to " + (who.selectedOptions[0] && who.value === uid ? who.selectedOptions[0].textContent : uid) + ". They get it next time they're online."); toast("Gift sent"); }
         catch (e) { adMsg((e && e.message) || "Couldn't send the gift"); }
       }, true);
       const row = (l, el) => { const r = h("label", "f", l); r.append(el); return r; };
