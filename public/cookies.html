@@ -127,6 +127,7 @@
 
 <tr><td><code>np-cookie-choice-v1</code></td><td>Remember whether advertising is allowed in this browser.</td><td>Valid for 180 days. The record stays until replaced or cleared, but an expired choice does not allow ads.</td></tr>
 <tr><td><code>np-domain-migrated-v1</code></td><td>Remember a completed move so old bookmarks use your new save.</td><td>Until cleared; also remembered for the tab session where available.</td></tr>
+<tr><td><code>np-pending-rewards:*</code></td><td>Up to ten interrupted account reward claims so a connection problem can be retried without awarding the same match twice.</td><td>Removed after the claim is saved or no longer eligible, or when browser storage is cleared.</td></tr>
 <tr><td><code>np-match-history:*</code>, <code>np-blocked:*</code></td><td>Recent completed matches and blocked players, scoped to your account on this device (or guest use). Blocking hides chat and invitations.</td><td>Until cleared. Match history retains the latest 20 matches; the block list holds up to 100 players.</td></tr>
 <tr><td><code>np-welcome-v1</code></td><td>Remember that you chose or dismissed the first-time quick-start card.</td><td>Until cleared.</td></tr>
 </tbody>

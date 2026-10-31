@@ -1,0 +1,66 @@
+// Runs inside the game closure. Firebase owns identity; the Worker owns earned progress.
+const NPSecure = (() => {
+ const api=window.NPProgressAPI,active=()=>!!window.npAccounts?.user();
+ const uid=()=>window.npAccounts?.user()?.uid;
+ let appliedUid='',applying=false,busyDrop=false,busyTradeIn=false,practiceMid='',tickBusy=false;
+ const key=()=> 'np-pending-rewards:'+uid();
+ const pendingRead=()=>{try{return JSON.parse(localStorage.getItem(key())||'[]').slice(0,10);}catch{return[];}};
+ const pendingWrite=rows=>{try{localStorage.setItem(key(),JSON.stringify(rows.slice(-10)));}catch{}};
+ function apply(data){
+  if(!data||applying)return;applying=true;
+  try{const pending=savePending?Object.fromEntries(['name','body','decal','wheel','trail','boom','paint','finish','topper','antenna','title','banner'].map(k=>[k,profile[k]])):{};Object.assign(profile,sanitizeProfile(data),pending);appliedUid=uid();try{localStorage.setItem('np-profile',JSON.stringify(profile));}catch{}enforceUnlocks();applyProfileToMe();renderMenuChrome();}finally{applying=false;}
+ }
+ api?.listen((data,rev,owner)=>{if(owner===uid()&&dbOk&&appliedUid===owner)apply(data);});
+ const adopt=adoptStore;adoptStore=async function(st,merge){appliedUid='';await adopt(st,merge);appliedUid=uid()||'';if(active())recover();};
+ const leave=leaveToMenu;leaveToMenu=function(...args){const wasRanked=active()&&mode==='online'&&match.rk&&match.ph!=='over';leave(...args);if(wasRanked)setTimeout(()=>api.call('load').then(r=>apply(r.profile)).catch(()=>{}),800);};
+ const begin=beginMatch;beginMatch=function(){begin();if(active()&&mode==='offline'){const mid=match.mid;practiceMid=mid;api.call('session-start',{id:'start-'+mid,mid,mut:match.mut}).catch(()=>{if(practiceMid===mid)practiceMid='';});}};
+ setInterval(()=>{if(!active()||!dbOk||mode!=='offline'||paused||freePlay||training||viewer||!['play','countdown','goal','replay'].includes(match.ph)||practiceMid!==match.mid||tickBusy)return;tickBusy=true;api.call('session-tick',{id:crypto.randomUUID(),mid:match.mid}).catch(()=>{}).finally(()=>{tickBusy=false;});},10000);
+ const oldOver=onMatchOver;
+ async function claim(row){const result=await api.call('match',row);apply(result.profile);pendingWrite(pendingRead().filter(x=>x.id!==row.id));return result;}
+ let recovering=false;
+ async function recover(){if(recovering)return;recovering=true;try{for(const row of pendingRead()){try{const r=await claim(row);toast('Match rewards saved: +'+r.result.xpGain+' XP');}catch(e){if([409,422].includes(e.status)&&!String(e.message).includes('Waiting'))pendingWrite(pendingRead().filter(x=>x.id!==row.id));}}}finally{recovering=false;}}
+ onMatchOver=async function(){
+  if(!active()||['free','training','viewer'].includes(matchKind())||![0,1].includes(me.team)||spec)return oldOver();
+  const mid=match.mid,kind=matchKind(),win=match.s[0]===match.s[1]?-1:match.s[0]>match.s[1]?0:1;
+  if(awardedMid===mid){showPost(win);return;}
+  const roster=teamRoster(),mvp=boardRows($('postBody'),roster,true);$('postSaveRp').hidden=!(replay.clip&&replay.clip.length>=10&&replay.savedClip!==replay.clip);
+  lastResult=null;showPost(win);$('postXpTotal').textContent='Saving rewards…';$('postXp').textContent='Checking the match result. You can stay here or return to the menu.';
+  const old=pendingRead().find(x=>x.mid===mid&&x.room===(mode==='online'?gameCode:null));
+  const row=old||{id:crypto.randomUUID(),mid,room:mode==='online'?gameCode:null,clanId:clan.id||null,score:[match.s[me.team],match.s[1-me.team]],st:match.st[myKey()]||[0,0,0,0,0,0],mvp:mvp===myKey()};
+  if(!old)pendingWrite([...pendingRead(),row]);
+  const room=game,score=match.s.slice();let error;
+  for(let attempt=0;attempt<8;attempt++){
+   try{
+    room?.send?.({t:'result-ack',mid,score});
+    const r=await claim(row);awardedMid=mid;lastResult=r.result;
+    if(match.mid===mid&&screen==='post')showPost(win);else toast('Match rewards saved: +'+r.result.xpGain+' XP');
+    if(row.clanId&&row.clanId===clan.id&&r.result.clanContribution)queueClan(r.result.clanContribution);
+    lobbyPresence();return;
+   }catch(e){error=e;if(e.status===422)break;if(attempt<7)await new Promise(resolve=>setTimeout(resolve,1200));}
+  }
+  if(match.mid!==mid||screen!=='post')return;
+  $('postXpTotal').textContent='Rewards not saved yet';$('postXp').replaceChildren(h('p','note',error?.message||'Try again when your connection is back.'));
+  const retry=sbtn('Retry saving rewards','sm pri',()=>{retry.disabled=true;onMatchOver();});$('postXp').append(retry);
+ };
+ const open=openDrop;openDrop=async function(index){if(!active())return open(index);if(busyDrop)return null;busyDrop=true;try{const r=await api.call('drop',{id:crypto.randomUUID(),index,rev:api.revision()});apply(r.profile);return r.got;}catch(e){toast(e.message);try{apply((await api.call('load')).profile);}catch{}return null;}finally{busyDrop=false;}};
+ const ti=tradeIn;tradeIn=async function(rarity,keys){if(!active())return ti(rarity,keys);if(busyTradeIn)return null;busyTradeIn=true;try{const r=await api.call('trade-in',{id:crypto.randomUUID(),rarity,keys,rev:api.revision()});apply(r.profile);return {got:r.got,picked:r.picked};}catch(e){toast(e.message);try{apply((await api.call('load')).profile);}catch{}return null;}finally{busyTradeIn=false;}};
+ const rr=rerollQuest;rerollQuest=async function(index){if(!active())return rr(index);try{apply((await api.call('reroll',{id:crypto.randomUUID(),index})).profile);return true;}catch(e){toast(e.message);return false;}};
+ // Signed-in ranks only change when the room's confirmed result is committed.
+ const ranked=recordRankedResult;recordRankedResult=function(...args){if(active())return null;return ranked(...args);};
+ const settle=settleAbandoned;settleAbandoned=function(){if(active()){profile.ab=null;return null;}return settle();};
+ const end=endTrade;endTrade=function(message){const T=trade,other=T&&lobbyPlayers().find(x=>x.peer===T.peer)?.ui;if(active()&&T&&!T.done&&other)api.call('trade-cancel',{id:crypto.randomUUID(),trade:T.id,other}).catch(()=>{});end(message);};
+ const complete=completeTrade;
+ completeTrade=async function(){
+  if(!active())return complete();const T=trade;if(!T||T.pending||T.done)return;
+  const other=lobbyPlayers().find(x=>x.peer===T.peer)?.ui;if(!other){toast('Both players must be signed in to trade.');return;}
+  T.pending=true;
+  try{const r=await api.call('trade',{id:'trade-'+T.id,trade:T.id,other,mine:T.o,theirs:T.their});if(trade!==T)return;if(r.waiting){setTimeout(()=>{if(trade===T){T.pending=false;completeTrade();}},1000);return;}
+   apply(r.profile);T.done=true;T.st='done';$('tradePop').hidden=true;lobbyPresence();toast('Trade complete. Your items are saved.');if(screen==='garage')renderGarage();
+  }catch(e){if(trade===T){T.ok='';T.pending=false;lobbyPresence();toast(e.message);}}
+ };
+ claimGifts=async function(){
+  const A=adA();if(giftBusy||!giftQ.length||!dbOk||!A||!active())return;giftBusy=true;
+  try{while(giftQ.length){const g=giftQ.shift();try{const r=await api.call('gift',{id:'gift-'+g.id,gift:g.id});apply(r.profile);await A.claimGift(g.id);if(r.claimed)noteQ.push({id:'gift:'+g.id,title:'Gift from the developer',text:r.got?'You got '+r.got.name+'! It is in your garage.':(r.xp||r.px)>=0?'Your bonus XP has been saved.':'Your XP has been adjusted.',about:r.note||'',unlock:r.after?.lv>r.before?.lv?{before:r.before,after:r.after,mid:'gift-'+g.id}:null});}catch(e){giftSeen.delete(g.id);toast(e.message);}}}finally{giftBusy=false;showNote();}
+ };
+ return {apply,active,api,recover};
+})();

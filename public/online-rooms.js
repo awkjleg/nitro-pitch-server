@@ -15,7 +15,7 @@
     constructor(name, lobby = false) {
       this.name = name; this.lobby = lobby; this.me = me;
       this.pres = {}; this.sent = {}; this.others = new Map(); this.cbs = []; this.connCbs = []; this.events = new Map(); this.rttMs=null; this.lastPongAt=0;
-      this.closed = false; this.isConnected = false; this.created = undefined; this.tries = 0; this.ws = null;
+      this.serverHost=null;this.authUid=null;this.authBusy=false;this.authAt=0;this.closed = false; this.isConnected = false; this.created = undefined; this.tries = 0; this.ws = null;
       this.opened = new Promise((resolve,reject) => { this.resolve = resolve; this.reject = reject; }); this.opened.catch(() => {});
       this.rebuild(); this.connect();
     }
@@ -68,7 +68,11 @@
       if (this.ws?.readyState !== 1) return;
       try { this.ws.send(typeof message === 'string' ? message : JSON.stringify(message)); } catch (_) {}
     }
-    sync() { this.send({t:'sync',p:this.pres}); }
+    async authenticate(){
+      const A=window.npAccounts,u=A?.user();if(!u&&this.authUid){this.send({t:'auth-clear'});this.authUid=null;}if(this.authBusy||!u||this.authUid===u.uid&&Date.now()-this.authAt<45000||this.authRequestedUid===u.uid&&Date.now()-this.authAt<5000)return;this.authBusy=true;this.authRequestedUid=u.uid;this.authAt=Date.now();
+      try{const token=await A.token();if(A.user()?.uid===u.uid){this.send({t:'auth',token});this.authAt=Date.now();}}catch{}finally{this.authBusy=false;}
+    }
+    sync() { this.authenticate();this.send({t:'sync',p:this.pres}); }
     connect() {
       if (this.closed) return;
       clearTimeout(this.retryTimer);
@@ -85,14 +89,18 @@
       ws.onopen=()=>{
         if(this.ws!==ws || this.closed)return;
         clearTimeout(this.firstTimer);this.firstTimer=setTimeout(fail,STATE_WAIT);
-        this.send({t:'hello',p:this.pres});
+        this.send({t:'hello',p:this.pres});this.authUid=null;this.authenticate();
       };
       ws.onmessage=event=>{
         if(this.ws!==ws || this.closed)return;
         if(event.data==='pong'){if(this.replyTimer){const rtt=Math.max(0,Date.now()-this.pingSentAt);this.rttMs=Math.round(this.rttMs===null?rtt:this.rttMs*.7+rtt*.3);this.lastPongAt=Date.now();}clearTimeout(this.replyTimer);this.replyTimer=null;return;}
         let message;try{message=JSON.parse(event.data);}catch(_){return;}
         if(!message || typeof message!=='object')return;
+        if(message.t==='auth-ok'){this.authUid=message.uid;return;}
+        if(message.t==='auth-error'){this.authUid=null;return;}
+        if(message.t==='host'){this.serverHost=message.id;return;}
         if(message.t==='state'){
+          this.serverHost=message.host||this.serverHost;
           clearTimeout(this.firstTimer);this.tries=0;this.applyState(message);
           if(this.created===undefined)this.created=!!message.created;
           this.everConnected=true;this.setConnected(true);this.resolve(this);this.ping();return;
@@ -140,6 +148,7 @@
       if(this.ws.readyState===1){clearTimeout(this.replyTimer);this.replyTimer=null;this.lastTick=Date.now();this.sync();this.ping();}
     }
     async presence(values) {
+      this.authenticate();
       if(!values || typeof values!=='object')return;
       const out={};
       for(const key of Object.keys(values)){const value=values[key]===undefined?null:values[key],text=JSON.stringify(value);if(this.sent[key]!==text){this.sent[key]=text;out[key]=value;}}

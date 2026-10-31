@@ -76,14 +76,15 @@
   const tradeStart=startTrade;startTrade=function(peer){if(isBlocked(lobbyPlayers().find(p=>p.peer===peer))){toast('Unblock this player before trading.');return;}tradeStart(peer);};
 
   const ended=onMatchOver;
-  onMatchOver=function(){
-    const kind=matchKind(),roster=teamRoster(),team=me.team,mid=match.mid;
-    ended();load();
-    if(mid&&[0,1].includes(team)&&!spec&&!['training','viewer','free'].includes(kind)){
-      const stats=match.st[myKey()]||[],rank=lastResult?.mid===mid?lastResult.rank:null;
-      const row={id:mid,at:Date.now(),title:matchTitle(),result:match.s[team]===match.s[1-team]?'Draw':match.s[team]>match.s[1-team]?'Win':'Loss',score:[match.s[team],match.s[1-team]],goals:stats[1]||0,assists:stats[2]||0,saves:stats[3]||0,xp:lastResult?.mid===mid?lastResult.xpGain:0,team:roster.filter(p=>p.team===team).map(p=>p.name),opponents:roster.filter(p=>p.team===1-team).map(p=>p.name),rank:rank?{before:rank.before.mmr,after:rank.after.mmr}:null};
+  onMatchOver=async function(){
+    const kind=matchKind(),roster=teamRoster(),team=me.team,mid=match.mid,finished=structuredClone(match),title=matchTitle(),key=myKey(),wasSpec=spec,accountOwner=owner;
+    await ended();load();if(owner!==accountOwner)return;
+    if(mid&&[0,1].includes(team)&&!wasSpec&&!['training','viewer','free'].includes(kind)){
+      const stats=finished.st[key]||[],rank=lastResult?.mid===mid?lastResult.rank:null;
+      const row={id:mid,at:Date.now(),title,result:finished.s[team]===finished.s[1-team]?'Draw':finished.s[team]>finished.s[1-team]?'Win':'Loss',score:[finished.s[team],finished.s[1-team]],goals:stats[1]||0,assists:stats[2]||0,saves:stats[3]||0,xp:lastResult?.mid===mid?lastResult.xpGain:0,team:roster.filter(p=>p.team===team).map(p=>p.name),opponents:roster.filter(p=>p.team===1-team).map(p=>p.name),rank:rank?{before:rank.before.mmr,after:rank.after.mmr}:null};
       historyRows=C.addHistory(historyRows,row);write('np-match-history:'+owner,historyRows);
     }
+    if(match.mid!==mid)return;
     const expected=roster.filter(p=>!p.bot).map(p=>p.key).sort();
     rematchState=mode==='online'&&!spec&&!freePlay&&expected.length>=2?{mid,expected,voted:false}:null;
     bindRematch();renderRematch();

@@ -1,3 +1,5 @@
+import secureProgress from "./secure-progress.txt";
+import gamePolish from "./game-polish.txt";
 import drivingUpdates from "./driving-updates.txt";
 import playerFeatures from "./player-features.txt";
 // The original game is a single prebuilt HTML asset. Keep the small, reviewed
@@ -10,7 +12,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111010;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111011;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -62,7 +64,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.12\",\n  \"title\": \"Update 5.12: Quick start, wall driving & ball cam\",\n  \"notes\": [\n    \"New players get a small quick-start card with the tutorial, free play and current controls. Try the tutorial or free play before creating an account; online matches still need sign-in.\",\n    \"Wall and ramp movement now uses smaller contact steps to follow curved surfaces more smoothly, while keeping jumps and ceiling releases.\",\n    \"Ball cam now frames the ball from the actual camera position after wall avoidance. Overhead tracking holds a stable orbit and eases its horizon to reduce sudden spins. Holding rear view now works with ball cam on.\",\n    \"New players start with a wider camera view and camera shake off. Existing saved camera settings are kept.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.13\",\n  \"title\": \"Update 5.13: New arenas, bigger goals & rewarding unlocks\",\n  \"notes\": [\n    \"Explore Sunset Canyon, Aurora Ridge and Orbital Station with a new visual arena picker. All arenas share the same competitive field.\",\n    \"Goal explosions now spread farther with a bigger shockwave and stronger car pushback.\",\n    \"Unlocks show your new items, their rarity and an Equip now button. Refreshed menus, garage cards and animated XP make rewards easier to enjoy.\",\n    \"Existing Firebase accounts and progress are preserved. New account rewards, drops and trades are checked and saved by the server.\",\n    \"Ranked results require opposing player confirmation. Bot-only fallback matches are practice and do not change your rank.\",\n    \"Progress saves can be retried after a connection interruption. Daily quests now reset together at midnight UTC.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -86,7 +88,7 @@ const patches = [
   },
   {
     "before": "requestAnimationFrame(frame);\n})();\n</script>",
-    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_PLAYER_FEATURES */\n})();\n</script>"
+    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n})();\n</script>"
   },
   {
     "before": "<button class=\"nb\" id=\"navSettings\" type=\"button\">",
@@ -135,6 +137,78 @@ const patches = [
   {
     "before": "fov: 90, dist: 270, height: 100, angle: -3, stiff: 0.5, ver: SET_VER, ballCam: true, shake: true,",
     "after": "fov: 105, dist: 280, height: 100, angle: -3, stiff: 0.5, ver: SET_VER, ballCam: true, shake: false,"
+  },
+  {
+    "before": "    user: () => toUser(auth && auth.currentUser),",
+    "after": "    user: () => toUser(auth && auth.currentUser),\n    async token(force=false) { await ready; if (!auth.currentUser) throw new Error(\"Sign in to continue\"); return auth.currentUser.getIdToken(force); },"
+  },
+  {
+    "before": "      const ref = fs.collection(\"players\").doc(fu.uid);\n      return {",
+    "after": "      if (window.NPProgressAPI) return window.NPProgressAPI.store();\n      const ref = fs.collection(\"players\").doc(fu.uid);\n      return {"
+  },
+  {
+    "before": "</head>",
+    "after": "<script src=\"/progress-api.js\"></script>\n<link rel=\"stylesheet\" href=\"/game-polish.css\">\n</head>"
+  },
+  {
+    "before": "function openDropUI(k) {",
+    "after": "async function openDropUI(k) {"
+  },
+  {
+    "before": "  const got = openDrop(k); if (!got) return;",
+    "after": "  const got = await openDrop(k); if (!got) return;"
+  },
+  {
+    "before": "function tradeInUI() {",
+    "after": "async function tradeInUI() {"
+  },
+  {
+    "before": "  const r = tiRar, res = tradeIn(r, tiSel.slice());",
+    "after": "  const r = tiRar, res = await tradeIn(r, tiSel.slice());"
+  },
+  {
+    "before": "() => { if (rerollQuest(i)) { toast(\"New quest: \" + questText(profile.qs.dq[i])); renderPass(); }",
+    "after": "async () => { if (await rerollQuest(i)) { toast(\"New quest: \" + questText(profile.qs.dq[i])); renderPass(); }"
+  },
+  {
+    "before": "function startLocalMatch(m) { startOfflineMatch(matchCfg(m), m.team === 1 ? 1 : 0); }",
+    "after": "function startLocalMatch(m) { const cfg=matchCfg(m); cfg.rk=0; cfg.mm=0; startOfflineMatch(cfg, m.team === 1 ? 1 : 0); toast(\"Practice match against bots: earn XP, rank unchanged\"); }"
+  },
+  {
+    "before": "function pickHost(now) {\n  let best = null;",
+    "after": "function pickHost(now) {\n  if (game.serverHost) { const selected=game.peers().find(p=>p.peer===game.serverHost); if(selected)return selected; }\n  let best = null;"
+  },
+  {
+    "before": "const KICK_MARKS =",
+    "after": "THEMES.push(\n  { name: \"Sunset Canyon\", night: false, bg: 0x312039, horizon: 0xe9a174, fog: [420, 1050], stripes: [\"#447054\", \"#4c7a5b\"], line: \"rgba(245,245,221,.9)\", corner: \"#392a39\", wall: 0xffc69b, wallOp: .13, rim: 0xf6ccab, stand: 0x423345, outer: 0x452f3d, strip: 0xffbf79, beam: .03, roof: 0x352c3e, ramp: 0x67505c },\n  { name: \"Aurora Ridge\", night: true, bg: 0x071b31, horizon: 0x276a78, fog: [420, 1000], stripes: [\"#28554c\", \"#306256\"], line: \"rgba(223,245,239,.92)\", corner: \"#122b3a\", wall: 0x8cebd7, wallOp: .14, rim: 0xa0eee3, stand: 0x153846, outer: 0x16333e, strip: 0x71e7cb, beam: .04, roof: 0x132b3e, ramp: 0x345a63 },\n  { name: \"Orbital Station\", night: true, bg: 0x040b1b, horizon: 0x263757, fog: [450, 1100], stripes: [\"#273d50\", \"#30475a\"], line: \"rgba(229,241,255,.92)\", corner: \"#0b182d\", wall: 0x9dc9ef, wallOp: .13, rim: 0xe1ebff, stand: 0x1d2c46, outer: 0x101c32, strip: 0x85d8ed, beam: .03, roof: 0x16243d, ramp: 0x40516b }\n);\nconst KICK_MARKS ="
+  },
+  {
+    "before": "const GOAL_BLAST_R = 36, GOAL_BLAST_V = 48, _gbd = new V3();",
+    "after": "const GOAL_BLAST_R = 72, GOAL_BLAST_V = 64, _gbd = new V3();"
+  },
+  {
+    "before": "  const f = (1 - dist / GOAL_BLAST_R) ** 1.5;",
+    "after": "  const f = (1 - dist / GOAL_BLAST_R) ** 0.85;"
+  },
+  {
+    "before": "  d.y = Math.max(d.y, 0) + 0.45; d.normalize();",
+    "after": "  d.y = Math.max(d.y, 0) + 0.6; d.normalize();"
+  },
+  {
+    "before": "  c.v.addScaledVector(d, GOAL_BLAST_V * f);",
+    "after": "  c.v.addScaledVector(d, GOAL_BLAST_V * f).clampLength(0, 90);"
+  },
+  {
+    "before": "  if (f > 0.25) fx.burst(c.p, 0xffffff, Math.round(40 * f), 10, 0.6, 6);",
+    "after": "  if (f > 0.25) fx.burst(c.p, 0xffffff, Math.round(24 * f), 12, 0.6, 6);"
+  },
+  {
+    "before": "const dayNow = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);",
+    "after": "const dayNow = () => Math.floor(Date.now() / 86400000);"
+  },
+  {
+    "before": "  if (mode === \"menu\") { demoSim(dt);",
+    "after": "  if (!$(\"unlockPop\").hidden || !$(\"dropPop\").hidden) thumbs.pump();\n  if (mode === \"menu\") { demoSim(dt);"
   }
 ];
 
@@ -146,5 +220,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures);
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish);
 }

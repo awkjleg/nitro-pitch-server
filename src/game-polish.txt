@@ -1,0 +1,93 @@
+const NPPolish = (() => {
+ const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+ const low=()=>settings.quality===0||(settings.quality===3&&perfLite);
+ const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
+ // Scenery stays beyond the collision shell. Every arena shares exactly the same field and boost pads.
+ let scenery=null,sceneryIndex=-1;
+ function disposeScenery(){if(!scenery)return;scene.remove(scenery);const geos=new Set(),mats=new Set();scenery.traverse(o=>{if(o.geometry)geos.add(o.geometry);if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m));});geos.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());scenery=null;}
+ function decorate(index){
+  if(index===sceneryIndex)return;sceneryIndex=index;disposeScenery();if(index<5)return;
+  const th=THEMES[index],group=scenery=new THREE.Group();group.name='Nitro Pitch arena scenery';scene.add(group);
+  const material=color=>new THREE.MeshBasicMaterial({color,fog:false});
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(1200,24,12),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:{top:{value:new THREE.Color(th.bg)},bottom:{value:new THREE.Color(th.horizon)}},vertexShader:'varying float h;void main(){h=normalize(position).y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',fragmentShader:'uniform vec3 top;uniform vec3 bottom;varying float h;void main(){gl_FragColor=vec4(mix(bottom,top,smoothstep(-0.12,0.65,h)),1.0);}'}));sky.renderOrder=-5;group.add(sky);
+  const matrix=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3(),scale=new THREE.Vector3(),rand=rng(500+index);
+  if(index===5||index===6){
+   const mountains=new THREE.InstancedMesh(new THREE.ConeGeometry(1,1,index===5?5:4),new THREE.MeshLambertMaterial({color:index===5?0x874f59:0x31556d,flatShading:true}),36);
+   for(let i=0;i<36;i++){const a=i/36*Math.PI*2,r=330+rand()*120,h=75+rand()*170;v.set(Math.cos(a)*r,h/2-20,Math.sin(a)*r);scale.set(45+rand()*45,h,40+rand()*45);q.setFromAxisAngle(UP,rand()*Math.PI);matrix.compose(v,q,scale);mountains.setMatrixAt(i,matrix);}group.add(mountains);
+   if(index===5){const sun=new THREE.Mesh(new THREE.SphereGeometry(54,24,16),material(0xffbf83));sun.position.set(-260,130,-570);group.add(sun);}
+   else{
+    for(let n=0;n<3;n++){const points=[];for(let j=0;j<=30;j++)points.push(new V3(-420+j*28,175+n*32+Math.sin(j*.22+n)*25,-380+n*80));const ribbon=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),60,6-n,4,false),new THREE.MeshBasicMaterial({color:[0x44d9ac,0x719ce8,0xb58cfc][n],transparent:true,opacity:.3,depthWrite:false,fog:false}));group.add(ribbon);}
+   }
+  }else{
+   const planet=new THREE.Mesh(new THREE.SphereGeometry(110,32,20),new THREE.MeshLambertMaterial({color:0x7198ad}));planet.position.set(230,260,-580);group.add(planet);
+   const ring=new THREE.Mesh(new THREE.RingGeometry(145,190,80),new THREE.MeshBasicMaterial({color:0xd8bd92,side:THREE.DoubleSide,transparent:true,opacity:.55,fog:false}));ring.position.copy(planet.position);ring.rotation.set(.85,.2,-.3);group.add(ring);
+   const pylons=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshLambertMaterial({color:0x40536f}),24);
+   for(let i=0;i<24;i++){const a=i/24*Math.PI*2;v.set(Math.cos(a)*240,45,Math.sin(a)*270);scale.set(7,90,7);q.setFromAxisAngle(UP,-a);matrix.compose(v,q,scale);pylons.setMatrixAt(i,matrix);}group.add(pylons);
+   const orbit=new THREE.Mesh(new THREE.TorusGeometry(255,2,6,80),material(0x7dcced));orbit.rotation.x=Math.PI/2;orbit.position.y=90;group.add(orbit);
+  }
+ }
+ const theme=applyTheme;applyTheme=function(i){theme(i);decorate(i);if(THEMES[i]?.ramp)rampMat.color.setHex(THEMES[i].ramp);};
+ const palette=[['#101d36','#5779a9'],['#548abd','#f0c891'],['#102c48','#8dc9d9'],['#36203a','#f39256'],['#100e35','#b95ac7'],['#452948','#ffb479'],['#0c243d','#54bfc0'],['#071225','#4985a7']];
+ const captions=['The original home of car soccer','Open skies. Fresh grass.','Cold lights. Clear lines.','Under the furnace lights','After-hours neon','Warm skies. Canyon silhouettes.','Northern lights above the pitch','A stadium above the atmosphere'];
+ function thumbnail(index){
+  const cv=node('canvas');cv.width=336;cv.height=180;cv.setAttribute('aria-hidden','true');const c=cv.getContext('2d'),p=palette[index]||palette[0];
+  const grad=c.createLinearGradient(0,0,0,180);grad.addColorStop(0,p[0]);grad.addColorStop(1,p[1]);c.fillStyle=grad;c.fillRect(0,0,336,180);
+  const rnd=rng(index+71);if(THEMES[index].night){c.fillStyle='#dceaff99';for(let i=0;i<24;i++)c.fillRect(rnd()*336,rnd()*85,1,1);}
+  if(index===7){c.fillStyle='#9ab9c6';c.beginPath();c.arc(248,44,30,0,Math.PI*2);c.fill();c.strokeStyle='#d9c293';c.lineWidth=7;c.beginPath();c.ellipse(248,44,48,10,-.32,0,Math.PI*2);c.stroke();}
+  else if(index===5||index===1){c.fillStyle='#ffd2a1';c.beginPath();c.arc(245,55,22,0,Math.PI*2);c.fill();}
+  if(index===6){c.strokeStyle='#61e4c780';c.lineWidth=8;c.beginPath();c.moveTo(0,35);c.bezierCurveTo(100,5,210,85,336,22);c.stroke();}
+  c.fillStyle=index===5?'#704153':'#10223a';c.beginPath();c.moveTo(0,130);for(let x=0;x<=340;x+=30)c.lineTo(x,75+rnd()*40);c.lineTo(336,160);c.fill();
+  c.fillStyle=THEMES[index].stripes[0];c.beginPath();c.moveTo(55,109);c.lineTo(280,109);c.lineTo(336,180);c.lineTo(0,180);c.fill();c.strokeStyle='#c9deeb99';c.lineWidth=1.5;c.stroke();c.beginPath();c.ellipse(168,145,43,13,0,0,Math.PI*2);c.moveTo(20,145);c.lineTo(316,145);c.stroke();
+  c.strokeStyle='#57acff';c.lineWidth=3;c.strokeRect(140,96,55,19);c.fillStyle='#0b142399';c.fillRect(0,174,336,6);return cv;
+ }
+ function arenaStrip(select){let strip=document.getElementById('np-'+select.id);if(!strip){strip=node('div','np-arena-strip');strip.id='np-'+select.id;strip.setAttribute('role','group');strip.setAttribute('aria-label','Choose an arena');select.closest('label').after(strip);THEMES.forEach((th,i)=>{const b=node('button','np-arena-card');b.type='button';b.append(thumbnail(i),node('b','',th.name),node('small','',captions[i]));if(i>=5)b.append(node('em','','NEW'));b.onclick=()=>{select.value=String(i);select.dispatchEvent(new Event('change',{bubbles:true}));arenaStrip(select);if(mode==='menu'){match.mut[4]=i;setTheme(i);}sfx.ready();};strip.append(b);});}
+  [...strip.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(i===+select.value)));
+ }
+ for(const [name,id]of [['exhibition','exArena'],['private','pvArena']]){const original=name==='exhibition'?renderExhibition:renderPrivate;const run=()=>{original();arenaStrip($(id));};if(name==='exhibition')renderExhibition=run;else renderPrivate=run;$(id).addEventListener('change',()=>arenaStrip($(id)));}
+ // Item reveals show actual owned cosmetics, including toppers, antennas, titles and banners.
+ let rewardTimer=0,rewardSequence=0,returnFocus=null;
+ const label=node('div','np-reward-label','ADDED TO YOUR COLLECTION'),copy=node('p','np-reward-copy','Earned on the pitch. Ready for your next match.');
+ $('unlockT').before(label);$('unlockT').after(copy);$('unlockOk').querySelector('span').textContent='Continue';
+ function itemsFor(r){const items=[],seen=new Set();const add=(kind,i)=>{const key=kind+':'+i,it=listOf(kind)?.[i];if(it&&!seen.has(key)&&!lockOf(kind,i)){seen.add(key);items.push({kind,i,name:it.name,rar:it.rar||0});}};
+  for(const kind of COS_KINDS)listOf(kind).forEach((it,i)=>{if(!it.admin&&!it.drop&&!it.pass&&!(it.tier>=0)&&!it.clan&&!it.qn&&!it.lead&&(it.lv||1)>r.before.lv&&(it.lv||1)<=r.after.lv)add(kind,i);});
+  for(const t of r.pass?.tiers||[])for(const it of passReward(t))if(it.i!==undefined)add(it.kind,it.i);
+  for(const t of r.rank?.newTiers||[])for(const kind of COS_KINDS)listOf(kind).forEach((it,i)=>{if(it.tier===t)add(kind,i);});return items;
+ }
+ function equip(kind,i){if(lockOf(kind,i))return;profile[gField(kind)]=i;applyProfileToMe();saveProfile();lobbyPresence();renderMenuChrome();if(screen==='garage')renderGarage();sfx.ready();toast(listOf(kind)[i].name+' equipped');}
+ showUnlockPop=function(r){
+  if(!r||unlockShownFor===r.mid)return;const items=itemsFor(r),drops=r.drops||[],tiers=r.pass?.tiers||[],levelled=r.after.lv>r.before.lv;
+  if(!items.length&&!drops.length&&!tiers.length&&!levelled)return;unlockShownFor=r.mid;clearTimeout(rewardTimer);const sequence=++rewardSequence;
+  rewardTimer=setTimeout(()=>{
+   if(sequence!==rewardSequence||mode!=='menu'&&match.ph!=='over')return;
+   const list=$('unlockList');list.replaceChildren();const rarity=Math.max(1,...items.map(x=>x.rar));$('unlockPop').style.setProperty('--reward-color',RARITIES[rarity][1]);
+   $('unlockT').textContent=items.length?'New unlock'+(items.length===1?'!':'s!'):levelled?'Level '+r.after.lv+'!':'Nitro Pass advanced';
+   copy.textContent=levelled?'Level '+r.before.lv+' → '+r.after.lv+' · '+rankOf(r.after.lv):'Your rewards are ready for the next kickoff.';
+   for(const it of items){const card=node('li'),art=node('div','np-reward-art');card.style.setProperty('--rar',RARITIES[it.rar][1]);art.append(itemThumb(it.kind,it.i));card.append(art,node('b','',it.name),node('small','',RARITIES[it.rar][0]+' · '+kindName(it.kind)));const action=sbtn('Equip now','xs pri',()=>{equip(it.kind,it.i);action.disabled=true;action.querySelector('span').textContent='Equipped';});card.append(action);list.append(card);}
+   for(const [lv,rar]of drops){const card=node('li');card.style.setProperty('--rar',RARITIES[rar][1]);const art=node('div','np-reward-art');art.append(dropThumb(rar));card.append(art,node('b','',RARITIES[rar][0]+' Drop'),node('small','','Level '+lv+' reward'));list.append(card);}
+   if(!items.length&&!drops.length)list.append(node('li','np-reward-note',levelled?'Keep playing to reach your next unlock.':'Tier '+passTier()+' of '+PASS_TIERS+' · Keep the momentum going.'));
+   returnFocus=document.activeElement;$('unlockPop').hidden=false;if(!reduced())sfx.levelUp();$('unlockOk').focus();
+  },reduced()?0:900);
+ };
+ $('unlockOk').onclick=()=>{$('unlockPop').hidden=true;if(returnFocus?.isConnected)returnFocus.focus();};
+ // Opening a drop never blocks closing after the reward is ready; Equip now actually equips it.
+ $('dpEquip').querySelector('span').textContent='Equip now';$('dpEquip').onclick=()=>{if(dpGot&&!dpGot.xp)equip(dpGot.kind,dpGot.i);$('dropPop').hidden=true;};
+ const post=showPost;let countFrame=0;
+ showPost=function(win){post(win);cancelAnimationFrame(countFrame);const result=lastResult?.mid===match.mid?lastResult:null;if(!result){const old=$('np-reward-saved');if(old)old.hidden=true;return;}
+  let badge=$('np-reward-saved');if(!badge){badge=node('div','np-saved-badge','Rewards saved');badge.id='np-reward-saved';$('postXpTotal').after(badge);}badge.hidden=false;
+  if(reduced())return;const start=performance.now(),mid=match.mid;function count(t){if(screen!=='post'||match.mid!==mid)return;const f=Math.min(1,(t-start)/900),amount=Math.round(result.xpGain*(1-(1-f)**3));$('postXpTotal').textContent='+'+amount.toLocaleString()+' XP';if(f<1)countFrame=requestAnimationFrame(count);}countFrame=requestAnimationFrame(count);
+ };
+ const arenaTag=node('div','np-arena-tag');arenaTag.hidden=true;arenaTag.append(node('small','','WELCOME TO'),node('b'));document.body.append(arenaTag);let tagMid='',tagUntil=0,lastScore='';
+ const update=updateHud;updateHud=function(dt,now){update(dt,now);if(mode!=='menu'&&match.mid&&tagMid!==match.mid&&['countdown','play'].includes(match.ph)){tagMid=match.mid;tagUntil=now+3;arenaTag.querySelector('b').textContent=(THEMES[snowOn?2:match.mut[4]]||THEMES[0]).name;}
+  arenaTag.hidden=mode==='menu'||now>tagUntil||screen!=='none'||!!training;
+  const score=match.s.join(':');if(score!==lastScore){lastScore=score;if(!reduced()&&match.ph==='goal')$('score').animate([{scale:'1.08'},{scale:'1'}],{duration:400,easing:'ease-out'});}
+ };
+ // A restrained, pooled shockwave adds scale without multiplying the original particle budget.
+ const blast=new THREE.Group();blast.visible=false;scene.add(blast);
+ const shell=new THREE.Mesh(new THREE.SphereGeometry(1,20,12),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+ const wave=new THREE.Mesh(new THREE.TorusGeometry(1,.025,6,64),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));
+ const floorWave=wave.clone();floorWave.material=wave.material.clone();floorWave.rotation.x=Math.PI/2;blast.add(shell,wave,floorWave);
+ let blastTime=3,blastMatch='',blastMode='';const originalGoal=fx.goal,originalStep=fx.step;
+ fx.goal=function(type,at,color){originalGoal.call(fx,type,at,color);if(mode==='menu')return;blast.position.copy(at);blastTime=0;blastMatch=match.mid;blastMode=mode;blast.visible=true;for(const mesh of [shell,wave,floorWave])mesh.material.color.setHex(color);wave.rotation.y=Math.atan2(-at.x,-at.z);floorWave.position.y=-at.y+.3;};
+ fx.step=function(dt){originalStep.call(fx,dt);if(!blast.visible)return;blastTime+=dt;const t=blastTime;if(t>1.65||mode!==blastMode||match.mid!==blastMatch||mode==='menu'){blast.visible=false;return;}const fade=(1-t/1.65)**2;const radius=3+t*35;shell.scale.setScalar(radius);shell.material.opacity=(reduced()?0:.13)*fade;shell.visible=!low();wave.scale.setScalar(radius);wave.material.opacity=(reduced()?.18:.72)*fade;floorWave.scale.setScalar(radius*1.3);floorWave.material.opacity=.45*fade;};
+ return {decorate,itemsFor,equip,reduced};
+})();

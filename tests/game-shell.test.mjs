@@ -2,13 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-const root=new URL('../',import.meta.url);
-const raw=await readFile(new URL('public/index.html',root),'utf8');
-const source=await readFile(new URL('src/game-shell.js',root),'utf8');
-const playerFeatures=await readFile(new URL('src/player-features.txt',root),'utf8');
-const drivingUpdates=await readFile(new URL('src/driving-updates.txt',root),'utf8');
-const patchContext=vm.createContext({playerFeatures,drivingUpdates});vm.runInContext(source.replace('import drivingUpdates from "./driving-updates.txt";', '').replace('import playerFeatures from "./player-features.txt";', '').replace('export function applyGameFixes','function applyGameFixes')+'\nglobalThis.apply=applyGameFixes;',patchContext);
-const html=patchContext.apply(raw);
+import {root,raw,html} from './served-game.mjs';
 
 test('game-shell changes match the actual bundled game and every inline script parses',()=>{
  assert(html.includes('src="/online-rooms.js"'));assert(html.includes('src="/game-notices.js"'));assert(/const BUILD = \d+;/.test(html));assert(!html.includes('const OPEN_WAIT = 8000, STATE_WAIT = 30000;'));

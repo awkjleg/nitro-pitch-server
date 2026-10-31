@@ -9,6 +9,6 @@
   // Route through the Worker for legacy-domain migration and advertising gating.
   "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
   // Rooms plus short-lived encrypted browser-save transfers between the two domains.
-  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }, { "name": "TRANSFERS", "class_name": "DomainTransfer" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }, { "tag": "v2", "new_sqlite_classes": ["DomainTransfer"] }]
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }, { "name": "TRANSFERS", "class_name": "DomainTransfer" }, { "name": "PROGRESS", "class_name": "Progress" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }, { "tag": "v2", "new_sqlite_classes": ["DomainTransfer"] }, { "tag": "v3", "new_sqlite_classes": ["Progress"] }]
 }
