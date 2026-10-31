@@ -9,7 +9,7 @@ const patchContext=vm.createContext({});vm.runInContext(source.replace('export f
 const html=patchContext.apply(raw);
 
 test('game-shell changes match the actual bundled game and every inline script parses',()=>{
- assert(html.includes('src="/online-rooms.js"'));assert(html.includes('src="/game-notices.js"'));assert(html.includes('const BUILD = 2026111002;'));assert(!html.includes('const OPEN_WAIT = 8000, STATE_WAIT = 30000;'));
+ assert(html.includes('src="/online-rooms.js"'));assert(html.includes('src="/game-notices.js"'));assert(/const BUILD = \d+;/.test(html));assert(!html.includes('const OPEN_WAIT = 8000, STATE_WAIT = 30000;'));
  for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(match[1]);
  assert(html.includes('if (adTab === "online" && !$("adminPop").hidden) renderAdmin();'));
  assert(html.includes('ball.floorFrame = false;'));
@@ -35,4 +35,26 @@ test('a last-play goal is counted before the ground-contact check',()=>{
 test('a ball falling through a Dropshot hole is not mistaken for a floor touch',()=>{
  const f=fixture({dropOn:true});f.ball.p.y=0;f.authorityMatch(0.02);assert.equal(f.match.ph,'play');
  f.ball.p.y=-4;f.authorityMatch(0.02);assert.equal(f.match.ph,'goal');
+});
+
+test('served build, version endpoint, response header, and new active patch notes agree',async()=>{
+ const version=(await readFile(new URL('public/version.txt',root),'utf8')).trim();
+ assert.equal(html.match(/const BUILD = (\d+);/)[1],version);
+ const worker=await readFile(new URL('src/worker.js',root),'utf8');assert(worker.includes('"X-Nitropitch-Build", "'+version+'"'));
+ const notes=html.slice(html.indexOf('const PATCH_NOTES = '),html.indexOf('const PATCH_NOTES_53'));
+ const context=vm.createContext({});vm.runInContext(notes+'\nglobalThis.notes=PATCH_NOTES;',context);
+ assert.notEqual(context.notes.v,raw.match(/const PATCH_NOTES = \{ v: "([^"]+)"/)[1]);assert(context.notes.notes.length>0);assert(context.notes.title.includes(context.notes.v));
+});
+
+test('a newer build triggers the existing menu refresh popup and stays out of active matches',async()=>{
+ const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{hidden:true});return nodes.get(id);};
+ node('matchFound').hidden=true;node('updPop').hidden=true;
+ let checkCount=0;
+ const version=(await readFile(new URL('public/version.txt',root),'utf8')).trim();
+ const context=vm.createContext({BUILD:0,navByKey:false,mode:'menu',search:null,document:{hidden:false,addEventListener(){}},location:{protocol:'https:',reload(){}},inMatchView:()=>false,$:node,setInterval(){},Date,fetch:async()=>{checkCount++;return{ok:true,text:async()=>version};}});
+ const start=html.indexOf('let updateReady = false;'),end=html.indexOf('// ---------- patch notes:',start);
+ vm.runInContext(html.slice(start,end),context);
+ await new Promise(resolve=>setImmediate(resolve));assert(checkCount>0);assert.equal(node('updPop').hidden,false);
+ context.mode='online';context.showUpdateBar();assert.equal(node('updPop').hidden,true);
+ context.mode='menu';context.showUpdateBar();assert.equal(node('updPop').hidden,false);
 });

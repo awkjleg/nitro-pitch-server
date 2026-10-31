@@ -45,7 +45,7 @@ export default {
       response.headers.delete("Content-Length");
       response.headers.set("Cache-Control", "no-store");
       response.headers.set("X-Nitropitch-Consent", "v1");
-      response.headers.set("X-Nitropitch-Build", "2026111002");
+      response.headers.set("X-Nitropitch-Build", "2026111003");
       return response;
     }
     return env.ASSETS.fetch(req);

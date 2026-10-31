@@ -8,7 +8,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111002;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111003;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -57,6 +57,10 @@ const patches = [
   {
     "before": "<script src=\"/privacy-consent.js\"></script>",
     "after": "<script src=\"/game-notices.js\"></script>"
+  },
+  {
+    "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.5\",\n  \"title\": \"Update 5.5: Online fixes & our new home\",\n  \"notes\": [\n    \"Online player lists now stay together across tabs. The admin Online Now panel refreshes automatically, and waking a tab gets a fresh shared lobby list.\",\n    \"Short connection interruptions keep your match seat for up to 12 seconds instead of immediately saying you left. Reconnecting no longer silently switches you into a separate lobby.\",\n    \"The final play at 0:00 continues until the ball actually touches the floor. Last-second goals count before the result is decided, ties go to overtime, and Dropshot holes do not count as floor touches.\",\n    \"Our main address is now nitropitch.app. The old address securely carries readable saves and sign-ins over, while keeping the old browser save as a backup.\",\n    \"New Terms and Cookies pages explain the game rules and browser storage. The advertising choice is centered, separate from the terms, and can be changed from the cookies page.\",\n    \"Fixed the terms-notice script and policy links. Every new game release will update these patch notes and use the existing refresh notification.\"\n  ]\n};\n"
   }
 ];
 
