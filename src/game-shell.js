@@ -53,6 +53,10 @@ const patches = [
   {
     "before": "      body.append(ta, row);\n    } else {\n      const ps = lobbyPlayers();\n      body.append(h(\"div\", \"\", ps.length + 1 + \" online (including you)\"));\n",
     "after": "      body.append(ta, row);\n    } else {\n      if (!onlineOk) { body.append(h(\"div\", \"none\", \"Reconnecting to the shared lobby…\")); return; }\n      const ps = lobbyPlayers();\n      body.append(h(\"div\", \"\", ps.length + 1 + \" online (including you)\"));\n"
+  },
+  {
+    "before": "<script src=\"/privacy-consent.js\"></script>",
+    "after": "<script src=\"/game-notices.js\"></script>"
   }
 ];
 
