@@ -50,3 +50,11 @@ Legacy page visits automatically pass through a short migration before opening t
 The old browser save remains intact. A completion flag on the new address prevents old bookmarks from offering the stale source copy again. When a different account or guest save already exists on the new address, the player chooses which to keep. Blocked storage, revoked/expired credentials, connectivity failures, or saves exceeding 8 MiB may require retrying or signing in again. Revisit the old URL to restart; do not clear the old site data first. This migration depends on Firebase’s pinned persistence format; re-test it before changing the Firebase SDK version.
 
 Keep the old `/ws` endpoint available: existing game tabs and the default room-server URL use it. The room server accepts `https://nitropitch.app` as well as the existing development and legacy origins. The cookie dialog is centered and gives equal one-click allow/reject controls.
+
+## Online consistency and game-shell compatibility updates
+
+`public/online-rooms.js` keeps every tab on the same WebSocket lobby. It reconciles snapshots atomically, refreshes on tab wake and heartbeats, retries without a separate peer-to-peer fallback, and ignores callbacks from replaced connections. `src/room.js` retains small presence records in hibernating socket attachments, requests larger records again without deleting player seats, and allows 12 seconds for a transient reconnect. Explicit Leave remains immediate.
+
+The prebuilt `public/index.html` asset is unchanged. `src/game-shell.js` applies a small set of checked compatibility edits before it is served: loading the new transport, live connection/admin-list refresh, the build number, and accurate final ground-contact/goal ordering. If replacing the game asset, update these tested anchors or apply the changes directly and remove the compatibility layer. The layer refuses ambiguous/missing anchors rather than silently serving a partially patched game.
+
+Run `node --test tests/*.test.mjs` (Node 22+) before deployment. These tests cover hibernation, transient reconnects, explicit departures, stale socket callbacks, atomic snapshots, tab wake, stationary gameplay timestamps, the game-script syntax, and zero-second goals/ground contacts including Dropshot.
