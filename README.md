@@ -40,3 +40,13 @@ Cloudflare's free plan includes Durable Objects (what the server uses) with dail
 online stops working on the server until midnight UTC, and the game switches to the old peer-to-peer online by itself
 (which doesn't work on networks that block it). The Workers Paid plan ($5/month) raises the limits a lot.
 
+
+## Domain migration
+
+The canonical website is `https://nitropitch.app`. The Wrangler configuration attaches that custom domain to this same `nitropitch` Worker and keeps its workers.dev address enabled; both hosts must reach the same deployment. The domain must belong to the deployment’s Cloudflare account. The correctly spelled legacy hostname is `nitropitch.bibleway.workers.dev`.
+
+Legacy page visits automatically pass through a short migration before opening the same path on the new address. The new-origin tab generates a private ECDH key and a PKCE-style verifier. The old page encrypts the allowed game storage and the pinned Firebase 10.12.2 persistence record with ECDH/AES-GCM. A short-lived Durable Object holds only ciphertext, validates the verifier, permits one redemption, and deletes the transfer. Keys and raw login credentials never appear in the redirect URLs. Both source and target pages run as top-level pages, so third-party storage partitioning does not hide the old save.
+
+The old browser save remains intact. A completion flag on the new address prevents old bookmarks from offering the stale source copy again. When a different account or guest save already exists on the new address, the player chooses which to keep. Blocked storage, revoked/expired credentials, connectivity failures, or saves exceeding 8 MiB may require retrying or signing in again. Revisit the old URL to restart; do not clear the old site data first. This migration depends on Firebase’s pinned persistence format; re-test it before changing the Firebase SDK version.
+
+Keep the old `/ws` endpoint available: existing game tabs and the default room-server URL use it. The room server accepts `https://nitropitch.app` as well as the existing development and legacy origins. The cookie dialog is centered and gives equal one-click allow/reject controls.

@@ -3,6 +3,8 @@
 // passes every change on to the others. It uses WebSocket hibernation, so a quiet room costs (almost) nothing; after
 // waking from hibernation it has forgotten the presences and asks each player to send theirs again ("resync").
 import { DurableObject } from "cloudflare:workers";
+import { migrationFetch } from "./domain-migration.js";
+export { DomainTransfer } from "./domain-migration.js";
 
 // sites allowed to use the rooms (your copies of the game); anything else is refused
 const ORIGIN_OK = /^https:\/\/([a-z0-9-]+\.)*bibleway\.workers\.dev$|^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
@@ -11,10 +13,12 @@ const MAX_PLAYERS = 400, MAX_MSG = 64000;
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+    const migration = await migrationFetch(req, env);
+    if (migration) return migration;
     if (url.pathname === "/ws") {
       if (req.headers.get("Upgrade") !== "websocket") return new Response("Nitro Pitch rooms: WebSocket only", { status: 426 });
       const origin = req.headers.get("Origin") || "";
-      if (!ORIGIN_OK.test(origin)) return new Response("Not allowed", { status: 403 });
+      if (origin !== "https://nitropitch.app" && !ORIGIN_OK.test(origin)) return new Response("Not allowed", { status: 403 });
       const room = String(url.searchParams.get("room") || "lobby").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60) || "lobby";
       return env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(req);
     }
