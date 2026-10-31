@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#060a14">
+<meta name="description" content="See what Nitro Pitch saves in your browser, why it is used, and how to manage optional advertising.">
+<title>Cookies &amp; Browser Storage | Nitro Pitch</title>
+<link rel="stylesheet" href="/legal.css">
+
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="page">
+<div class="topbar">
+<a class="brand" href="/">NITRO PITCH</a>
+<nav aria-label="Policies">
+<a href="/terms-and-conditions.html">Terms</a>
+<a href="/privacy-policy.html">Privacy</a>
+<a href="/cookies.html" aria-current="page">Cookies</a>
+<a href="/">Back to game</a>
+</nav>
+</div>
+<header class="hero">
+<span class="eyebrow">The rules of the road</span>
+<h1>Cookies &amp; Browser Storage</h1>
+<p class="lead">See what Nitro Pitch saves in your browser, why it is used, and how to manage optional advertising.</p>
+<p class="updated">Last updated: October 30, 2026</p>
+</header>
+<div class="layout">
+<aside class="contents">
+<b>On this page</b>
+<nav aria-label="On this page">
+<a href="#basics">1. Cookies and local storage</a>
+<a href="#storage">2. What the game stores</a>
+<a href="#providers">3. Advertising &amp; third-party services</a>
+<a href="#choices">4. Advertising &amp; privacy controls</a>
+<a href="#clear">5. Browser controls &amp; deleting data</a>
+<a href="#contact">6. Updates &amp; questions</a>
+</nav>
+</aside>
+<main id="main">
+<section class="card" id="basics">
+<h2>1. Cookies and local storage</h2>
+<p>Cookies are small pieces of information stored by your browser and sent with relevant web requests. Local storage keeps data for this site between visits; session storage normally lasts for the current tab session. Both can support gameplay without being advertising cookies.</p>
+<p>The table below describes storage used by the game code. Providers may also use their own storage when you use sign-in or load pages that include advertising.</p>
+</section>
+<section class="card" id="storage">
+<h2>2. What the game stores</h2>
+<div class="table-wrap">
+<table>
+<caption>First-party browser storage used by Nitro Pitch</caption>
+<thead>
+<tr>
+<th scope="col">Storage / examples</th>
+<th scope="col">Purpose</th>
+<th scope="col">Duration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>np-settings</code>, <code>np-mute</code>
+</td>
+<td>Controls, camera, audio, and settings.</td>
+<td>Until changed or cleared.</td>
+</tr>
+<tr>
+<td>
+<code>np-profile</code>, <code>np-name</code>, <code>np-train</code>, <code>np-tut</code>
+</td>
+<td>Local progress, name, training records, and tutorial state.</td>
+<td>Until replaced or cleared.</td>
+</tr>
+<tr>
+<td>
+<code>np-exh</code>, <code>np-priv</code>, <code>np-pls</code>
+</td>
+<td>Exhibition, private match, and playlist preferences.</td>
+<td>Until changed or cleared.</td>
+</tr>
+<tr>
+<td>
+<code>np-replays</code>, <code>np-rp-*</code>
+</td>
+<td>Replays you choose to save.</td>
+<td>Until deleted or cleared; the oldest is replaced after 10 slots.</td>
+</tr>
+<tr>
+<td>
+<code>np-rejoin</code>
+</td>
+<td>Reconnect to an interrupted match.</td>
+<td>Valid for 10 minutes; removed when checked after expiry or when cleared by the game.</td>
+</tr>
+<tr>
+<td>
+<code>np-pc</code> (session storage)</td>
+<td>Party code for this tab.</td>
+<td>The tab session, subject to browser session restoration.</td>
+</tr>
+<tr>
+<td>
+<code>np-clanq</code>, <code>np-clanreq</code>
+</td>
+<td>Pending clan updates and membership requests.</td>
+<td>Until processed, replaced, or cleared.</td>
+</tr>
+<tr>
+<td>
+<code>np-patch-seen</code>, <code>np-ann-closed</code>, <code>np-adm-seen</code>
+</td>
+<td>Dismissed notices and admin inbox state.</td>
+<td>Until replaced or cleared.</td>
+</tr>
+<tr>
+<td>
+<code>nitropitch_terms_accepted*</code>
+</td>
+<td>Remember terms acknowledgment in this browser, including account-specific records where available.</td>
+<td>Until cleared.</td>
+</tr>
+
+</tbody>
+</table>
+</div>
+<p>Local storage has no built-in expiry. Game code can replace or remove entries earlier. Firebase Authentication can also use browser persistence, including IndexedDB, to keep you signed in.</p>
+</section>
+<section class="card" id="providers">
+<h2>3. Advertising &amp; third-party services</h2>
+<p>Nitro Pitch includes Google AdSense. The game currently requests the AdSense script when the game page opens. Google and its partners may use cookies or similar identifiers for ad delivery, personalization, fraud prevention, and measurement. Cookie names and lifetimes vary by product and provider.</p>
+<p>Learn more from <a href="https://policies.google.com/technologies/ads">Google’s advertising information</a>, <a href="https://business.safety.google/adscookies/">Google’s ad cookie reference</a>, and <a href="https://myadcenter.google.com/">Google’s ad settings</a>. Sign-in uses Firebase, hosting uses Cloudflare, and the game loads some resources from external providers. These requests can share technical information such as your IP address independently of advertising personalization settings.</p>
+<p>The repository does not include a separate analytics loader. Advertising measurement is part of optional advertising. A hosting provider or deployment configuration may add services outside this repository; this page should be reviewed when those change.</p>
+</section>
+<section class="card" id="choices">
+<h2>4. Advertising &amp; privacy controls</h2>
+<p>You can manage personalized advertising through <a href="https://myadcenter.google.com/">Google My Ad Center</a> and <a href="https://adssettings.google.com/partnerads">Google’s partner-site ad settings</a>. These settings are managed by Google; their availability depends on your account, browser, and location.</p>
+<p>Your browser can block third-party cookies and clear stored site data. Blocking cookies or turning off personalization does not necessarily remove all ads or stop every advertising request.</p>
+<div class="note">The current game requests Google AdSense on page load. This policy page does not itself block advertising scripts or record an advertising consent preference. If a consent message is displayed by Google or another provider, use the choices offered there.</div>
+<p>Terms acknowledgment is not consent to advertising cookies. Browser controls and Google settings are separate from the game’s terms popup.</p>
+</section>
+<section class="card" id="clear">
+<h2>5. Browser controls &amp; deleting data</h2>
+<p>Use your browser’s privacy settings to review or remove cookies and site data, block third-party cookies, or use private browsing. Look for “Cookies and site data” or “Site settings” for the Nitro Pitch address.</p>
+<div class="note">Clearing site data may sign you out and delete guest progress, settings, saved replays, and consent choices. It does not delete account data held on servers. Make sure any progress you want to keep is saved to your account first.</div>
+<p>If browser storage is blocked, the game may not remember your choice between visits. Advertising remains off unless you actively allow it during that visit.</p>
+</section>
+<section class="card" id="contact">
+<h2>6. Updates &amp; questions</h2>
+<p>We will update this page when storage or advertising practices change. For questions, use the feedback speech-bubble button at the top of the game menu (sign-in required). See the <a href="/privacy-policy.html">Privacy Policy</a> for personal-information requests and the <a href="/terms-and-conditions.html">Terms &amp; Conditions</a> for game rules.</p>
+</section>
+</main>
+</div>
+<footer>
+<nav aria-label="Policies">
+<a href="/terms-and-conditions.html">Terms</a>
+<a href="/privacy-policy.html">Privacy</a>
+<a href="/cookies.html" aria-current="page">Cookies</a>
+<a href="/">Back to game</a>
+</nav>
+<p>Nitro Pitch · Play fair. Respect other players.</p>
+</footer>
+</div>
+</body>
+</html>
