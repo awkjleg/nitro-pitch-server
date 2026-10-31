@@ -62,3 +62,11 @@ Run `node --test tests/*.test.mjs` (Node 22+) before deployment. These tests cov
 ### Player tools
 
 `src/player-features.txt` is imported as text by Wrangler and inserted inside the original game closure by `src/game-shell.js`. It contains the player-tool UI and pure data helpers; it must not be loaded as a separate script because the game state is private to that closure. Match history (20 entries) and blocks (100 entries) use account-scoped browser storage and are described on the Cookies page. The existing Nitro Pass quest rewards are reused. Rematch readiness is broadcast by the Room only after every connected human votes for the same match and roster; clients never send the ready event.
+
+### Wall movement, camera and quick start
+
+`src/driving-updates.txt` is inserted inside the game closure before the player tools. `NPDrive.move` adaptively splits surface movement and contacts without reapplying forces; the original jump, landing and ceiling-release logic is retained. Ball-camera framing uses the final collision-constrained camera position, with overhead orbit hysteresis, transported screen-up and a rear-view target. Menu, spectator and replay cameras retain their existing paths.
+
+New visitors can launch the existing tutorial or free play from a dismissible Home card. Those two entry points allow guests, while banned-player checks and online sign-in gates remain. `np-welcome-v1` remembers the choice locally. Camera defaults change only through `DEFAULT_SETTINGS`; current saved settings are preserved.
+
+Run `npm ci` and `npm test` for the regression suite. The camera/physics fixtures use Three.js 0.158.0, matching the bundled game's pinned browser version.

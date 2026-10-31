@@ -125,16 +125,45 @@
   function updateMemberStatus(){if(!clanView||$('clanCardPop').hidden||ccCur?.id!==clanView.id)return;const online=new Set(onlineOk?lobbyPlayers().map(p=>p.ui):[]);if(onlineOk&&account())online.add(account().uid);for(const row of clanView.section.querySelectorAll('[data-member-uid]'))row.querySelector('.np-member-status').textContent=!onlineOk?'Status unavailable':online.has(row.dataset.memberUid)?'Online':'Offline';}
 
   const career=renderCareer;renderCareer=function(){career();if(!$('np-career-history')){const node=button('View match history',showHistory);node.id='np-career-history';$('cStats').after(node);}};
+  const welcomeKey='np-welcome-v1';
+  let welcomeChoice=!!read(welcomeKey,null);
+  function chooseWelcome(kind){
+    if(mode!=='menu'||search)return;
+    if(kind==='tutorial')startTutorial();
+    else if(kind==='free'){startFreePlay();if(freePlay)hideMenu();}
+    if(kind!=='skip'&&mode!=='offline')return;
+    welcomeChoice=true;try{localStorage.setItem(welcomeKey,JSON.stringify(kind));}catch(_){}
+    const card=$('np-quick-start');if(card)card.hidden=true;
+  }
+  function initWelcome(){
+    const host=$('home').querySelector('.spot');if(!host)return;
+    const card=el('section','panel np-quick-start');card.id='np-quick-start';card.hidden=true;card.setAttribute('aria-labelledby','np-quick-title');
+    const heading=el('h2','','Your first kickoff');heading.id='np-quick-title';
+    const message=el('p','','Learn the basics in a short tutorial, or try free play. Sign in when you’re ready for online matches.');
+    const controls=el('p','np-quick-controls');controls.id='np-quick-controls';
+    const actions=el('div','np-quick-actions');
+    for(const [label,kind,cls]of[['Learn to play','tutorial','pri'],['Try free play','free',''],['I know the controls','skip','xs']]){
+      const action=el('button','sbtn '+cls);action.type='button';action.append(el('span','',label));action.addEventListener('click',()=>chooseWelcome(kind));actions.append(action);
+    }
+    card.append(heading,message,controls,actions);host.append(card);
+    const style=el('style');style.textContent='#home .spot{position:relative}.np-quick-start{position:absolute;top:0;left:50%;transform:translateX(-50%);width:min(460px,100%);padding:18px 20px;z-index:4;pointer-events:auto}.np-quick-start h2{margin:0 0 8px;font:22px var(--display);color:var(--gold)}.np-quick-start p{margin:0 0 12px;font-size:14px;line-height:1.5}.np-quick-start .np-quick-controls{font-size:12px;color:var(--dim)}.np-quick-actions{display:flex;flex-wrap:wrap;gap:9px}.np-quick-actions .sbtn{height:40px;font-size:12px}.np-quick-actions .xs{height:32px}@media(max-width:760px){#home .spot:has(.np-quick-start:not([hidden])){height:auto;min-height:250px}.np-quick-start{position:relative;left:auto;transform:none;margin:0 auto;width:100%}}';document.head.append(style);
+  }
+  function tickWelcome(){
+    const card=$('np-quick-start');if(!card)return;
+    const show=!welcomeChoice&&!tutDone()&&!(profile.games>0)&&!isBanned&&mode==='menu'&&screen==='home'&&!search&&!document.querySelector('dialog[open]');
+    card.hidden=!show;card.parentElement.setAttribute('aria-hidden',String(!show));
+    if(show){const keys='Drive '+keyLabel('fwd')+' / '+keyLabel('back')+' · Steer '+keyLabel('left')+' / '+keyLabel('right')+' · Jump '+keyLabel('jump')+' · Boost '+keyLabel('boost')+' · Ball cam '+keyLabel('cam')+'. Keyboard and controller settings are in Settings.';if($('np-quick-controls').textContent!==keys)$('np-quick-controls').textContent=keys;}
+  }
   function init(){
     const style=el('style');style.textContent='.np-connection{position:fixed;top:72px;right:14px;z-index:60;padding:7px 11px;border:1px solid #61718b;background:#081221e8;border-radius:7px;color:#edf4ff;font:12px/1.4 Segoe UI,sans-serif;pointer-events:none}.np-connection[data-quality="good"]{border-color:#4ee39a}.np-connection[data-quality="slow"]{border-color:#ffd451}.np-connection[data-quality="offline"]{border-color:#ff6475}.np-player-dialog{box-sizing:border-box;margin:auto;width:min(720px,calc(100% - 28px));max-height:85vh;overflow:auto;border:1px solid #53698c;border-radius:14px;background:#0b1425;color:#edf4ff;padding:24px;font:16px/1.6 Segoe UI,sans-serif}.np-player-dialog::backdrop{background:#03080ed9}.np-player-dialog h2{margin:0 0 14px;color:#ffd451}.np-action{font:700 14px/1.4 Segoe UI,sans-serif;border:1px solid #6682a8;border-radius:7px;color:#edf4ff;background:#172a45;padding:10px 14px;min-height:42px;cursor:pointer}.np-action:disabled{opacity:.55;cursor:default}.np-action:focus-visible,[role="button"]:focus-visible{outline:3px solid #ffd451;outline-offset:3px}.np-muted{color:#afc0d8;font-size:13px}.np-history-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;width:100%;margin:8px 0}.np-history-row small{display:block;width:100%;text-align:left}.np-member{display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:100%;margin:7px 0}.np-member small{color:#ffd451}.np-member-status{margin-left:auto;font-size:12px;color:#afc0d8}.np-members{margin-top:18px;border-top:1px solid #34435f;padding-top:14px}.ctag[role="button"],.cl-find[role="button"]{cursor:pointer}.np-rematch{padding:12px 0}';document.head.append(style);
     const chip=el('div','np-connection','Connecting…');chip.id='np-connection';chip.setAttribute('role','status');chip.setAttribute('aria-live','polite');document.body.append(chip);
     $('navMore').onclick=()=>showScreen('more');
     $('np-history').onclick=showHistory;
     $('np-blocks').onclick=showBlocks;
-    load();tick();setInterval(tick,1000);window.addEventListener('storage',event=>{if(event.key?.startsWith('np-blocked:')||event.key===null){owner='';load();lchat.key='';lchatRender();}});
+    initWelcome();load();tick();setInterval(tick,1000);window.addEventListener('storage',event=>{if(event.key?.startsWith('np-blocked:')||event.key===null){owner='';load();lchat.key='';lchatRender();}});
   }
   function tick(){
-    load();const connection=mode==='online'&&game?game:roomApi,info=connection?.connectionInfo?.();const chip=$('np-connection');
+    load();tickWelcome();const connection=mode==='online'&&game?game:roomApi,info=connection?.connectionInfo?.();const chip=$('np-connection');
     if(chip){const connected=info?.connected===true,recent=info?.lastReply&&Date.now()-info.lastReply<30000;const text=!connected?'Reconnecting…':!recent?'Checking connection…':'Server ping: '+info.pingMs+' ms';if(chip.textContent!==text)chip.textContent=text;chip.dataset.quality=!connected?'offline':!recent||info.pingMs>120?'slow':'good';chip.title='Round-trip time to the shared game server. This does not measure graphics performance.';}
     if(rematchState&&(match.mid!==rematchState.mid||mode!=='online'||!game))rematchState=null;bindRematch();renderRematch();updateMemberStatus();
   }

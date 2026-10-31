@@ -1,3 +1,4 @@
+import drivingUpdates from "./driving-updates.txt";
 import playerFeatures from "./player-features.txt";
 // The original game is a single prebuilt HTML asset. Keep the small, reviewed
 // compatibility changes here while the asset stays unchanged. Test these anchors
@@ -9,7 +10,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111009;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111010;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -61,7 +62,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.11\",\n  \"title\": \"Update 5.11: Privacy page branding\",\n  \"notes\": [\n    \"The Privacy Policy page now shows our blue rocket-car logo next to Nitro Pitch. Click the logo to return to the game.\",\n    \"Refresh when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.12\",\n  \"title\": \"Update 5.12: Quick start, wall driving & ball cam\",\n  \"notes\": [\n    \"New players get a small quick-start card with the tutorial, free play and current controls. Try the tutorial or free play before creating an account; online matches still need sign-in.\",\n    \"Wall and ramp movement now uses smaller contact steps to follow curved surfaces more smoothly, while keeping jumps and ceiling releases.\",\n    \"Ball cam now frames the ball from the actual camera position after wall avoidance. Overhead tracking holds a stable orbit and eases its horizon to reduce sudden spins. Holding rear view now works with ball cam on.\",\n    \"New players start with a wider camera view and camera shake off. Existing saved camera settings are kept.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -85,7 +86,7 @@ const patches = [
   },
   {
     "before": "requestAnimationFrame(frame);\n})();\n</script>",
-    "after": "requestAnimationFrame(frame);\n/* NP_PLAYER_FEATURES */\n})();\n</script>"
+    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_PLAYER_FEATURES */\n})();\n</script>"
   },
   {
     "before": "<button class=\"nb\" id=\"navSettings\" type=\"button\">",
@@ -114,6 +115,26 @@ const patches = [
   {
     "before": "<meta name=\"theme-color\" content=\"#0b1020\">",
     "after": "<meta name=\"theme-color\" content=\"#0b1020\">\n<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"VideoGame\",\"name\":\"Nitro Pitch\",\"url\":\"https://nitropitch.app/\",\"image\":\"https://nitropitch.app/nitro-pitch-icon.png\",\"description\":\"Free online car soccer browser game with multiplayer, ranked matches, private rooms, bot matches and training.\",\"genre\":[\"Sports\",\"Racing\"],\"playMode\":[\"SinglePlayer\",\"MultiPlayer\"],\"gamePlatform\":\"Web browser\",\"applicationCategory\":\"GameApplication\",\"operatingSystem\":\"Web browser\",\"isAccessibleForFree\":true,\"inLanguage\":\"en\",\"@id\":\"https://nitropitch.app/#game\",\"screenshot\":[\"https://nitropitch.app/images/nitro-pitch-car-soccer-arena.webp\",\"https://nitropitch.app/images/nitro-pitch-free-play.webp\",\"https://nitropitch.app/images/nitro-pitch-main-menu.webp\",\"https://nitropitch.app/images/nitro-pitch-ranked-playlists.webp\",\"https://nitropitch.app/images/nitro-pitch-leaderboard.webp\"]}</script>\n<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@graph\":[{\"@type\":\"WebSite\",\"@id\":\"https://nitropitch.app/#website\",\"name\":\"Nitro Pitch\",\"url\":\"https://nitropitch.app/\",\"publisher\":{\"@id\":\"https://nitropitch.app/#organization\"}},{\"@type\":\"Organization\",\"@id\":\"https://nitropitch.app/#organization\",\"name\":\"Nitro Pitch\",\"url\":\"https://nitropitch.app/\",\"logo\":{\"@type\":\"ImageObject\",\"url\":\"https://nitropitch.app/nitro-pitch-icon.png\",\"contentUrl\":\"https://nitropitch.app/nitro-pitch-icon.png\",\"width\":512,\"height\":512}}]}</script>\n"
+  },
+  {
+    "before": "  c.p.addScaledVector(c.v, dt);\n  carContacts(c, dt);",
+    "after": "  NPDrive.move(c, dt);"
+  },
+  {
+    "before": "function startTutorial() {\n  if (loginGate()) return;",
+    "after": "function startTutorial() {\n  if (isBanned) { loginGate(); return; }"
+  },
+  {
+    "before": "function startFreePlay(keepSearch) {\n  if (loginGate()) return;",
+    "after": "function startFreePlay(keepSearch) {\n  if (isBanned) { loginGate(); return; }"
+  },
+  {
+    "before": "  if (s === \"play\" && loginGate()) return;",
+    "after": "  if (s === \"play\" && isBanned) { loginGate(); return; }"
+  },
+  {
+    "before": "fov: 90, dist: 270, height: 100, angle: -3, stiff: 0.5, ver: SET_VER, ballCam: true, shake: true,",
+    "after": "fov: 105, dist: 280, height: 100, angle: -3, stiff: 0.5, ver: SET_VER, ballCam: true, shake: false,"
   }
 ];
 
@@ -125,5 +146,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_PLAYER_FEATURES */", () => playerFeatures);
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures);
 }
