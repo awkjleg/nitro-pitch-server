@@ -1,0 +1,135 @@
+// Runs inside the game's closure. Keep collision forces in stepCar; only split
+// the surface movement, so boost, jumping and gravity are never applied twice.
+const NPDrive = (() => {
+  const probe=new V3(), probeN=new V3(), behind=new V3(), desired=new V3(), rigUp=new V3(), delta=new V3();
+  const ballDir=new V3(), carDir=new V3(), axis=new V3(), view=new V3(), nextUp=new V3(), upTarget=new V3(), oldView=new V3(0,0,1);
+  const transport=new Q(), rearTarget=new V3(), rearForward=new V3();
+  let active=false, overhead=false, turnSign=1, rollSign=1;
+  function move(c,dt){
+    if(!(dt>0))return;
+    let count=1;
+    if(c.ground){
+      probe.copy(c.p).addScaledVector(c.v,dt);arenaSDF(probe,probeN,c.h[0]);
+      if(c.n.y<0.98||probeN.dot(c.n)<0.9995){
+        count=Math.min(8,Math.max(1,Math.ceil(c.v.length()*dt/Math.max(0.08,(RB-RIDE)*0.025))));
+      }
+    }
+    const step=dt/count;
+    for(let i=0;i<count;i++){c.p.addScaledVector(c.v,step);carContacts(c,step);}
+  }
+  function constrain(p,c,onWall){
+    if(onWall){
+      if(Math.abs(me.car.n.x)>0.4)p.x=clamp(p.x,-(W-3.5),W-3.5);
+      if(Math.abs(me.car.n.z)>0.4)p.z=clamp(p.z,-(L-3.5),L-3.5);
+      for(let i=0;i<3;i++){const d=arenaSDF(p,probeN,0.8);if(d<2)p.addScaledVector(probeN,2-d);}
+    }
+    clampCam(p,c,onWall&&Math.abs(me.car.n.z)>0.4);
+  }
+  function aim(ballPoint,carPoint,up,verticalFov,aspect){
+    ballDir.subVectors(ballPoint,camPos);
+    const distance=ballDir.length();if(distance<1e-7)ballDir.copy(camDir).negate();else ballDir.divideScalar(distance);
+    carDir.copy(carPoint).addScaledVector(up,30*UU).sub(camPos).normalize();
+    const angle=Math.acos(clamp(ballDir.dot(carDir),-1,1));
+    const halfV=verticalFov*Math.PI/360,halfH=Math.atan(Math.tan(halfV)*Math.max(0.1,aspect));
+    const radius=Math.asin(clamp(BR/Math.max(BR+0.01,distance),0,0.99));
+    const margin=Math.max(0,Math.min(halfV,halfH)*0.68-radius);
+    const toward=Math.min(angle*0.32,margin);
+    axis.crossVectors(ballDir,carDir);
+    view.copy(ballDir);
+    // Antiparallel directions have no unique interpolation axis. Prefer the ball
+    // rather than dividing by sin(pi), which used to produce unstable framing.
+    if(axis.lengthSq()>1e-8&&toward>1e-7)view.applyAxisAngle(axis.normalize(),toward);
+    camLook.copy(camPos).addScaledVector(view,Math.max(10,distance));
+    return view;
+  }
+  function screenUp(direction,up,dt,reset){
+    if(reset){
+      nextUp.copy(camera.up).addScaledVector(direction,-camera.up.dot(direction));
+    }else{
+      transport.setFromUnitVectors(oldView,direction);nextUp.copy(camUp).applyQuaternion(transport);
+      nextUp.addScaledVector(direction,-nextUp.dot(direction));
+    }
+    if(nextUp.lengthSq()<1e-8){nextUp.copy(up).addScaledVector(direction,-up.dot(direction));}
+    if(nextUp.lengthSq()<1e-8){nextUp.set(1,0,0).addScaledVector(direction,-direction.x);}
+    if(nextUp.lengthSq()<1e-8)nextUp.set(0,0,1);
+    nextUp.normalize();
+    upTarget.copy(up).addScaledVector(direction,-up.dot(direction));
+    const strength=upTarget.length();
+    if(strength>0.18){
+      upTarget.divideScalar(strength);axis.crossVectors(nextUp,upTarget);
+      let error=Math.atan2(axis.dot(direction),clamp(nextUp.dot(upTarget),-1,1));
+      if(Math.abs(error)>Math.PI-0.01)error=rollSign*Math.abs(error);
+      if(Math.abs(error)>1e-5)rollSign=Math.sign(error);
+      const turn=clamp(error*(1-Math.exp(-6*dt))*clamp((strength-0.18)/0.55,0,1),-1.8*dt,1.8*dt);
+      nextUp.applyAxisAngle(direction,turn).normalize();
+    }
+    camUp.copy(nextUp);oldView.copy(direction);camera.up.copy(camUp);
+  }
+  function ballCamera(dt,rear=false){
+    dt=clamp(dt,0,0.05);
+    const car=me.car,c=car.rp;
+    let b=ball.rp;
+    const onWall=car.ground&&car.n.y<0.7&&Math.abs(c.z)<L;
+    rigUp.copy(UP);
+    if(car.ground&&car.n.y>-0.7)rigUp.lerp(car.n,0.3).normalize();
+    if(rear){
+      rearForward.set(0,0,1).applyQuaternion(car.rq);rearForward.addScaledVector(rigUp,-rearForward.dot(rigUp));
+      if(rearForward.lengthSq()<1e-6)rearForward.copy(camF);rearForward.normalize();
+      rearTarget.copy(c).addScaledVector(rearForward,-100);b=rearTarget;overhead=false;
+    }
+    // Keep a persistent orbit direction near an overhead ball. Hysteresis stops
+    // tiny movements across the car from producing repeated 180-degree swivels.
+    desired.subVectors(c,b);const separation=desired.length();
+    desired.addScaledVector(rigUp,-desired.dot(rigUp));const flat=desired.length();
+    const ratio=flat/Math.max(separation,0.01);
+    if(overhead){if(ratio>0.24&&flat>40*UU)overhead=false;}
+    else if(ratio<0.13||flat<20*UU)overhead=true;
+    behind.copy(camDir).addScaledVector(rigUp,-camDir.dot(rigUp));
+    if(behind.lengthSq()<1e-6){behind.set(0,0,-1).applyQuaternion(car.rq);behind.addScaledVector(rigUp,-behind.dot(rigUp));}
+    if(behind.lengthSq()<1e-6)behind.set(1,0,0);behind.normalize();
+    if(!overhead&&flat>1e-5){
+      desired.divideScalar(flat);axis.crossVectors(behind,desired);
+      let error=Math.atan2(axis.dot(rigUp),clamp(behind.dot(desired),-1,1));
+      if(Math.abs(error)>Math.PI-0.01)error=turnSign*Math.abs(error);
+      if(Math.abs(error)>1e-5)turnSign=Math.sign(error);
+      const rate=12*clamp(ratio,0.25,1),turn=clamp(error*(1-Math.exp(-rate*dt)),-5*dt,5*dt);
+      behind.applyAxisAngle(rigUp,turn).normalize();
+    }
+    camDir.copy(behind);camF.copy(behind).negate();
+    const pull=1+(1-settings.stiff)*0.3*clamp((car.v.length()-MAXS*0.5)/(BMAX-MAXS*0.5),0,1);
+    const rise=rear?0:clamp((b.y-c.y)/Math.max(1,separation),0,1);
+    probe.copy(c).addScaledVector(behind,settings.dist*UU*pull*(1-rise*0.08));
+    probe.addScaledVector(rigUp,settings.height*UU*(1-rise*0.65));
+    // constrain() uses probeN, not probe; preserve the target in the game rig vector.
+    _w.copy(probe);constrain(_w,c,onWall);
+    delta.subVectors(c,camPrevC);
+    const ride=camFollow&&dt>0&&delta.lengthSq()<(60*dt+0.5)**2;
+    if(ride)camPos.add(delta);else camPos.copy(_w);
+    camPrevC.copy(c);camFollow=true;
+    camBlend=Math.max(0,camBlend-dt*2);
+    camPos.lerp(_w,1-Math.exp(-(camBlend>0?8:24)*dt));
+    // Clamp the actual smoothed position too; an old position must not travel
+    // through the wall while its safe target is on the playing field.
+    constrain(camPos,c,onWall);
+    delta.subVectors(camPos,b);const clearance=BR+0.35;
+    if(delta.lengthSq()<clearance*clearance){
+      if(delta.lengthSq()<1e-8)delta.copy(behind);camPos.copy(b).addScaledVector(delta.normalize(),clearance);constrain(camPos,c,onWall);
+    }
+    const fov=vFov(settings.fov);
+    const direction=aim(b,c,rigUp,fov,innerWidth/Math.max(1,innerHeight));
+    screenUp(direction,rigUp,dt,!active||!ride);active=true;
+    camera.position.copy(camPos);camera.lookAt(camLook);
+    // Shake is optional, but must never undo wall collision avoidance.
+    if(settings.shake&&shakeT>0){shakeT=Math.max(0,shakeT-dt);camera.position.x+=(Math.random()-0.5)*shakeT*0.35;camera.position.y+=(Math.random()-0.5)*shakeT*0.35;constrain(camera.position,c,onWall);}
+    if(Math.abs(camera.fov-fov)>0.01){camera.fov=fov;camera.updateProjectionMatrix();}
+  }
+  return{move,ballCamera,aim,screenUp,reset(){active=false;overhead=false;}};
+})();
+const npPreviousCamera=updateCamera;
+updateCamera=function(dt,now){
+  const playerView=mode!=='menu'&&match.ph!=='lobby'&&match.ph!=='replay'&&match.ph!=='over'&&!spec&&(me.team===0||me.team===1)&&!showroomOn();
+  if(playerView&&((ballCam&&ballMesh.visible)||rearView)){
+    if(viewOffsetOn){camera.clearViewOffset();viewOffsetOn=false;camera.updateProjectionMatrix();}
+    NPDrive.ballCamera(dt,!!rearView);
+  }else{NPDrive.reset();npPreviousCamera(dt,now);}
+};
