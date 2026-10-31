@@ -1,3 +1,3 @@
 User-agent: *
 Allow: /
-Sitemap: https://nitropitch.bibleway.workers.dev/sitemap.xml
+Sitemap: https://nitropitch.app/sitemap.xml

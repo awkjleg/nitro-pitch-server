@@ -123,6 +123,7 @@
 </tr>
 
 <tr><td><code>np-cookie-choice-v1</code></td><td>Remember whether advertising is allowed in this browser.</td><td>Valid for 180 days. The record stays until replaced or cleared, but an expired choice does not allow ads.</td></tr>
+<tr><td><code>np-domain-migrated-v1</code></td><td>Remember a completed move so old bookmarks use your new save.</td><td>Until cleared; also remembered for the tab session where available.</td></tr>
 </tbody>
 </table>
 </div>
@@ -139,7 +140,7 @@
 <p>Advertising is off until you allow it. Rejecting advertising does not stop you from playing. Change a saved choice here at any time.</p>
 <button class="action" type="button" data-cookie-settings>Manage advertising cookies</button>
 <p id="cookie-choice-status" role="status" aria-live="polite"></p>
-<p>Your choice applies to this browser and site address for up to 180 days. Other devices or copies of the site need their own choice. Terms acknowledgment is separate from advertising consent.</p>
+<p>Your choice applies to this browser and site address for up to 180 days. Other devices or copies of the site need their own choice. When this site moves from nitropitch.bibleway.workers.dev to nitropitch.app, the migration can carry this browser’s saved preference to the new address. Terms acknowledgment is separate from advertising consent.</p>
 <p>Withdrawing permission reloads the page to stop scripts already running; other open tabs also reload when they receive the updated choice. This does not erase cookies Google already set. Use browser site-data controls and <a href="https://myadcenter.google.com/">Google My Ad Center</a> for existing cookies and account advertising settings.</p>
 <p>This site control manages whether AdSense loads. It is not a Google-certified consent management platform. Where Google requires an additional regional consent message, the site operator must also configure it in AdSense.</p>
 </section>
@@ -150,7 +151,8 @@
 <p>If browser storage is blocked, your choice may only last for the current visit. Advertising stays off on a new visit until you actively allow it again.</p>
 </section>
 <section class="card" id="contact">
-<h2>6. Updates &amp; questions</h2>
+<h2>6. Moving to nitropitch.app &amp; questions</h2>
+<p>When you visit the old address, a short transfer copies game saves, settings, saved replays, and any readable Firebase sign-in to nitropitch.app. It uses an encrypted, single-use transfer that expires after five minutes. The decryption key stays in your browser tab; the temporary server copy is deleted after redemption or expiry. Your old browser copy remains. Existing saves or accounts on the new address are preserved unless you explicitly choose to replace them. Restricted browser storage, expired sign-ins, and very large saves may require a retry or signing in again.</p>
 <p>We will update this page when storage or advertising practices change. For questions, use the feedback speech-bubble button at the top of the game menu (sign-in required). See the <a href="/privacy-policy.html">Privacy Policy</a> for personal-information requests and the <a href="/terms-and-conditions.html">Terms &amp; Conditions</a> for game rules.</p>
 </section>
 </main>

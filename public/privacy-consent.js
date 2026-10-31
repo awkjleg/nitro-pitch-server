@@ -28,6 +28,8 @@
   }
 
   function showConsentModal() {
+    if (alreadyAccepted(getCurrentUid())) return;
+    if (document.getElementById('np-cookie-dialog')?.open) { setTimeout(showConsentModal,250); return; }
     if (document.getElementById('nitropitch-terms-modal')) return;
 
     const overlay = document.createElement('div');
