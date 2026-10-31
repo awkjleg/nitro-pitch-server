@@ -8,6 +8,7 @@
 <title>Cookies &amp; Browser Storage | Nitro Pitch</title>
 <link rel="stylesheet" href="/legal.css">
 
+<script defer src="/cookie-consent.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -34,7 +35,7 @@
 <a href="#basics">1. Cookies and local storage</a>
 <a href="#storage">2. What the game stores</a>
 <a href="#providers">3. Advertising &amp; third-party services</a>
-<a href="#choices">4. Advertising &amp; privacy controls</a>
+<a href="#choices">4. Your advertising choice</a>
 <a href="#clear">5. Browser controls &amp; deleting data</a>
 <a href="#contact">6. Updates &amp; questions</a>
 </nav>
@@ -43,7 +44,7 @@
 <section class="card" id="basics">
 <h2>1. Cookies and local storage</h2>
 <p>Cookies are small pieces of information stored by your browser and sent with relevant web requests. Local storage keeps data for this site between visits; session storage normally lasts for the current tab session. Both can support gameplay without being advertising cookies.</p>
-<p>The table below describes storage used by the game code. Providers may also use their own storage when you use sign-in or load pages that include advertising.</p>
+<p>The table below describes storage used by the game code. Providers may also use their own storage when you use sign-in or allow advertising.</p>
 </section>
 <section class="card" id="storage">
 <h2>2. What the game stores</h2>
@@ -121,6 +122,7 @@
 <td>Until cleared.</td>
 </tr>
 
+<tr><td><code>np-cookie-choice-v1</code></td><td>Remember whether advertising is allowed in this browser.</td><td>Valid for 180 days. The record stays until replaced or cleared, but an expired choice does not allow ads.</td></tr>
 </tbody>
 </table>
 </div>
@@ -128,22 +130,24 @@
 </section>
 <section class="card" id="providers">
 <h2>3. Advertising &amp; third-party services</h2>
-<p>Nitro Pitch includes Google AdSense. The game currently requests the AdSense script when the game page opens. Google and its partners may use cookies or similar identifiers for ad delivery, personalization, fraud prevention, and measurement. Cookie names and lifetimes vary by product and provider.</p>
+<p>Nitro Pitch includes Google AdSense. The game only requests the AdSense script after you allow advertising through the cookie controls. Google and its partners may then use cookies or similar identifiers for ad delivery, personalization, fraud prevention, and measurement. Cookie names and lifetimes vary by product and provider.</p>
 <p>Learn more from <a href="https://policies.google.com/technologies/ads">Google’s advertising information</a>, <a href="https://business.safety.google/adscookies/">Google’s ad cookie reference</a>, and <a href="https://myadcenter.google.com/">Google’s ad settings</a>. Sign-in uses Firebase, hosting uses Cloudflare, and the game loads some resources from external providers. These requests can share technical information such as your IP address independently of advertising personalization settings.</p>
 <p>The repository does not include a separate analytics loader. Google’s advertising services may also measure ad delivery and interactions. A hosting provider or deployment configuration may add services outside this repository; this page should be reviewed when those change.</p>
 </section>
 <section class="card" id="choices">
-<h2>4. Advertising &amp; privacy controls</h2>
-<p>You can manage personalized advertising through <a href="https://myadcenter.google.com/">Google My Ad Center</a> and <a href="https://adssettings.google.com/partnerads">Google’s partner-site ad settings</a>. These settings are managed by Google; their availability depends on your account, browser, and location.</p>
-<p>Your browser can block third-party cookies and clear stored site data. Blocking cookies or turning off personalization does not necessarily remove all ads or stop every advertising request.</p>
-<div class="note">The current game requests Google AdSense on page load. This policy page does not itself block advertising scripts or record an advertising consent preference. If a consent message is displayed by Google or another provider, use the choices offered there.</div>
-<p>Terms acknowledgment is not consent to advertising cookies. Browser controls and Google settings are separate from the game’s terms popup.</p>
+<h2>4. Your advertising choice</h2>
+<p>Advertising is off until you allow it. Rejecting advertising does not stop you from playing. Change a saved choice here at any time.</p>
+<button class="action" type="button" data-cookie-settings>Manage advertising cookies</button>
+<p id="cookie-choice-status" role="status" aria-live="polite"></p>
+<p>Your choice applies to this browser and site address for up to 180 days. Other devices or copies of the site need their own choice. Terms acknowledgment is separate from advertising consent.</p>
+<p>Withdrawing permission reloads the page to stop scripts already running; other open tabs also reload when they receive the updated choice. This does not erase cookies Google already set. Use browser site-data controls and <a href="https://myadcenter.google.com/">Google My Ad Center</a> for existing cookies and account advertising settings.</p>
+<p>This site control manages whether AdSense loads. It is not a Google-certified consent management platform. Where Google requires an additional regional consent message, the site operator must also configure it in AdSense.</p>
 </section>
 <section class="card" id="clear">
 <h2>5. Browser controls &amp; deleting data</h2>
 <p>Use your browser’s privacy settings to review or remove cookies and site data, block third-party cookies, or use private browsing. Look for “Cookies and site data” or “Site settings” for the Nitro Pitch address.</p>
 <div class="note">Clearing site data may sign you out and delete guest progress, settings, saved replays, and consent choices. It does not delete account data held on servers. Make sure any progress you want to keep is saved to your account first.</div>
-<p>If browser storage is blocked, the game may not remember settings or terms acknowledgment between visits. Blocking storage alone does not stop the AdSense script from being requested.</p>
+<p>If browser storage is blocked, your choice may only last for the current visit. Advertising stays off on a new visit until you actively allow it again.</p>
 </section>
 <section class="card" id="contact">
 <h2>6. Updates &amp; questions</h2>

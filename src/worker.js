@@ -18,6 +18,29 @@ export default {
       const room = String(url.searchParams.get("room") || "lobby").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60) || "lobby";
       return env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(req);
     }
+    // Transform the game shell before any browser can request its legacy ad loader.
+    if (["/", "/index", "/index/", "/index.html"].includes(url.pathname)) {
+      const headers = new Headers(req.headers);
+      headers.delete("If-None-Match");
+      headers.delete("If-Modified-Since");
+      const asset = await env.ASSETS.fetch(new Request(req, { headers }));
+      if (!asset.ok || !asset.headers.get("Content-Type")?.includes("text/html")) return asset;
+      const transformed = new HTMLRewriter()
+        .on('script[src*="pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"]', {
+          element(element) { element.remove(); }
+        })
+        .on("head", {
+          element(element) {
+            element.prepend('<script src="/cookie-consent.js" data-ad-client="ca-pub-3345250551146308"></script>', { html: true });
+          }
+        }).transform(asset);
+      const response = new Response(transformed.body, transformed);
+      response.headers.delete("ETag");
+      response.headers.delete("Content-Length");
+      response.headers.set("Cache-Control", "no-store");
+      response.headers.set("X-Nitropitch-Consent", "v1");
+      return response;
+    }
     return env.ASSETS.fetch(req);
   }
 };
