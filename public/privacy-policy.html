@@ -37,8 +37,8 @@
       display:flex;align-items:center;justify-content:space-between;gap:16px;
       padding:10px 0 24px;border-bottom:1px solid var(--line);margin-bottom:26px;
     }
-    .brand{display:flex;align-items:center;gap:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
-    .brand-mark{width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--orange));box-shadow:0 0 16px rgba(255,212,81,.8)}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);text-decoration:none}.brand:focus-visible{outline:3px solid var(--gold);outline-offset:6px;border-radius:12px}
+    .brand-mark{display:block;width:64px;height:64px;flex-shrink:0;border-radius:12px;object-fit:contain}
     .brand-name{font-family:var(--display);font-size:24px;letter-spacing:.05em}
     .back-link{color:var(--gold);text-decoration:none;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
     .hero{
@@ -75,10 +75,10 @@
 <body>
   <div class="page">
     <div class="topbar">
-      <div class="brand">
-        <span class="brand-mark"></span>
+      <a class="brand" href="/" aria-label="Nitro Pitch home">
+        <img class="brand-mark" src="/apple-touch-icon.png" width="64" height="64" alt="Nitro Pitch logo" decoding="async">
         <span class="brand-name">Nitro Pitch</span>
-      </div>
+      </a>
       <a class="back-link" href="/">Back to Game</a>
     </div>
 
