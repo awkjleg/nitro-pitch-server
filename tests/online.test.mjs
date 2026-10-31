@@ -2,15 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
+import {validCar,validHit,validGame,resultEvidence,rankedRules} from '../src/room-guard.js';
 const root=new URL('../',import.meta.url);
 const read=path=>readFile(new URL(path,root),'utf8');
 
 async function roomFixture(){
   let now=100000;const sockets=[],data=new Map();let alarm=null;
-  const storage={list:async({prefix})=>new Map([...data].filter(([key])=>key.startsWith(prefix))),put:async(key,value)=>data.set(key,structuredClone(value)),delete:async key=>data.delete(key),setAlarm:async value=>{alarm=value;},deleteAlarm:async()=>{alarm=null;}};
+  const storage={get:async key=>data.get(key),list:async({prefix})=>new Map([...data].filter(([key])=>key.startsWith(prefix))),put:async(key,value)=>data.set(key,structuredClone(value)),delete:async key=>data.delete(key),setAlarm:async value=>{alarm=value;},deleteAlarm:async()=>{alarm=null;}};
   const ctx={storage,getWebSockets:id=>sockets.filter(ws=>ws.readyState===1&&(!id||ws.attachment.id===id)),setWebSocketAutoResponse(){},blockConcurrencyWhile(fn){this.ready=fn();}};
-  const source=(await read('src/room.js')).replace("import { DurableObject } from 'cloudflare:workers';",'').replace('export class Room','class Room')+'\nglobalThis.TestRoom=Room;';
-  const context=vm.createContext({DurableObject:class{constructor(ctx){this.ctx=ctx;}},WebSocketRequestResponsePair:class{},TextEncoder,Response,Request,URL,JSON,Map,Set,Date:class extends Date{static now(){return now;}}});vm.runInContext(source,context);
+  const source=(await read('src/room.js')).replace(/^import .*;$/gm,'').replace('export class Room','class Room')+'\nglobalThis.TestRoom=Room;';
+  const context=vm.createContext({validCar,validHit,validGame,resultEvidence,reply:Response.json,identify:async()=>({uid:"test"}),structuredClone,DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},WebSocketRequestResponsePair:class{},TextEncoder,Response,Request,URL,JSON,Map,Set,Date:class extends Date{static now(){return now;}}});vm.runInContext(source,context);
   const fixture={ctx,sockets,data,advance:ms=>{now+=ms;},get alarm(){return alarm;},async wake(){this.room=new context.TestRoom(ctx,{});await ctx.ready;return this.room;},socket(id){const ws={readyState:1,attachment:{id,ok:false},messages:[],serializeAttachment(value){this.attachment=structuredClone(value);},deserializeAttachment(){return structuredClone(this.attachment);},send(value){this.messages.push(JSON.parse(value));},close(){this.readyState=3;}};sockets.push(ws);return ws;},message(ws,value){return this.room.webSocketMessage(ws,JSON.stringify(value));}};
   await fixture.wake();return fixture;
 }
@@ -23,10 +24,10 @@ test('hibernation retains a quiet lobby and broadcasts one authoritative members
 });
 
 test('large sleeping match records preserve player seats while requesting a full resync',async()=>{
- const f=await roomFixture(),a=f.socket('a'),b=f.socket('b');await f.message(a,{t:'hello',p:{nm:'A',j:1,tm:0,g:'large'.repeat(1000)}});await f.message(b,{t:'hello',p:{nm:'B',j:2,tm:1}});
+ const f=await roomFixture(),a=f.socket('a'),b=f.socket('b');await f.message(a,{t:'hello',p:{nm:'A',j:1,tm:0,large:'large'.repeat(1000)}});await f.message(b,{t:'hello',p:{nm:'B',j:2,tm:1}});
  await f.wake();await f.message(b,{t:'sync',p:{nm:'B',j:2,tm:1}});const state=b.messages.filter(m=>m.t==='state').at(-1);
  assert.deepEqual(state.memberIds,['a']);assert.deepEqual(state.pending,['a']);assert.equal(state.members.a.j,1);assert(a.messages.some(m=>m.t==='resync'));
- await f.message(a,{t:'full',p:{nm:'A',j:1,tm:0,g:'restored'}});assert.equal(f.room.partial.size,0);
+ await f.message(a,{t:'full',p:{nm:'A',j:1,tm:0,large:'restored'}});assert.equal(f.room.partial.size,0);
 });
 
 test('short disconnects survive a wake/reconnect without a false departure; real departures expire',async()=>{

@@ -3,6 +3,8 @@
 // passes every change on to the others. It uses WebSocket hibernation, so a quiet room costs (almost) nothing; after
 // waking, it restores socket identity records and asks clients to refresh any large presence payloads.
 export { Room } from "./room.js";
+import {progressFetch} from './progress.js';
+export {Progress} from './progress.js';
 import { applyGameFixes } from "./game-shell.js";
 import { migrationFetch } from "./domain-migration.js";
 export { DomainTransfer } from "./domain-migration.js";
@@ -13,6 +15,7 @@ const ORIGIN_OK = /^https:\/\/([a-z0-9-]+\.)*bibleway\.workers\.dev$|^https?:\/\
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+    const progress=await progressFetch(req,env);if(progress)return progress;
     const migration = await migrationFetch(req, env);
     if (migration) return migration;
     if (url.pathname === "/ws") {
@@ -45,7 +48,7 @@ export default {
       response.headers.delete("Content-Length");
       response.headers.set("Cache-Control", "no-store");
       response.headers.set("X-Nitropitch-Consent", "v1");
-      response.headers.set("X-Nitropitch-Build", "2026111010");
+      response.headers.set("X-Nitropitch-Build", "2026111011");
       return response;
     }
     return env.ASSETS.fetch(req);

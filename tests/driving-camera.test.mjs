@@ -3,10 +3,8 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import * as THREE from 'three';
-const root=new URL('../',import.meta.url),read=p=>readFile(new URL(p,root),'utf8');
-const raw=await read('public/index.html'),drivingUpdates=await read('src/driving-updates.txt'),playerFeatures=await read('src/player-features.txt');
-const shell=(await read('src/game-shell.js')).replace('import playerFeatures from "./player-features.txt";','').replace('import drivingUpdates from "./driving-updates.txt";','').replace('export function applyGameFixes','function applyGameFixes');
-const patch=vm.createContext({drivingUpdates,playerFeatures});vm.runInContext(shell+'\nglobalThis.apply=applyGameFixes;',patch);const html=patch.apply(raw);
+import {root,read,raw,html} from './served-game.mjs';
+const drivingUpdates=await read('src/driving-updates.txt');
 function fixture(){
  const camera=new THREE.PerspectiveCamera(60,16/9,0.1,1000);
  const ctx=vm.createContext({THREE,V3:THREE.Vector3,Q:THREE.Quaternion,Math,console,clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),CARS:[{h:[0.867,0.3866,1.2051],ho:[0,0.415,0.2776]}],me:{team:0,car:null},match:{mut:[0,1],ph:'play'},sfx:{jump(){},whoosh(){}},fx:{emit(){}},camera,mode:'offline',camBlend:0,rearView:false,ballCam:true,ballMesh:{visible:true},ball:{rp:new THREE.Vector3(0,2,20)},settings:{dist:280,height:100,angle:-3,stiff:0.5,fov:105,shake:false},innerWidth:1280,innerHeight:720,spec:null,dropOn:false,DVERT:[],showroomOn:()=>false,nowS:()=>1,paused:false,renderer:{},replay:{active:false}});

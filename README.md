@@ -70,3 +70,13 @@ Run `node --test tests/*.test.mjs` (Node 22+) before deployment. These tests cov
 New visitors can launch the existing tutorial or free play from a dismissible Home card. Those two entry points allow guests, while banned-player checks and online sign-in gates remain. `np-welcome-v1` remembers the choice locally. Camera defaults change only through `DEFAULT_SETTINGS`; current saved settings are preserved.
 
 Run `npm ci` and `npm test` for the regression suite. The camera/physics fixtures use Three.js 0.158.0, matching the bundled game's pinned browser version.
+
+### Update 5.13: account rewards and presentation
+
+Firebase remains the identity and community provider. `/api/progress` verifies the Firebase ID token through Google's account lookup and imports each existing Firestore player save once. The `PROGRESS` SQLite Durable Object then owns new XP, ranks, drops, inventories, gift receipts and trades. Browser saves can update cosmetics/settings, but cannot award progress. No service-account key is required. Existing Firestore player documents are retained as migration baselines, not continuously overwritten. Do not revert to the old browser-written save path after migration without reconciling newer Durable Object progress.
+
+`src/reward-rules.js` is generated from the bundled catalogue/rules by `node scripts/extract-economy.mjs`; regenerate when changing that catalogue. Reward mutations and receipts are atomic; two-account trades use one serialized `accounts-v1` object. This favors correctness for the current game population; shard/coordinate trades before high-volume scaling. Guest practice remains device-local. Existing leaderboards are grandfathered; migrated accounts replace their legacy rows.
+
+Room authentication binds presence to verified Firebase UIDs and elects a host. Result validation checks server elapsed time, score/stat bounds, participant identity and opposing-team confirmation. Ranked awards require standard matchmaking rules and humans on both teams. This is **not authoritative server physics**: the elected client still simulates matches, and colluding modified clients remain a limitation. New arenas preserve all collision dimensions. Goal blast velocity is bounded; effect geometry is pooled, and replaced scenery is disposed. Reduced-motion and low-quality preferences are respected.
+
+`src/game-polish.txt` supplies arena cards, scenery, item reveals, immediate equip actions, XP animation and goal shockwaves. `public/game-polish.css` uses the existing menu design. `np-pending-rewards:<uid>` retains up to ten interrupted claims for retry. Every release still updates the active notes, version endpoint and safe menu refresh notification.
