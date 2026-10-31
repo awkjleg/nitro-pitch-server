@@ -9,7 +9,7 @@ const patchContext=vm.createContext({});vm.runInContext(source.replace('export f
 const html=patchContext.apply(raw);
 
 test('game-shell changes match the actual bundled game and every inline script parses',()=>{
- assert(html.includes('src="/online-rooms.js"'));assert(html.includes('const BUILD = 2026111002;'));assert(!html.includes('const OPEN_WAIT = 8000, STATE_WAIT = 30000;'));
+ assert(html.includes('src="/online-rooms.js"'));assert(html.includes('src="/game-notices.js"'));assert(html.includes('const BUILD = 2026111002;'));assert(!html.includes('const OPEN_WAIT = 8000, STATE_WAIT = 30000;'));
  for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(match[1]);
  assert(html.includes('if (adTab === "online" && !$("adminPop").hidden) renderAdmin();'));
  assert(html.includes('ball.floorFrame = false;'));
