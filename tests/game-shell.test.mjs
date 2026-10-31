@@ -5,7 +5,8 @@ import {readFile} from 'node:fs/promises';
 const root=new URL('../',import.meta.url);
 const raw=await readFile(new URL('public/index.html',root),'utf8');
 const source=await readFile(new URL('src/game-shell.js',root),'utf8');
-const patchContext=vm.createContext({});vm.runInContext(source.replace('export function applyGameFixes','function applyGameFixes')+'\nglobalThis.apply=applyGameFixes;',patchContext);
+const playerFeatures=await readFile(new URL('src/player-features.txt',root),'utf8');
+const patchContext=vm.createContext({playerFeatures});vm.runInContext(source.replace('import playerFeatures from "./player-features.txt";', '').replace('export function applyGameFixes','function applyGameFixes')+'\nglobalThis.apply=applyGameFixes;',patchContext);
 const html=patchContext.apply(raw);
 
 test('game-shell changes match the actual bundled game and every inline script parses',()=>{

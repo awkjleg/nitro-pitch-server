@@ -65,3 +65,22 @@ test('tab wake requests an authoritative refresh and identical full states do no
  f.listeners.visibilitychange();assert(ws.messages.some(value=>value.includes('"t":"sync"')));
  ws.receive({t:'f',id:'a',p:{nm:'A',j:1,t:2}});assert(room.peers()[1].updatedAt>first);
 });
+
+test('rematches require every active human and reject stale votes, changed rosters and disconnects',async()=>{
+ const f=await roomFixture(),a=f.socket('a'),b=f.socket('b'),s=f.socket('s');
+ await f.message(a,{t:'hello',p:{j:1,tm:0}});await f.message(b,{t:'hello',p:{j:2,tm:1}});await f.message(s,{t:'hello',p:{j:3,tm:-1,sp:true}});
+ const vote=(mid='m1',roster=['a','b'])=>({mid,roster,yes:true});
+ await f.message(a,{t:'p',p:{npRematch:vote()}});assert(!a.messages.some(m=>m.t==='rematch-ready'));
+ await f.message(b,{t:'p',p:{npRematch:vote('old')}});assert(!a.messages.some(m=>m.t==='rematch-ready'));
+ await f.message(b,{t:'p',p:{npRematch:vote('m1',['b'])}});assert(!a.messages.some(m=>m.t==='rematch-ready'));
+ await f.message(b,{t:'p',p:{npRematch:vote()}});assert.deepEqual(a.messages.filter(m=>m.t==='rematch-ready'),[{t:'rematch-ready',mid:'m1',voters:['a','b']}]);
+ await f.message(a,{t:'p',p:{nm:'A'}});assert.equal(a.messages.filter(m=>m.t==='rematch-ready').length,1);
+ b.readyState=3;await f.room.webSocketClose(b);await f.message(a,{t:'p',p:{npRematch:vote('m2')}});assert.equal(a.messages.filter(m=>m.t==='rematch-ready').length,1);
+ const replacement=f.socket('b');await f.message(replacement,{t:'hello',p:{j:2,tm:1,npRematch:vote('m2')}});assert.equal(a.messages.filter(m=>m.t==='rematch-ready').length,2);
+});
+test('connection metrics track pong latency and server events unsubscribe',async()=>{
+ const f=await clientFixture(),room=await f.lobby(),ws=f.sockets[0];ws.open();ws.receive({t:'state',members:{}});
+ f.advance(37);ws.onmessage({data:'pong'});assert.equal(room.connectionInfo().pingMs,37);assert.equal(room.connectionInfo().connected,true);
+ let events=0;const off=room.on('rematch-ready',()=>events++);ws.receive({t:'rematch-ready',mid:'m1',voters:['a','b']});off();ws.receive({t:'rematch-ready',mid:'m1',voters:['a','b']});assert.equal(events,1);
+ room.lost(ws);assert.equal(room.connectionInfo().connected,false);
+});

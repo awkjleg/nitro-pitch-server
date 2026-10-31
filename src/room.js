@@ -5,7 +5,7 @@ const bytes=new TextEncoder();
 
 export class Room extends DurableObject {
   constructor(ctx,env){
-    super(ctx,env);this.pres=new Map();this.partial=new Set();this.departures=new Map();this.resyncAt=new Map();
+    super(ctx,env);this.pres=new Map();this.partial=new Set();this.departures=new Map();this.resyncAt=new Map();this.rematchSent=null;
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping','pong'));
     // Socket attachments survive hibernation. Full small lobby records fit; large
     // match records retain identity/seat metadata until the client resends them.
@@ -48,6 +48,19 @@ export class Room extends DurableObject {
       this.resyncAt.set(id,now);this.send(ws,{t:'resync'});
     }
   }
+  checkRematch(force=false){
+    if(this.partial.size||this.departures.size)return;
+    const players=[...this.pres].filter(([,p])=>Number.isFinite(p.j)&&[0,1].includes(p.tm)&&!p.sp);
+    if(players.length<2)return;
+    const ids=players.map(([id])=>id).sort(),roster=JSON.stringify(ids),mid=players[0][1].npRematch?.mid;
+    if(typeof mid!=='string'||!mid||mid.length>80)return;
+    for(const[id,p]of players){
+      const v=p.npRematch;
+      if(!v||v.mid!==mid||v.yes!==true||!Array.isArray(v.roster)||JSON.stringify([...v.roster].sort())!==roster)return;
+      if(!this.ctx.getWebSockets(id).some(ws=>ws.readyState===1&&this.info(ws).ok&&!this.info(ws).replaced))return;
+    }
+    const key=mid+':'+roster;if(force||this.rematchSent!==key){this.rematchSent=key;this.bcast({t:'rematch-ready',mid,voters:ids});}
+  }
   async scheduleAlarm(){if(this.departures.size)await this.ctx.storage.setAlarm(Math.min(...this.departures.values()));else await this.ctx.storage.deleteAlarm();}
   async fetch(request){
     const id=cleanId(new URL(request.url).searchParams.get('id'));if(!id)return new Response('Missing id',{status:400});
@@ -69,7 +82,7 @@ export class Room extends DurableObject {
       this.pres.set(id,p);this.partial.delete(id);this.resyncAt.delete(id);this.cache(ws,id,p);
       if(this.departures.delete(id)){await this.ctx.storage.delete('leave:'+id);await this.scheduleAlarm();}
       if(message.t==='hello'||message.t==='sync')this.state(ws,created);
-      if(changed)this.bcast({t:known?'f':'j',id,p},ws);this.resync();return;
+      if(changed)this.bcast({t:known?'f':'j',id,p},ws);this.resync();this.checkRematch(message.t==='hello'||message.t==='sync');return;
     }
     if(message.t==='p'&&message.p&&typeof message.p==='object'&&!Array.isArray(message.p)){
       if(!info.ok||!this.pres.has(id)||this.partial.has(id)){this.send(ws,{t:'resync'});return;}
@@ -78,7 +91,7 @@ export class Room extends DurableObject {
         if(['__proto__','constructor','prototype'].includes(key))continue;
         out[key]=message.p[key];if(out[key]===null)delete current[key];else current[key]=out[key];
       }
-      this.cache(ws,id,current);this.bcast({t:'p',id,p:out},ws);this.resync();return;
+      this.cache(ws,id,current);this.bcast({t:'p',id,p:out},ws);this.resync();this.checkRematch();return;
     }
     if(message.t==='bye'){await this.gone(ws,true);try{ws.close(1000,'bye');}catch(_){}}
   }
