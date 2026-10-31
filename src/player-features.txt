@@ -1,0 +1,143 @@
+(function () {
+  'use strict';
+  const text=(value,max=40)=>typeof value==='string'?value.slice(0,max):'';
+  const number=(value,max=1000000)=>Number.isFinite(value)?Math.max(0,Math.min(max,Math.round(value))):0;
+  function history(value){
+    if(!Array.isArray(value))return[];
+    return value.filter(row=>row&&typeof row.id==='string'&&row.id.length>0&&row.id.length<=80&&Number.isFinite(row.at)&&Array.isArray(row.score)&&row.score.length===2).slice(0,20).map(row=>({id:row.id,at:number(row.at,1e15),title:text(row.title,80),result:['Win','Loss','Draw'].includes(row.result)?row.result:'Draw',score:row.score.map(v=>number(v,999)),goals:number(row.goals),assists:number(row.assists),saves:number(row.saves),xp:number(row.xp),team:Array.isArray(row.team)?row.team.slice(0,6).map(v=>text(v)):[],opponents:Array.isArray(row.opponents)?row.opponents.slice(0,6).map(v=>text(v)):[],rank:row.rank&&Number.isFinite(row.rank.before)&&Number.isFinite(row.rank.after)?{before:number(row.rank.before,4000),after:number(row.rank.after,4000)}:null}));
+  }
+  function addHistory(rows,row){return history([row,...history(rows).filter(item=>item.id!==row.id)]);}
+  function identity(player){const uid=player&&(player.ui||player.uid||player.pr?.ui),peer=player&&(player.peer||player.key);return typeof uid==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(uid)?'uid:'+uid:typeof peer==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(peer)?'peer:'+peer:'';}
+  function blocks(value){return Array.isArray(value)?value.filter(item=>item&&/^(uid|peer):[A-Za-z0-9_-]{1,128}$/.test(item.id)&&typeof item.name==='string').slice(0,100).map(item=>({id:item.id,name:text(item.name),at:number(item.at,1e15)})):[];}
+  function rematch(mid,expected,peers){
+    const ids=[...new Set(expected)].sort();
+    const players=peers.filter(p=>p.presence&&Number.isFinite(p.presence.j)&&[0,1].includes(p.presence.tm)&&!p.presence.sp);
+    const current=[...new Set(players.map(p=>p.peer))].sort();
+    const complete=ids.length>=2&&JSON.stringify(ids)===JSON.stringify(current);
+    const votes=players.filter(p=>ids.includes(p.peer)&&p.presence.npRematch?.mid===mid&&p.presence.npRematch.yes===true&&Array.isArray(p.presence.npRematch.roster)&&JSON.stringify([...p.presence.npRematch.roster].sort())===JSON.stringify(ids)).length;
+    return{total:ids.length,votes,complete,ready:complete&&votes===ids.length};
+  }
+  window.NPPlayerCore=Object.freeze({history,addHistory,identity,blocks,rematch});
+})();
+
+(function () {
+  'use strict';
+  if(!window.NPPlayerCore || typeof onMatchOver!=='function')return;
+  const C=window.NPPlayerCore;
+  const account=()=>{try{return window.npAccounts?.user()||null;}catch(_){return null;}};
+  const scope=()=>account()?.uid||'guest';
+  const read=(key,fallback=[])=>{try{return JSON.parse(localStorage.getItem(key)||'null')||fallback;}catch(_){return fallback;}};
+  const write=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value));return true;}catch(_){toast('Your browser could not save this change.');return false;}};
+  let owner='',historyRows=[],blocked=[],rematchState=null,rematchOff=null,rematchRoom=null,clanRequest=0,clanView=null;
+  function load(){const next=scope();if(next===owner)return;owner=next;historyRows=C.history(read('np-match-history:'+owner));blocked=C.blocks(read('np-blocked:'+owner));}
+  function isBlocked(player){load();const id=C.identity(player);return !!id&&blocked.some(item=>item.id===id);}
+  function chatBlocked(message){const parts=String(message.k||'').split(':');return !message.me&&isBlocked({ui:message.ui,peer:parts[0]==='c'?parts[1]:parts[0]});}
+  const el=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=String(text);return node;};
+  const button=(label,run)=>{const node=el('button','np-action',label);node.type='button';node.addEventListener('click',run);return node;};
+  function dialog(title){
+    let node=document.getElementById('np-player-dialog');if(!node){node=el('dialog','np-player-dialog');node.id='np-player-dialog';node.setAttribute('aria-labelledby','np-player-dialog-title');document.body.append(node);}
+    if(node.open)node.close();node.replaceChildren();const heading=el('h2','',title);heading.id='np-player-dialog-title';const body=el('div','np-feature-body');node.append(heading,body,button('Close',()=>node.close()));node.showModal();return body;
+  }
+  function setBlocked(player){
+    load();const id=C.identity(player);if(!id||player.me||id==='uid:'+(account()?.uid||''))return;
+    const exists=blocked.some(item=>item.id===id);
+    if(!exists&&blocked.length>=100){toast('Your block list is full. Unblock a player first.');return;}
+    const next=exists?blocked.filter(item=>item.id!==id):[...blocked,{id,name:String(player.name||'Player').slice(0,40),at:Date.now()}];
+    if(!write('np-blocked:'+owner,next))return;blocked=next;
+    if(!exists&&trade&&isBlocked(lobbyPlayers().find(p=>p.peer===trade.peer))&&!trade.done)endTrade('Trade cancelled: player blocked.');
+    for(const peer of partyInvites.keys())if(isBlocked(lobbyPlayers().find(p=>p.peer===peer)))partyInvites.delete(peer);
+    if(ciCur?.from&&isBlocked({ui:ciCur.from})){ciCur=null;$('clanInvPop').hidden=true;}
+    lchat.key='';lchatRender();renderPartyInvite();toast(exists?'Player unblocked':'Player blocked on this device');
+  }
+  function showBlocks(){
+    load();const body=dialog('Blocked players');body.append(el('p','np-muted','Saved for this account on this device. Blocking hides chat and party, clan, and trade invitations; it does not remove players from matches. Guest blocks apply to their current connection.'));
+    if(!blocked.length)body.append(el('p','','You have no blocked players. Open a player’s stats to block them.'));
+    for(const item of blocked){const row=el('div','np-history-row');row.append(el('span','',item.name),button('Unblock',()=>{setBlocked({name:item.name,...(item.id.startsWith('uid:')?{ui:item.id.slice(4)}:{peer:item.id.slice(5)})});showBlocks();}));body.append(row);}
+  }
+  function showHistory(){
+    load();const body=dialog('Match history');body.append(el('p','np-muted','Your last 20 completed matches, saved for this account on this device. Select a match for teammates, opponents, XP, and rank changes.'));
+    if(!historyRows.length)body.append(el('p','','Your next completed match will appear here. Training, free play, and spectating are excluded.'));
+    for(const row of historyRows){const item=button(row.result+' · '+row.score.join('–')+' · '+row.title,()=>showHistoryDetails(row));item.classList.add('np-history-row');item.append(el('small','np-muted',new Date(row.at).toLocaleString()));body.append(item);}
+  }
+  function showHistoryDetails(row){
+    const body=dialog(row.title);body.append(el('p','np-result',row.result+' · '+row.score.join('–')),el('p','np-muted',new Date(row.at).toLocaleString()),el('p','','Goals '+row.goals+' · Assists '+row.assists+' · Saves '+row.saves+' · +'+row.xp+' XP'));
+    if(row.rank){const delta=row.rank.after-row.rank.before;body.append(el('p','','Ranked MMR: '+row.rank.before+' → '+row.rank.after+' ('+(delta>=0?'+':'')+delta+')'));}
+    body.append(el('h3','','Your team'),el('p','',row.team.join(', ')||'—'),el('h3','','Opponents'),el('p','',row.opponents.join(', ')||'—'),button('Back to history',showHistory));
+  }
+  function daily(){passTab='quests';showScreen('pass');renderPass();}
+  function showAbout(){const body=dialog('About Nitro Pitch');body.append(el('p','','Nitro Pitch is a free online car soccer browser game. Boost, jump, and score in multiplayer, competitive ranked matches, private rooms, bot matches, and training—no download needed.'),el('h3','','Looking for unblocked games or game websites?'),el('p','','You can play Nitro Pitch directly in a modern browser. School, work, and other network rules vary, so access cannot be guaranteed on every network.'),el('p','','Use the controls shown in Settings and start with training to learn driving, jumping, boosting, and scoring.'));}
+
+  const originalStats=showStats;
+  showStats=function(player){originalStats(player);if(player.me)return;const peer=lobbyPlayers().find(p=>p.peer===player.peer);const target={...player,ui:player.uid||player.pr?.ui||peer?.ui};if(!C.identity(target))return;const section=$('spAdmin');section.hidden=false;const row=el('div','row');row.append(button(isBlocked(target)?'Unblock player':'Block player',()=>{setBlocked(target);showStats(player);}));section.append(el('small','','Your privacy controls'),row);};
+  const addMessage=lchatAdd;lchatAdd=function(message){if(!chatBlocked(message))addMessage(message);};
+  const invite=showPartyInvite;showPartyInvite=function(value){if(!isBlocked(lobbyPlayers().find(p=>p.peer===value.peer)))invite(value);};
+  const partyRender=renderPartyInvite;renderPartyInvite=function(){for(const peer of partyInvites.keys())if(isBlocked(lobbyPlayers().find(p=>p.peer===peer)))partyInvites.delete(peer);partyRender();};
+  const inviteClan=showClanInvite;showClanInvite=function(){const all=clan.invites;clan.invites=all.filter(value=>!isBlocked({ui:value.from}));try{inviteClan();}finally{clan.invites=all;}};
+  const inviteParty=partyInvite;partyInvite=function(peer){if(isBlocked(lobbyPlayers().find(p=>p.peer===peer))){toast('Unblock this player before inviting them.');return;}inviteParty(peer);};
+  const tradeStart=startTrade;startTrade=function(peer){if(isBlocked(lobbyPlayers().find(p=>p.peer===peer))){toast('Unblock this player before trading.');return;}tradeStart(peer);};
+
+  const ended=onMatchOver;
+  onMatchOver=function(){
+    const kind=matchKind(),roster=teamRoster(),team=me.team,mid=match.mid;
+    ended();load();
+    if(mid&&[0,1].includes(team)&&!spec&&!['training','viewer','free'].includes(kind)){
+      const stats=match.st[myKey()]||[],rank=lastResult?.mid===mid?lastResult.rank:null;
+      const row={id:mid,at:Date.now(),title:matchTitle(),result:match.s[team]===match.s[1-team]?'Draw':match.s[team]>match.s[1-team]?'Win':'Loss',score:[match.s[team],match.s[1-team]],goals:stats[1]||0,assists:stats[2]||0,saves:stats[3]||0,xp:lastResult?.mid===mid?lastResult.xpGain:0,team:roster.filter(p=>p.team===team).map(p=>p.name),opponents:roster.filter(p=>p.team===1-team).map(p=>p.name),rank:rank?{before:rank.before.mmr,after:rank.after.mmr}:null};
+      historyRows=C.addHistory(historyRows,row);write('np-match-history:'+owner,historyRows);
+    }
+    const expected=roster.filter(p=>!p.bot).map(p=>p.key).sort();
+    rematchState=mode==='online'&&!spec&&!freePlay&&expected.length>=2?{mid,expected,voted:false}:null;
+    bindRematch();renderRematch();
+  };
+  function bindRematch(){
+    if(game===rematchRoom)return;if(rematchOff)rematchOff();rematchRoom=game;
+    rematchOff=game?.on?.('rematch-ready',message=>{
+      if(game!==rematchRoom||!rematchState||message.mid!==rematchState.mid||match.mid!==message.mid||match.ph!=='over'||!isAuthority||game?.connected?.()===false)return;
+      if(JSON.stringify([...message.voters].sort())!==JSON.stringify(rematchState.expected))return;
+      const result=C.rematch(match.mid,rematchState.expected,game.peers());if(!result.ready)return;
+      rematchState=null;game.presence({npRematch:null}).catch(()=>{});beginMatch();hideMenu();
+    })||null;
+  }
+  function vote(){if(!rematchState||!game||match.ph!=='over')return;rematchState.voted=!rematchState.voted;game.presence({npRematch:{mid:rematchState.mid,yes:rematchState.voted,roster:rematchState.expected}}).catch(()=>{});renderRematch();}
+  function renderRematch(){
+    let box=$('np-rematch');if(!box){box=el('div','np-rematch');box.id='np-rematch';$('postStatus').after(box);}
+    if(!rematchState||match.ph!=='over'||match.mid!==rematchState.mid){box.hidden=true;box.dataset.key='';return;}box.hidden=false;
+    const result=C.rematch(match.mid,rematchState.expected,game.peers());const key=JSON.stringify([result,rematchState.voted,game.connected?.()]);if(box.dataset.key===key)return;box.dataset.key=key;box.replaceChildren();const action=button((rematchState.voted?'Cancel rematch vote':'Vote for rematch')+' · '+result.votes+'/'+result.total,vote);action.disabled=!result.complete||game.connected?.()===false;
+    box.append(action,el('p','np-muted',!result.complete?'A player left. Use Queue again or leave the match.':game.connected?.()===false?'Reconnecting…':'Everyone must agree. A rematch keeps these teams and settings.'));
+  }
+  const authority=authorityMatch;authorityMatch=function(dt){if(rematchState&&match.ph==='over'&&match.mid===rematchState.mid)overT=0;authority(dt);};
+
+  async function members(c,section,request){
+    const A=window.npAccounts;section.replaceChildren(el('h3','','Members'),el('p','np-muted','Loading members…'));
+    try{
+      if(!A?.clans?.members)throw new Error('Sign in to view clan members.');
+      const rows=await A.clans.members(c.id);if(request!==clanRequest||!section.isConnected||ccCur?.id!==c.id)return;
+      section.replaceChildren(el('h3','','Members · '+rows.length));const order={owner:0,officer:1,member:2};
+      for(const person of [...rows].sort((a,b)=>(order[a.role]??3)-(order[b.role]??3)||String(a.name||'').localeCompare(String(b.name||'')))){
+        const row=button(String(person.name||'Player').slice(0,40),()=>{statsForUid(person.uid,person.name);});row.classList.add('np-member');row.dataset.memberUid=String(person.uid||'');row.append(el('small','',String(person.role||'member')),el('span','np-member-status','Checking status…'));section.append(row);
+      }
+      if(!rows.length)section.append(el('p','','No members returned.'));
+      section.append(button('Refresh members',()=>members(c,section,++clanRequest)));clanView={id:c.id,section};updateMemberStatus();
+    }catch(error){if(request!==clanRequest||!section.isConnected)return;section.replaceChildren(el('h3','','Members'),el('p','',error.message==='Sign in to view clan members.'?error.message:'Members could not be loaded. Sign in or try again.'),button('Retry',()=>members(c,section,++clanRequest)));}
+  }
+  const clanCard=showClanCard;showClanCard=function(c){clanCard(c);if(!c?.id)return;const section=el('section','np-members');$('ccBody').append(section);members(c,section,++clanRequest);};
+  const clanRow=clanFindRow;clanFindRow=function(c){const row=clanRow(c);row.tabIndex=0;row.setAttribute('role','button');row.setAttribute('aria-label','View '+c.name+' members');row.addEventListener('click',event=>{if(!event.target.closest('button,a,input'))showClanCard(c);});row.addEventListener('keydown',event=>{if(event.target===row&&['Enter',' '].includes(event.key)){event.preventDefault();showClanCard(c);}});return row;};
+  const clanTag=tagEl;tagEl=function(tag,color){const node=clanTag(tag,color);node.tabIndex=0;node.setAttribute('role','button');node.setAttribute('aria-label','View clan '+tag+' members');const open=async event=>{event.stopPropagation();try{const c=clan.data?.tag===tag?{id:clan.id,...clan.data}:await window.npAccounts?.clans?.byTag(tag);if(c)showClanCard(c);else toast('That clan could not be found.');}catch(_){toast('Clan details could not be loaded.');}};node.addEventListener('click',open);node.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();open(event);}});return node;};
+  function updateMemberStatus(){if(!clanView||$('clanCardPop').hidden||ccCur?.id!==clanView.id)return;const online=new Set(onlineOk?lobbyPlayers().map(p=>p.ui):[]);if(onlineOk&&account())online.add(account().uid);for(const row of clanView.section.querySelectorAll('[data-member-uid]'))row.querySelector('.np-member-status').textContent=!onlineOk?'Status unavailable':online.has(row.dataset.memberUid)?'Online':'Offline';}
+
+  const career=renderCareer;renderCareer=function(){career();if(!$('np-career-history')){const node=button('View match history',showHistory);node.id='np-career-history';$('cStats').after(node);}};
+  function init(){
+    const style=el('style');style.textContent='.np-connection{position:fixed;top:72px;right:14px;z-index:60;padding:7px 11px;border:1px solid #61718b;background:#081221e8;border-radius:7px;color:#edf4ff;font:12px/1.4 Segoe UI,sans-serif;pointer-events:none}.np-connection[data-quality="good"]{border-color:#4ee39a}.np-connection[data-quality="slow"]{border-color:#ffd451}.np-connection[data-quality="offline"]{border-color:#ff6475}.np-player-dialog{box-sizing:border-box;margin:auto;width:min(720px,calc(100% - 28px));max-height:85vh;overflow:auto;border:1px solid #53698c;border-radius:14px;background:#0b1425;color:#edf4ff;padding:24px;font:16px/1.6 Segoe UI,sans-serif}.np-player-dialog::backdrop{background:#03080ed9}.np-player-dialog h2{margin:0 0 14px;color:#ffd451}.np-action{font:700 14px/1.4 Segoe UI,sans-serif;border:1px solid #6682a8;border-radius:7px;color:#edf4ff;background:#172a45;padding:10px 14px;min-height:42px;cursor:pointer}.np-action:disabled{opacity:.55;cursor:default}.np-action:focus-visible,[role="button"]:focus-visible{outline:3px solid #ffd451;outline-offset:3px}.np-feature-actions{display:flex;gap:7px;flex-wrap:wrap}.np-feature-actions .np-action{flex:1;font-size:12px;padding:8px}.np-muted{color:#afc0d8;font-size:13px}.np-history-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;width:100%;margin:8px 0}.np-history-row small{display:block;width:100%;text-align:left}.np-member{display:flex;gap:12px;align-items:center;flex-wrap:wrap;width:100%;margin:7px 0}.np-member small{color:#ffd451}.np-member-status{margin-left:auto;font-size:12px;color:#afc0d8}.np-members{margin-top:18px;border-top:1px solid #34435f;padding-top:14px}.ctag[role="button"],.cl-find[role="button"]{cursor:pointer}.np-rematch{padding:12px 0}';document.head.append(style);
+    const chip=el('div','np-connection','Connecting…');chip.id='np-connection';chip.setAttribute('role','status');chip.setAttribute('aria-live','polite');document.body.append(chip);
+    const actions=el('div','np-feature-actions');const quests=button('Daily challenges',daily);quests.id='np-daily';actions.append(quests,button('Match history',showHistory),button('Blocked players',showBlocks),button('About',showAbout));$('home').querySelector('.nav').append(actions);
+    load();tick();setInterval(tick,1000);window.addEventListener('storage',event=>{if(event.key?.startsWith('np-blocked:')||event.key===null){owner='';load();lchat.key='';lchatRender();}});
+  }
+  function tick(){
+    load();const connection=mode==='online'&&game?game:roomApi,info=connection?.connectionInfo?.();const chip=$('np-connection');
+    if(chip){const connected=info?.connected===true,recent=info?.lastReply&&Date.now()-info.lastReply<30000;const text=!connected?'Reconnecting…':!recent?'Checking connection…':'Server ping: '+info.pingMs+' ms';if(chip.textContent!==text)chip.textContent=text;chip.dataset.quality=!connected?'offline':!recent||info.pingMs>120?'slow':'good';chip.title='Round-trip time to the shared game server. This does not measure graphics performance.';}
+    if(ensureQuests())saveProfile();const dailyButton=$('np-daily');if(dailyButton){const done=profile.qs.dq.filter(q=>q.d).length;dailyButton.textContent='Daily challenges · '+done+'/'+profile.qs.dq.length;}
+    if(rematchState&&(match.mid!==rematchState.mid||mode!=='online'||!game))rematchState=null;bindRematch();renderRematch();updateMemberStatus();
+  }
+  window.NPPlayerFeatures=Object.freeze({isBlocked,isChatBlocked:chatBlocked,showHistory,showBlocks});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();

@@ -58,3 +58,7 @@ Keep the old `/ws` endpoint available: existing game tabs and the default room-s
 The prebuilt `public/index.html` asset is unchanged. `src/game-shell.js` applies a small set of checked compatibility edits before it is served: loading the new transport, live connection/admin-list refresh, the build number, and accurate final ground-contact/goal ordering. If replacing the game asset, update these tested anchors or apply the changes directly and remove the compatibility layer. The layer refuses ambiguous/missing anchors rather than silently serving a partially patched game.
 
 Run `node --test tests/*.test.mjs` (Node 22+) before deployment. These tests cover hibernation, transient reconnects, explicit departures, stale socket callbacks, atomic snapshots, tab wake, stationary gameplay timestamps, the game-script syntax, and zero-second goals/ground contacts including Dropshot.
+
+### Player tools
+
+`src/player-features.txt` is imported as text by Wrangler and inserted inside the original game closure by `src/game-shell.js`. It contains the player-tool UI and pure data helpers; it must not be loaded as a separate script because the game state is private to that closure. Match history (20 entries) and blocks (100 entries) use account-scoped browser storage and are described on the Cookies page. The existing Nitro Pass quest rewards are reused. Rematch readiness is broadcast by the Room only after every connected human votes for the same match and roster; clients never send the ready event.

@@ -11,7 +11,7 @@
   const encoder = new TextEncoder();
   const status = document.getElementById('migration-status');
   const actions = document.getElementById('migration-actions');
-  const ALLOWED = /^(np-(?:settings|mute|profile|name|train|tut|exh|priv|pls|replays|rp-[a-z0-9]{1,16}|rejoin|clanq|clanreq|patch-seen|ann-closed|adm-seen|cookie-choice-v1)|nitropitch_terms_accepted(?:_global|:[A-Za-z0-9_-]{1,128}))$/;
+  const ALLOWED = /^(np-(?:settings|mute|profile|name|train|tut|exh|priv|pls|replays|rp-[a-z0-9]{1,16}|rejoin|clanq|clanreq|patch-seen|ann-closed|adm-seen|cookie-choice-v1)|np-(?:match-history|blocked):[A-Za-z0-9_-]{1,128}|nitropitch_terms_accepted(?:_global|:[A-Za-z0-9_-]{1,128}))$/;
 
   function base64(bytes) {
     let binary = '';

@@ -14,7 +14,7 @@
   class Room {
     constructor(name, lobby = false) {
       this.name = name; this.lobby = lobby; this.me = me;
-      this.pres = {}; this.sent = {}; this.others = new Map(); this.cbs = []; this.connCbs = [];
+      this.pres = {}; this.sent = {}; this.others = new Map(); this.cbs = []; this.connCbs = []; this.events = new Map(); this.rttMs=null; this.lastPongAt=0;
       this.closed = false; this.isConnected = false; this.created = undefined; this.tries = 0; this.ws = null;
       this.opened = new Promise((resolve,reject) => { this.resolve = resolve; this.reject = reject; }); this.opened.catch(() => {});
       this.rebuild(); this.connect();
@@ -27,6 +27,7 @@
     }
     fire(joined=[],left=[],updated=[]) { for (const cb of this.cbs) { try { cb({peers:this.snap,joined,left,updated}); } catch(error) { console.error(error); } } }
     connected() { return this.isConnected; }
+    connectionInfo(){return {connected:this.isConnected,pingMs:this.rttMs,lastReply:this.lastPongAt};}
     setConnected(connected) {
       if (connected === this.isConnected) return;
       this.isConnected = connected;
@@ -88,14 +89,15 @@
       };
       ws.onmessage=event=>{
         if(this.ws!==ws || this.closed)return;
-        if(event.data==='pong'){clearTimeout(this.replyTimer);this.replyTimer=null;return;}
+        if(event.data==='pong'){if(this.replyTimer){const rtt=Math.max(0,Date.now()-this.pingSentAt);this.rttMs=Math.round(this.rttMs===null?rtt:this.rttMs*.7+rtt*.3);this.lastPongAt=Date.now();}clearTimeout(this.replyTimer);this.replyTimer=null;return;}
         let message;try{message=JSON.parse(event.data);}catch(_){return;}
         if(!message || typeof message!=='object')return;
         if(message.t==='state'){
           clearTimeout(this.firstTimer);this.tries=0;this.applyState(message);
           if(this.created===undefined)this.created=!!message.created;
-          this.everConnected=true;this.setConnected(true);this.resolve(this);return;
+          this.everConnected=true;this.setConnected(true);this.resolve(this);this.ping();return;
         }
+        if(message.t==='rematch-ready'&&typeof message.mid==='string'&&Array.isArray(message.voters)&&message.voters.every(id=>typeof id==='string')){for(const cb of this.events.get(message.t)||[]){try{cb(message);}catch(error){console.error(error);}}return;}
         if(message.t==='resync'){this.send({t:'full',p:this.pres});return;}
         if(typeof message.id==='string'){
           if(message.t==='j'||message.t==='f')this.upsert(message.id,message.p,true);
@@ -115,8 +117,8 @@
       },HEARTBEAT);
     }
     ping() {
-      this.send('ping');
       if(this.replyTimer || this.ws?.readyState!==1)return;
+      this.pingSentAt=Date.now();this.send('ping');
       const ws=this.ws;
       this.replyTimer=setTimeout(()=>{
         this.replyTimer=null;if(this.ws!==ws || this.closed)return;
@@ -147,7 +149,8 @@
     peers(){return this.snap;}
     onPeers(cb){this.cbs.push(cb);setTimeout(()=>{if(!this.closed&&this.cbs.includes(cb))cb({peers:this.snap,joined:this.snap,left:[],updated:[]});});return()=>{this.cbs=this.cbs.filter(value=>value!==cb);};}
     onConnection(cb){this.connCbs.push(cb);setTimeout(()=>{if(!this.closed&&this.connCbs.includes(cb))cb(this.isConnected);});return()=>{this.connCbs=this.connCbs.filter(value=>value!==cb);};}
-    async emit(){} on(){return()=>{};}
+    async emit(){}
+    on(name,cb){if(typeof cb!=='function')return()=>{};if(!this.events.has(name))this.events.set(name,new Set());const set=this.events.get(name);set.add(cb);return()=>set.delete(cb);}
     async leave(){
       if(this.closed)return;
       this.send({t:'bye'});this.closed=true;clearTimeout(this.firstTimer);clearTimeout(this.retryTimer);clearTimeout(this.replyTimer);clearInterval(this.heartbeatTimer);
