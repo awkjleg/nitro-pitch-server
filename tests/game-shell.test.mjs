@@ -62,7 +62,7 @@ test('a newer build triggers the existing menu refresh popup and stays out of ac
 
 
 test('More uses native menu cards, returns home, and exposes a crawlable About page',()=>{
- assert(html.includes('id="navMore"'));assert(html.includes('id="more" hidden aria-label="More"'));assert(html.includes('class="tile c-gold" id="np-daily"'));assert(html.includes('href="/about" id="np-about"'));
+ assert(html.includes('id="navMore"'));assert(html.includes('id="more" hidden aria-label="More"'));assert(!html.includes('id="np-daily"'));assert(html.includes('id="np-history"'));assert(html.includes('function advanceQuests(c)'));assert(html.includes('id="navPass"')); assert(html.includes('href="/about" id="np-about"'));
  assert(html.includes('new Set(["home", "more",'));assert(html.includes('const ALL_SCREENS = ["home", "more",'));
  const start=html.indexOf('function goBack()'),end=html.indexOf('// keyboard / controller focus',start);
  const ctx=vm.createContext({screen:'more',topPopup:()=>null,$:()=>({hidden:false}),showScreen(s){ctx.screen=s;}});
