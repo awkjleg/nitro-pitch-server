@@ -11,7 +11,7 @@ const html=patchContext.apply(raw);
 
 test('game-shell changes match the actual bundled game and every inline script parses',()=>{
  assert(html.includes('src="/online-rooms.js"'));assert(html.includes('src="/game-notices.js"'));assert(/const BUILD = \d+;/.test(html));assert(!html.includes('const OPEN_WAIT = 8000, STATE_WAIT = 30000;'));
- for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(match[1]);
+ for(const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)){if(match[1].includes('application/ld+json'))JSON.parse(match[2]);else new vm.Script(match[2]);}
  assert(html.includes('if (adTab === "online" && !$("adminPop").hidden) renderAdmin();'));
  assert(html.includes('ball.floorFrame = false;'));
 });
@@ -58,4 +58,14 @@ test('a newer build triggers the existing menu refresh popup and stays out of ac
  await new Promise(resolve=>setImmediate(resolve));assert(checkCount>0);assert.equal(node('updPop').hidden,false);
  context.mode='online';context.showUpdateBar();assert.equal(node('updPop').hidden,true);
  context.mode='menu';context.showUpdateBar();assert.equal(node('updPop').hidden,false);
+});
+
+
+test('More uses native menu cards, returns home, and exposes a crawlable About page',()=>{
+ assert(html.includes('id="navMore"'));assert(html.includes('id="more" hidden aria-label="More"'));assert(html.includes('class="tile c-gold" id="np-daily"'));assert(html.includes('href="/about.html" id="np-about"'));
+ assert(html.includes('new Set(["home", "more",'));assert(html.includes('const ALL_SCREENS = ["home", "more",'));
+ const start=html.indexOf('function goBack()'),end=html.indexOf('// keyboard / controller focus',start);
+ const ctx=vm.createContext({screen:'more',topPopup:()=>null,$:()=>({hidden:false}),showScreen(s){ctx.screen=s;}});
+ vm.runInContext(html.slice(start,end),ctx);assert.equal(ctx.goBack(),true);assert.equal(ctx.screen,'home');
+ const schema=JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);assert.equal(schema['@type'],'VideoGame');assert.equal(schema.url,'https://nitropitch.app/');
 });

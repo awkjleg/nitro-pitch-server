@@ -9,7 +9,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111005;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111006;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -61,7 +61,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.7\",\n  \"title\": \"Update 5.7: Our new game icon\",\n  \"notes\": [\n    \"Our new blue rocket-car and soccer-ball artwork now appears in browser tabs, saved home-screen shortcuts and supported website link previews.\",\n    \"Player tools from Update 5.6 remain available: server ping, recent match history, player blocking, rematch voting, a daily-challenges shortcut and clickable clan member lists.\",\n    \"Refresh when prompted to load the latest version and new icon.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.8\",\n  \"title\": \"Update 5.8: A cleaner More menu\",\n  \"notes\": [\n    \"Daily challenges, Match history, Blocked players and About now live inside More on the main menu. Their cards match the rest of the game.\",\n    \"The More menu supports Back, Escape and controller navigation, with your daily challenge progress shown on its card.\",\n    \"Added an About & how-to-play page with game modes, browser requirements and answers for players looking for unblocked game websites.\",\n    \"Improved public game information, structured search data and the sitemap. Refresh when prompted to get this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -69,7 +69,7 @@ const patches = [
   },
   {
     "before": "<meta name=\"description\" content=\"Nitro Pitch: rocket-powered car soccer in your browser. Play bots or friends online.\">",
-    "after": "<meta name=\"description\" content=\"Play Nitro Pitch, a free online car soccer browser game with multiplayer, ranked matches, private rooms and bot practice. No download needed.\">"
+    "after": "<meta name=\"description\" content=\"Play Nitro Pitch, a free car soccer browser game with multiplayer, ranked matches and bots. No download. See our FAQ about unblocked game websites.\">"
   },
   {
     "before": ".filter(m => tab === \"clan\" ? m.clan && m.cid === clan.id : !m.clan);",
@@ -86,6 +86,34 @@ const patches = [
   {
     "before": "requestAnimationFrame(frame);\n})();\n</script>",
     "after": "requestAnimationFrame(frame);\n/* NP_PLAYER_FEATURES */\n})();\n</script>"
+  },
+  {
+    "before": "<button class=\"nb\" id=\"navSettings\" type=\"button\">",
+    "after": "<button class=\"nb\" id=\"navMore\" type=\"button\"><span><i class=\"ic\" data-ic=\"star\"></i><span><b>More</b><small>Challenges, history &amp; info</small></span></span></button>\n      <button class=\"nb\" id=\"navSettings\" type=\"button\">"
+  },
+  {
+    "before": "  <!-- PLAY -->",
+    "after": "  <section class=\"scr\" id=\"more\" hidden aria-label=\"More\">\n    <div class=\"shead\"><button class=\"back\" type=\"button\" data-back><span><i class=\"ic\" data-ic=\"left\"></i>Back<kbd>Esc</kbd></span></button><div class=\"stitle\"><small>Main menu</small><h1>More</h1></div></div>\n    <div class=\"psec\"><span>Your game</span></div>\n    <div class=\"tiles on\">\n      <button class=\"tile c-gold\" id=\"np-daily\" type=\"button\"><span class=\"tin\"><i class=\"ic big\" data-ic=\"target\"></i><i class=\"ic wm\" data-ic=\"target\"></i><b>Daily challenges</b><small>Daily and weekly quests. Earn XP and Nitro Pass rewards.</small><em class=\"tchip\" id=\"np-daily-progress\">Daily progress</em></span></button>\n      <button class=\"tile c-blue\" id=\"np-history\" type=\"button\"><span class=\"tin\"><i class=\"ic big\" data-ic=\"trophy\"></i><i class=\"ic wm\" data-ic=\"trophy\"></i><b>Match history</b><small>Your last 20 matches, scores and rank changes on this device.</small></span></button>\n      <button class=\"tile c-purple\" id=\"np-blocks\" type=\"button\"><span class=\"tin\"><i class=\"ic big\" data-ic=\"lock\"></i><i class=\"ic wm\" data-ic=\"lock\"></i><b>Blocked players</b><small>Manage who can send you chat and invitations on this device.</small></span></button>\n      <a class=\"tile c-teal\" href=\"/about.html\" id=\"np-about\" style=\"color:inherit;text-decoration:none\"><span class=\"tin\"><i class=\"ic big\" data-ic=\"ball\"></i><i class=\"ic wm\" data-ic=\"ball\"></i><b>About</b><small>Game modes, browser play and unblocked games FAQ.</small></span></a>\n    </div>\n  </section>\n\n  <!-- PLAY -->"
+  },
+  {
+    "before": "const MAIN_SCREENS = new Set([\"home\",",
+    "after": "const MAIN_SCREENS = new Set([\"home\", \"more\","
+  },
+  {
+    "before": "const ALL_SCREENS = [\"home\",",
+    "after": "const ALL_SCREENS = [\"home\", \"more\","
+  },
+  {
+    "before": "const DEPTH = { home: 0,",
+    "after": "const DEPTH = { home: 0, more: 1,"
+  },
+  {
+    "before": "    case \"play\": case \"garage\": case \"pass\": case \"career\": case \"account\": showScreen(\"home\"); return true;",
+    "after": "    case \"more\": case \"play\": case \"garage\": case \"pass\": case \"career\": case \"account\": showScreen(\"home\"); return true;"
+  },
+  {
+    "before": "<meta name=\"theme-color\" content=\"#0b1020\">",
+    "after": "<meta name=\"theme-color\" content=\"#0b1020\">\n<script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@type\":\"VideoGame\",\"name\":\"Nitro Pitch\",\"url\":\"https://nitropitch.app/\",\"image\":\"https://nitropitch.app/nitro-pitch-icon.png\",\"description\":\"Free online car soccer browser game with multiplayer, ranked matches, private rooms, bot matches and training.\",\"genre\":[\"Sports\",\"Racing\"],\"playMode\":[\"SinglePlayer\",\"MultiPlayer\"],\"gamePlatform\":\"Web browser\",\"applicationCategory\":\"GameApplication\",\"operatingSystem\":\"Web browser\",\"isAccessibleForFree\":true,\"inLanguage\":\"en\"}</script>"
   }
 ];
 
