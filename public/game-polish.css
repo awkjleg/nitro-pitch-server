@@ -51,3 +51,13 @@ input.t,select.t{background:#07111f;border:1px solid #526b8e;border-radius:5px;m
 @media(min-width:1000px) and (min-height:700px){.nav{gap:10px}.nb{height:58px}.nb.big{height:76px}.nb b{font-size:23px}.nb.big b{font-size:33px}}
 @media(max-width:760px){#np-connection{top:61px!important;right:12px!important;font-size:10px!important}.np-up-next{display:none}.np-arena-card{flex-basis:144px!important}#unlockPop .up-card{padding:20px 16px}.np-arena-tag{top:94px;left:12px}.np-arena-tag b{font-size:18px}#unlockList{grid-template-columns:repeat(2,minmax(0,1fr))!important}#unlockList .np-reward-art{height:80px}.np-reward-art canvas{max-height:85px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}#unlockPop,#dropPop{backdrop-filter:none}}
+
+.np-connection{position:fixed;z-index:80;top:80px;left:50%;transform:translateX(-50%);max-width:90vw;padding:10px 18px;background:#111b30ed;border:1px solid #ffd451;color:#ffe191;border-radius:5px;text-align:center;pointer-events:none;font-size:13px}
+.np-connection[hidden],.np-match-summary[hidden]{display:none}
+.np-match-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
+.np-match-summary>div{background:linear-gradient(140deg,#203655cc,#0b1525);border:1px solid #344e71;padding:14px 8px;text-align:center;border-radius:5px}
+.np-match-summary b{display:block;font-size:28px;color:#ffd451;font-variant-numeric:tabular-nums}.np-match-summary small{display:block;margin-top:4px;color:#b6c9e5;text-transform:uppercase;letter-spacing:.08em}
+.np-next-unlock{padding:12px 15px;border-left:3px solid #ffd451;background:#ffd4510b;color:#e9effa;font-size:13px}
+@media(max-width:520px){.np-match-summary{gap:5px}.np-match-summary b{font-size:22px}.np-match-summary small{font-size:10px}.np-connection{top:65px}}
+
+#post.trainres .np-match-summary,#post.trainres .np-next-unlock,#post.trainres #np-post-party{display:none}

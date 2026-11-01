@@ -1,0 +1,55 @@
+const NPMatchExperience = (() => {
+  const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls||'';if(text!==undefined)n.textContent=text;return n;};
+  const connection=el('div','np-connection');connection.hidden=true;connection.setAttribute('role','status');document.body.append(connection);
+  let hitAt=-9,noticeAt=-9,statMid='',previous=[];
+  function hit(at,speed){
+    const now=nowS();if(now-hitAt<.12)return;hitAt=now;
+    const strength=clamp(speed/45,0,1);sfx.hit(8+strength*38);
+    if(!NPPolish.reduced())fx.burst(at,TEAM_COL[me.team]||0xffffff,settings.quality===0?3:Math.round(4+strength*8),3+strength*6,.18+strength*.12,2);
+    if(speed>=40&&now-noticeAt>2&&!freePlay){noticeAt=now;popup('POWER HIT');}
+  }
+  const hud=updateHud;
+  updateHud=function(dt,now){
+    hud(dt,now);
+    const info=mode==='online'&&game?.connectionInfo?.();let text='';
+    if(info&&!info.connected){const remaining=Math.max(0,60-Math.floor((Date.now()-info.disconnectedAt)/1000));text=remaining?'Reconnecting… Your spot is reserved · '+remaining+'s':'Still reconnecting… Your reserved spot may have expired.';}
+    else if(info){const pending=game.peers().filter(p=>!p.sameTab&&info.reconnecting[p.peer]>Date.now()&&Number.isFinite(p.presence?.j)&&!p.presence?.sp);if(pending.length)text=pending.map(p=>cleanName(p.presence.nm)).join(', ')+' reconnecting…';}
+    connection.hidden=!text;if(connection.textContent!==text)connection.textContent=text;
+    const stats=match.st?.[myKey()]||[];
+    if(statMid!==match.mid){statMid=match.mid;previous=stats.slice();return;}
+    if(!spec&&mode!=='menu'&&match.ph==='play'){
+      if((stats[3]||0)>(previous[3]||0)){popup('SAVE!');noticeAt=now;}
+      else if((stats[4]||0)>(previous[4]||0)&&now-noticeAt>1){popup('SHOT ON GOAL');noticeAt=now;}
+    }
+    previous=stats.slice();
+  };
+  function nextUnlock(){
+    const level=myLevel();let next=null;
+    for(const kind of COS_KINDS)for(const item of listOf(kind)){
+      if(item.admin||item.drop||item.pass||item.tier>=0||item.clan||item.qn||item.lead||!(item.lv>level))continue;
+      if(!next||item.lv<next.lv)next=item;
+    }
+    return next?'Next level unlock: '+next.name+' · Level '+next.lv:level>=MAXLV?'Maximum level reached':'Keep playing to earn XP and level up';
+  }
+  function teammates(){
+    if(mode!=='online'||!game||spec||![0,1].includes(me.team))return [];
+    const online=new Set(lobbyPlayers().map(p=>p.peer)),party=new Set(partyState().members.map(p=>p.peer));
+    return [...new Set(game.peers().filter(p=>!p.sameTab&&p.presence?.tm===me.team&&!p.presence?.sp&&Number.isFinite(p.presence?.j)).map(p=>p.presence.lp||p.peer))].filter(id=>online.has(id)&&!party.has(id)&&!partySent.has(id));
+  }
+  const post=showPost;
+  showPost=function(win){
+    // Training uses plain text for this button; restore its label before the normal results renderer.
+    const again=$('postAgain');if(!again.querySelector('span')){again.textContent='';again.append(el('span'));}
+    post(win);
+    let summary=$('np-match-summary');if(!summary){summary=el('section','np-match-summary');summary.id='np-match-summary';summary.setAttribute('aria-label','Your match performance');$('postKind').closest('.po-head').after(summary);}
+    summary.replaceChildren();summary.hidden=!!spec;
+    if(!spec){const stats=match.st?.[myKey()]||[];for(const [label,index]of [['Goals',1],['Assists',2],['Saves',3],['Shots',4]]){const card=el('div');card.append(el('b','',String(stats[index]||0)),el('small','',label));summary.append(card);}}
+    let unlock=$('np-next-unlock');if(!unlock){unlock=el('p','np-next-unlock');unlock.id='np-next-unlock';$('postUnlocks').after(unlock);}unlock.hidden=!!spec;unlock.textContent=nextUnlock();
+    const kind=matchKind();if(['ranked','casual','extra','exhibition'].includes(kind))again.querySelector('span').textContent='Play Again';
+    let party=$('np-post-party');if(!party){party=el('button','sbtn');party.type='button';party.id='np-post-party';party.append(el('span','','Party Up'));again.before(party);}
+    const eligible=teammates();party.hidden=mode!=='online'||!!spec;party.disabled=!isPartyLeader()||!eligible.length;
+    party.title=!isPartyLeader()?'Only the party leader can invite teammates':eligible.length?'Invite your available teammates to your party':'No available teammates to invite';
+    party.onclick=()=>{for(const peer of teammates().slice(0,Math.max(0,PARTY_MAX-partyState().size)))partyInvite(peer);party.disabled=true;party.querySelector('span').textContent='Invites Sent';};party.querySelector('span').textContent='Party Up';
+  };
+  return {hit,nextUnlock,teammates};
+})();
