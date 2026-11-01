@@ -1,3 +1,4 @@
+import phoneControls from "./phone-controls.txt";
 import matchExperience from "./match-experience.txt";
 import secureProgress from "./secure-progress.txt";
 import gamePolish from "./game-polish.txt";
@@ -13,7 +14,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111012;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111013;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -65,7 +66,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.14\",\n  \"title\": \"Update 5.14: Stay connected, feel every hit\",\n  \"notes\": [\n    \"Match seats stay reserved for 60 seconds during a connection interruption, with clear reconnecting indicators.\",\n    \"Returning to a background tab preserves your place in the team lineup.\",\n    \"Ball contacts have speed-based sparks and stronger sound feedback. Saves and shots get clear personal feedback.\",\n    \"The match summary highlights goals, assists, saves, shots and your next level unlock. Party Up invites your available teammates.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.15\",\n  \"title\": \"Update 5.15: A clearer camera on phones\",\n  \"notes\": [\n    \"Phone ball cam turns more steadily and keeps a calmer horizon while driving on walls.\",\n    \"Phone framing gives the car more room, limits portrait lens distortion and adapts when you rotate your screen.\",\n    \"A larger Ball Cam button shows ON or OFF. Hold Look Back to check behind you without changing camera mode.\",\n    \"Phone gameplay camera shake is disabled without changing your saved desktop camera settings.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -89,7 +90,7 @@ const patches = [
   },
   {
     "before": "requestAnimationFrame(frame);\n})();\n</script>",
-    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n/* NP_MATCH_EXPERIENCE */\n})();\n</script>"
+    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n/* NP_MATCH_EXPERIENCE */\n/* NP_PHONE_CONTROLS */\n})();\n</script>"
   },
   {
     "before": "<button class=\"nb\" id=\"navSettings\" type=\"button\">",
@@ -218,6 +219,26 @@ const patches = [
   {
     "before": "  if (mode === \"online\" && game && !joinPending && Date.now() - hiddenAt > 2000) { me.joinedAt = Date.now(); game.presence({ j: me.joinedAt }).catch(() => {}); }",
     "after": "  if (mode === \"online\" && game && !joinPending && Date.now() - hiddenAt > 2000) { game.presence({ j: me.joinedAt }).catch(() => {}); }"
+  },
+  {
+    "before": "  const dist = settings.dist * UU, hgt = settings.height * UU, ang = settings.angle * Math.PI / 180;",
+    "after": "  const phoneFrame = NPDrive.framing();\n  const dist = phoneFrame.dist * UU, hgt = phoneFrame.height * UU, ang = settings.angle * Math.PI / 180;"
+  },
+  {
+    "before": "  const fovNow = vFov(settings.fov);\n  _cu.copy(UP);",
+    "after": "  const fovNow = phoneFrame.fov;\n  _cu.copy(UP);"
+  },
+  {
+    "before": "  if (settings.shake && shakeT > 0) { shakeT -= dt; camera.position.x += (Math.random() - 0.5) * shakeT * 1.2; camera.position.y += (Math.random() - 0.5) * shakeT * 1.2; }",
+    "after": "  if (settings.shake && shakeT > 0) { shakeT = Math.max(0, shakeT - dt); if (!phoneFrame.mobile) { camera.position.x += (Math.random() - 0.5) * shakeT * 1.2; camera.position.y += (Math.random() - 0.5) * shakeT * 1.2; } }"
+  },
+  {
+    "before": "  let pit = thr, rear = held(\"rear\");",
+    "after": "  let pit = thr, rear = held(\"rear\") || !!touch.rear;"
+  },
+  {
+    "before": "  <div class=\"tb\" id=\"tCam\">CAM</div>",
+    "after": "  <button type=\"button\" class=\"tb\" id=\"tCam\" aria-label=\"Toggle ball camera\" aria-pressed=\"false\">BALL CAM</button>\n  <button type=\"button\" class=\"tb\" id=\"tRear\" aria-label=\"Hold to look behind\">LOOK BACK</button>"
   }
 ];
 
@@ -229,5 +250,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience);
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls);
 }

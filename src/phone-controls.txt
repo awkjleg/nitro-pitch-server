@@ -1,0 +1,17 @@
+(() => {
+  const cam=$('tCam'),rear=$('tRear');let pointer=null,lastMode=null;
+  function label(){if(lastMode===ballCam)return;lastMode=ballCam;cam.textContent='BALL CAM '+(ballCam?'ON':'OFF');cam.setAttribute('aria-pressed',String(ballCam));cam.classList.toggle('on',ballCam);}
+  function release(){pointer=null;touch.rear=false;rear.classList.remove('on');}
+  rear.addEventListener('pointerdown',e=>{
+    if(pointer!==null||paused||!inMatchView())return;
+    e.preventDefault();pointer=e.pointerId;touch.rear=true;rear.classList.add('on');
+    try{rear.setPointerCapture(pointer);}catch{}
+  });
+  for(const type of ['pointerup','pointercancel','lostpointercapture'])rear.addEventListener(type,e=>{if(e.pointerId===pointer)release();});
+  rear.addEventListener('contextmenu',e=>e.preventDefault());
+  addEventListener('blur',release);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
+  addEventListener('resize',release);
+  const hud=updateHud;updateHud=function(dt,now){hud(dt,now);label();if($('touch').hidden||paused)release();};
+  label();
+})();

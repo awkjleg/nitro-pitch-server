@@ -11,7 +11,7 @@ function fixture(){
  const constants=raw.slice(raw.indexOf('const UU = 0.02;',raw.indexOf('// ---------- Rocket League units')),raw.indexOf('const CARS = CarLib.BODIES.map'));
  const surface=raw.slice(raw.indexOf('// ---------- surfaces: floor, ceiling, walls, corners'),raw.indexOf('// ---------- physics (Rocket League'));
  const physics=html.slice(html.indexOf('const lerpTable ='),html.indexOf('let bounceImpact ='));
- const cameraSource=raw.slice(raw.indexOf('// ---------- camera ----------'),raw.indexOf('// ---------- goal knockback'));
+ const cameraSource=html.slice(html.indexOf('// ---------- camera ----------'),html.indexOf('// ---------- goal knockback'));
  vm.runInContext(constants+'\n'+surface+'\n'+physics+'\n'+cameraSource+'\n'+drivingUpdates+'\nglobalThis.gameTest={makeCar,resetCar,stepCar,arenaSDF,carContacts,NPDrive,camPos,camLook,camUp,camDir,camPrevC,W,L,H,RB,RIDE,BMAX,UP};',ctx);
  const f=ctx.gameTest;ctx.me.car=f.makeCar();f.resetCar(ctx.me.car,0,0,0);
  return{ctx,camera,...f,car:ctx.me.car};
@@ -99,4 +99,32 @@ test('holding rear view works while ball cam is enabled and preserves the select
  assert(f.camera.position.z>f.car.rp.z+2);assert.equal(f.ctx.ballCam,true);
  f.ctx.rearView=false;for(let i=0;i<120;i++)f.ctx.updateCamera(1/60,2+i/60);
  assert(f.camera.position.z<f.car.rp.z-2);assert.equal(f.ctx.ballCam,true);const p=projectedBall(f);assert(Math.abs(p.x)<.85&&Math.abs(p.y)<.85);
+});
+
+function phoneViewport(f,width,height){f.ctx.isTouch=true;f.ctx.innerWidth=width;f.ctx.innerHeight=height;f.camera.aspect=width/height;f.camera.updateProjectionMatrix();}
+test('phone ball cam frames wall and overhead balls across portrait and landscape sizes',()=>{
+ for(const [w,h]of [[390,844],[844,390],[320,568],[667,375]]){
+  const f=fixture();phoneViewport(f,w,h);sideCar(f);f.ctx.ball.rp.set(f.W-3,19,11);
+  for(let i=0;i<180;i++)f.ctx.updateCamera(1/60,i/60);
+  const p=projectedBall(f);assert(Math.abs(p.x)<.85&&Math.abs(p.y)<.85);assert(p.z>-1&&p.z<1);assert(f.camera.fov<=88);assert(f.arenaSDF(f.camera.position,new THREE.Vector3(),.8)>.75);
+  f.ctx.ball.rp.copy(f.car.rp).add(new THREE.Vector3(0,22,0));let previous=f.camDir.clone();
+  for(let i=0;i<100;i++){f.ctx.ball.rp.x+=i%2?.001:-.001;f.ctx.updateCamera(1/60,4+i/60);assert(finite(f.camLook));assert(f.camDir.dot(previous)>.998);previous.copy(f.camDir);}
+ }
+});
+test('phone framing adapts to rotation without changing saved settings or desktop framing',()=>{
+ const f=fixture(),saved=JSON.stringify(f.ctx.settings);phoneViewport(f,390,844);assert(f.NPDrive.framing().dist>f.ctx.settings.dist);f.ctx.ball.rp.set(12,4,20);
+ for(let i=0;i<90;i++)f.ctx.updateCamera(1/60,i/60);
+ phoneViewport(f,844,390);for(let i=0;i<90;i++)f.ctx.updateCamera(1/60,2+i/60);
+ assert(finite(f.camera.position));assert.equal(JSON.stringify(f.ctx.settings),saved);const p=projectedBall(f);assert(Math.abs(p.x)<.85&&Math.abs(p.y)<.85);
+ f.ctx.isTouch=false;assert.equal(f.NPDrive.framing().dist,f.ctx.settings.dist);assert.equal(f.NPDrive.framing().height,f.ctx.settings.height);
+});
+test('phone orbit has a lower turn speed cap and rear view preserves ball cam selection',()=>{
+ const f=fixture();phoneViewport(f,844,390);f.ctx.ball.rp.set(50,2,0);const before=f.camDir.clone();f.ctx.updateCamera(1/60,0);assert(before.angleTo(f.camDir)<=3.2/60+1e-6);
+ f.ctx.rearView=true;for(let i=0;i<180;i++)f.ctx.updateCamera(1/60,i/60);assert(f.camera.position.z>f.car.rp.z+2);assert.equal(f.ctx.ballCam,true);
+ f.ctx.rearView=false;for(let i=0;i<180;i++)f.ctx.updateCamera(1/60,4+i/60);const p=projectedBall(f);assert(Math.abs(p.x)<.85&&Math.abs(p.y)<.85);
+});
+test('phone chase camera uses adapted framing and keeps saved shake preference',()=>{
+ const f=fixture();phoneViewport(f,390,844);f.ctx.ballCam=false;f.ctx.settings.shake=true;
+ vm.runInContext('shakeT=0.8;',f.ctx);for(let i=0;i<90;i++)f.ctx.updateCamera(1/60,i/60);
+ assert(f.camera.fov<=88);assert(finite(f.camera.position));assert.equal(f.ctx.settings.shake,true);assert(f.camera.position.distanceTo(f.car.rp)>6);
 });
