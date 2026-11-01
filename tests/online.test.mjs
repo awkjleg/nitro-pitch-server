@@ -85,3 +85,18 @@ test('connection metrics track pong latency and server events unsubscribe',async
  let events=0;const off=room.on('rematch-ready',()=>events++);ws.receive({t:'rematch-ready',mid:'m1',voters:['a','b']});off();ws.receive({t:'rematch-ready',mid:'m1',voters:['a','b']});assert.equal(events,1);
  room.lost(ws);assert.equal(room.connectionInfo().connected,false);
 });
+
+test('match disconnect reserves the same team seat for sixty seconds and broadcasts recovery',async()=>{
+ const f=await roomFixture();f.room.name='np-m-test';await f.ctx.storage.put('room-name','np-m-test');
+ const a=f.socket('a'),b=f.socket('b');await f.message(a,{t:'hello',p:{nm:'A',j:1,tm:0}});await f.message(b,{t:'hello',p:{nm:'B',j:2,tm:1}});
+ a.readyState=3;await f.room.webSocketClose(a);assert.equal(f.alarm,160000);assert.equal(b.messages.at(-2)?.t==='connection'||b.messages.some(m=>m.t==='connection'&&m.until===160000),true);
+ f.advance(30000);await f.wake();await f.message(b,{t:'sync',p:{nm:'B',j:2,tm:1}});assert.equal(b.messages.filter(m=>m.t==='state').at(-1).reconnecting.a,160000);
+ const replacement=f.socket('a');await f.message(replacement,{t:'hello',p:{nm:'A',j:1,tm:0}});assert.equal(f.room.pres.get('a').tm,0);assert.equal(f.room.pres.get('a').j,1);assert(b.messages.some(m=>m.t==='connection'&&m.id==='a'&&m.until===0));assert(!b.messages.some(m=>m.t==='l'));
+ replacement.readyState=3;await f.room.webSocketClose(replacement);f.advance(60001);await f.room.alarm();assert(!f.room.pres.has('a'));assert(b.messages.some(m=>m.t==='l'&&m.id==='a'));
+});
+test('connection indicators reconcile snapshots, recovery events and final departures',async()=>{
+ const f=await clientFixture(),room=await f.lobby(),ws=f.sockets[0];ws.open();ws.receive({t:'state',members:{other:{nm:'Other'}},reconnecting:{other:160000}});assert.equal(room.connectionInfo().reconnecting.other,160000);
+ ws.receive({t:'connection',id:'other',until:0});assert.equal(room.connectionInfo().reconnecting.other,undefined);
+ ws.receive({t:'connection',id:'other',until:170000});ws.receive({t:'l',id:'other'});assert.equal(room.connectionInfo().reconnecting.other,undefined);
+ room.lost(ws);assert.equal(room.connectionInfo().disconnectedAt,100000);
+});

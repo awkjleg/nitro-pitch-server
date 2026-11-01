@@ -15,7 +15,7 @@
     constructor(name, lobby = false) {
       this.name = name; this.lobby = lobby; this.me = me;
       this.pres = {}; this.sent = {}; this.others = new Map(); this.cbs = []; this.connCbs = []; this.events = new Map(); this.rttMs=null; this.lastPongAt=0;
-      this.serverHost=null;this.authUid=null;this.authBusy=false;this.authAt=0;this.closed = false; this.isConnected = false; this.created = undefined; this.tries = 0; this.ws = null;
+      this.reconnecting={};this.disconnectedAt=0;this.serverHost=null;this.authUid=null;this.authBusy=false;this.authAt=0;this.closed = false; this.isConnected = false; this.created = undefined; this.tries = 0; this.ws = null;
       this.opened = new Promise((resolve,reject) => { this.resolve = resolve; this.reject = reject; }); this.opened.catch(() => {});
       this.rebuild(); this.connect();
     }
@@ -27,13 +27,14 @@
     }
     fire(joined=[],left=[],updated=[]) { for (const cb of this.cbs) { try { cb({peers:this.snap,joined,left,updated}); } catch(error) { console.error(error); } } }
     connected() { return this.isConnected; }
-    connectionInfo(){return {connected:this.isConnected,pingMs:this.rttMs,lastReply:this.lastPongAt};}
+    connectionInfo(){return {connected:this.isConnected,pingMs:this.rttMs,lastReply:this.lastPongAt,disconnectedAt:this.disconnectedAt,reconnecting:{...this.reconnecting}};}
     setConnected(connected) {
       if (connected === this.isConnected) return;
-      this.isConnected = connected;
+      this.isConnected = connected;this.disconnectedAt=connected?0:Date.now();
       for (const cb of this.connCbs) { try { cb(connected); } catch (_) {} }
     }
     applyState(message) {
+      this.reconnecting=message.reconnecting||{};
       const previous = this.others, next = new Map();
       const pending = new Set(message.pending || []);
       const ids = Array.isArray(message.memberIds) ? message.memberIds : Object.keys(message.members || {});
@@ -62,7 +63,7 @@
     }
     remove(id) {
       const prior=this.others.get(id);if(!prior)return;
-      this.others.delete(id);this.rebuild();this.fire([],[Object.freeze({peer:id,sameTab:false,isMe:false,...prior})]);
+      delete this.reconnecting[id];this.others.delete(id);this.rebuild();this.fire([],[Object.freeze({peer:id,sameTab:false,isMe:false,...prior})]);
     }
     send(message) {
       if (this.ws?.readyState !== 1) return;
@@ -98,6 +99,7 @@
         if(!message || typeof message!=='object')return;
         if(message.t==='auth-ok'){this.authUid=message.uid;return;}
         if(message.t==='auth-error'){this.authUid=null;return;}
+        if(message.t==='connection'&&typeof message.id==='string'&&Number.isFinite(message.until)){if(message.until>0)this.reconnecting[message.id]=message.until;else delete this.reconnecting[message.id];this.fire();return;}
         if(message.t==='host'){this.serverHost=message.id;return;}
         if(message.t==='state'){
           this.serverHost=message.host||this.serverHost;

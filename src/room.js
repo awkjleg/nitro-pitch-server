@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import {identify,reply} from './firebase-auth.js';
 import {validCar,validGame,validHit,resultEvidence,rankedRules} from './room-guard.js';
-const MAX_PLAYERS=400,MAX_MSG=64000,RECONNECT_GRACE=12000;
+const MAX_PLAYERS=400,MAX_MSG=64000,RECONNECT_GRACE=12000,MATCH_RECONNECT_GRACE=60000;
 const cleanId=value=>String(value||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,48);
 const bytes=new TextEncoder();
 
@@ -42,7 +42,7 @@ export class Room extends DurableObject {
   }
   state(ws,created=false){
     const id=this.info(ws).id,members=Object.create(null);for(const[key,value]of this.pres)if(key!==id)members[key]=value;
-    this.send(ws,{t:'state',you:id,created,host:this.host,members,memberIds:Object.keys(members),pending:[...this.partial].filter(key=>key!==id)});
+    this.send(ws,{t:'state',you:id,created,host:this.host,members,memberIds:Object.keys(members),pending:[...this.partial].filter(key=>key!==id),reconnecting:Object.fromEntries(this.departures)});
   }
   snapshots(){for(const ws of this.ctx.getWebSockets())if(ws.readyState===1&&this.info(ws).ok)this.state(ws);}
   resync(){
@@ -139,7 +139,7 @@ export class Room extends DurableObject {
       const known=this.pres.has(id),created=[...this.pres.keys()].every(key=>key===id);
       const changed=!known||this.partial.has(id)||JSON.stringify(this.pres.get(id))!==JSON.stringify(p);
       this.pres.set(id,p);if(!this.orders.has(id))this.orders.set(id,info.order||Date.now());this.partial.delete(id);this.resyncAt.delete(id);this.cache(ws,id,p);
-      if(this.departures.delete(id)){await this.ctx.storage.delete('leave:'+id);await this.scheduleAlarm();}
+      if(this.departures.delete(id)){await this.ctx.storage.delete('leave:'+id);await this.scheduleAlarm();this.bcast({t:'connection',id,until:0});}
       if(message.t==='hello'||message.t==='sync')this.state(ws,created);
       this.chooseHost();await this.track(id,p);if(changed)this.bcast({t:known?'f':'j',id,p},ws);this.resync();this.checkRematch(message.t==='hello'||message.t==='sync');return;
     }
@@ -164,9 +164,9 @@ export class Room extends DurableObject {
     }
     // Retain a seat during short transport interruptions. An explicit Leave still
     // removes it immediately; a reconnect with the same tab ID cancels this timer.
-    const p=this.pres.get(id)||info.p||{},until=Date.now()+RECONNECT_GRACE;
+    const p=this.pres.get(id)||info.p||{},until=Date.now()+(this.name&&this.name!=='lobby'?MATCH_RECONNECT_GRACE:RECONNECT_GRACE);
     this.pres.set(id,p);this.departures.set(id,until);this.partial.add(id);
-    await this.ctx.storage.put('leave:'+id,{p,until});await this.scheduleAlarm();this.chooseHost();
+    await this.ctx.storage.put('leave:'+id,{p,until});await this.scheduleAlarm();this.bcast({t:'connection',id,until});this.chooseHost();
   }
   async webSocketClose(ws){await this.gone(ws);try{ws.close(1000,'disconnected');}catch(_){}}
   async webSocketError(ws){await this.gone(ws);try{ws.close(1011,'connection error');}catch(_){}}

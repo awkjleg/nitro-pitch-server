@@ -1,3 +1,4 @@
+import matchExperience from "./match-experience.txt";
 import secureProgress from "./secure-progress.txt";
 import gamePolish from "./game-polish.txt";
 import drivingUpdates from "./driving-updates.txt";
@@ -12,7 +13,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111011;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111012;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -64,7 +65,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.13\",\n  \"title\": \"Update 5.13: New arenas, bigger goals & rewarding unlocks\",\n  \"notes\": [\n    \"Explore Sunset Canyon, Aurora Ridge and Orbital Station with a new visual arena picker. All arenas share the same competitive field.\",\n    \"Goal explosions now spread farther with a bigger shockwave and stronger car pushback.\",\n    \"Unlocks show your new items, their rarity and an Equip now button. Refreshed menus, garage cards and animated XP make rewards easier to enjoy.\",\n    \"Existing Firebase accounts and progress are preserved. New account rewards, drops and trades are checked and saved by the server.\",\n    \"Ranked results require opposing player confirmation. Bot-only fallback matches are practice and do not change your rank.\",\n    \"Progress saves can be retried after a connection interruption. Daily quests now reset together at midnight UTC.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.14\",\n  \"title\": \"Update 5.14: Stay connected, feel every hit\",\n  \"notes\": [\n    \"Match seats stay reserved for 60 seconds during a connection interruption, with clear reconnecting indicators.\",\n    \"Returning to a background tab preserves your place in the team lineup.\",\n    \"Ball contacts have speed-based sparks and stronger sound feedback. Saves and shots get clear personal feedback.\",\n    \"The match summary highlights goals, assists, saves, shots and your next level unlock. Party Up invites your available teammates.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -88,7 +89,7 @@ const patches = [
   },
   {
     "before": "requestAnimationFrame(frame);\n})();\n</script>",
-    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n})();\n</script>"
+    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n/* NP_MATCH_EXPERIENCE */\n})();\n</script>"
   },
   {
     "before": "<button class=\"nb\" id=\"navSettings\" type=\"button\">",
@@ -209,6 +210,14 @@ const patches = [
   {
     "before": "  if (mode === \"menu\") { demoSim(dt);",
     "after": "  if (!$(\"unlockPop\").hidden || !$(\"dropPop\").hidden) thumbs.pump();\n  if (mode === \"menu\") { demoSim(dt);"
+  },
+  {
+    "before": "    if (newTouch && c === me.car) { sfx.hit(relSpeed * 0.8); me.lastHitSnd = nowS(); shakeT = Math.max(shakeT, Math.min(0.35, relSpeed / 120)); }",
+    "after": "    if (newTouch && c === me.car) { NPMatchExperience.hit(b.p, relSpeed); me.lastHitSnd = nowS(); if (!NPPolish.reduced()) shakeT = Math.max(shakeT, Math.min(0.2, relSpeed / 180)); }"
+  },
+  {
+    "before": "  if (mode === \"online\" && game && !joinPending && Date.now() - hiddenAt > 2000) { me.joinedAt = Date.now(); game.presence({ j: me.joinedAt }).catch(() => {}); }",
+    "after": "  if (mode === \"online\" && game && !joinPending && Date.now() - hiddenAt > 2000) { game.presence({ j: me.joinedAt }).catch(() => {}); }"
   }
 ];
 
@@ -220,5 +229,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish);
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience);
 }
