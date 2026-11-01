@@ -5,6 +5,12 @@ const NPDrive = (() => {
   const ballDir=new V3(), carDir=new V3(), axis=new V3(), view=new V3(), nextUp=new V3(), upTarget=new V3(), oldView=new V3(0,0,1);
   const transport=new Q(), rearTarget=new V3(), rearForward=new V3();
   let active=false, overhead=false, turnSign=1, rollSign=1;
+  // Derived at runtime, so rotating a phone never overwrites saved desktop settings.
+  function phone(){return typeof isTouch!=='undefined'&&isTouch&&Math.min(innerWidth,innerHeight)<=600;}
+  function framing(){
+    const mobile=phone(),portrait=innerWidth<innerHeight;
+    return {mobile,dist:settings.dist*(mobile?(portrait?1.22:1.08):1),height:settings.height*(mobile?1.1:1),fov:mobile?Math.min(88,vFov(settings.fov)):vFov(settings.fov)};
+  }
   function move(c,dt){
     if(!(dt>0))return;
     let count=1;
@@ -67,11 +73,12 @@ const NPDrive = (() => {
   }
   function ballCamera(dt,rear=false){
     dt=clamp(dt,0,0.05);
+    const frame=framing();
     const car=me.car,c=car.rp;
     let b=ball.rp;
     const onWall=car.ground&&car.n.y<0.7&&Math.abs(c.z)<L;
     rigUp.copy(UP);
-    if(car.ground&&car.n.y>-0.7)rigUp.lerp(car.n,0.3).normalize();
+    if(car.ground&&car.n.y>-0.7)rigUp.lerp(car.n,frame.mobile?0.15:0.3).normalize();
     if(rear){
       rearForward.set(0,0,1).applyQuaternion(car.rq);rearForward.addScaledVector(rigUp,-rearForward.dot(rigUp));
       if(rearForward.lengthSq()<1e-6)rearForward.copy(camF);rearForward.normalize();
@@ -92,14 +99,14 @@ const NPDrive = (() => {
       let error=Math.atan2(axis.dot(rigUp),clamp(behind.dot(desired),-1,1));
       if(Math.abs(error)>Math.PI-0.01)error=turnSign*Math.abs(error);
       if(Math.abs(error)>1e-5)turnSign=Math.sign(error);
-      const rate=12*clamp(ratio,0.25,1),turn=clamp(error*(1-Math.exp(-rate*dt)),-5*dt,5*dt);
+      const rate=(frame.mobile?9:12)*clamp(ratio,0.25,1),limit=frame.mobile?3.2:5,turn=clamp(error*(1-Math.exp(-rate*dt)),-limit*dt,limit*dt);
       behind.applyAxisAngle(rigUp,turn).normalize();
     }
     camDir.copy(behind);camF.copy(behind).negate();
     const pull=1+(1-settings.stiff)*0.3*clamp((car.v.length()-MAXS*0.5)/(BMAX-MAXS*0.5),0,1);
     const rise=rear?0:clamp((b.y-c.y)/Math.max(1,separation),0,1);
-    probe.copy(c).addScaledVector(behind,settings.dist*UU*pull*(1-rise*0.08));
-    probe.addScaledVector(rigUp,settings.height*UU*(1-rise*0.65));
+    probe.copy(c).addScaledVector(behind,frame.dist*UU*pull*(1-rise*0.08));
+    probe.addScaledVector(rigUp,frame.height*UU*(1-rise*0.65));
     // constrain() uses probeN, not probe; preserve the target in the game rig vector.
     _w.copy(probe);constrain(_w,c,onWall);
     delta.subVectors(c,camPrevC);
@@ -115,15 +122,15 @@ const NPDrive = (() => {
     if(delta.lengthSq()<clearance*clearance){
       if(delta.lengthSq()<1e-8)delta.copy(behind);camPos.copy(b).addScaledVector(delta.normalize(),clearance);constrain(camPos,c,onWall);
     }
-    const fov=vFov(settings.fov);
+    const fov=frame.fov;
     const direction=aim(b,c,rigUp,fov,innerWidth/Math.max(1,innerHeight));
     screenUp(direction,rigUp,dt,!active||!ride);active=true;
     camera.position.copy(camPos);camera.lookAt(camLook);
     // Shake is optional, but must never undo wall collision avoidance.
-    if(settings.shake&&shakeT>0){shakeT=Math.max(0,shakeT-dt);camera.position.x+=(Math.random()-0.5)*shakeT*0.35;camera.position.y+=(Math.random()-0.5)*shakeT*0.35;constrain(camera.position,c,onWall);}
+    if(shakeT>0){shakeT=Math.max(0,shakeT-dt);if(!frame.mobile&&settings.shake){camera.position.x+=(Math.random()-0.5)*shakeT*0.35;camera.position.y+=(Math.random()-0.5)*shakeT*0.35;constrain(camera.position,c,onWall);}}
     if(Math.abs(camera.fov-fov)>0.01){camera.fov=fov;camera.updateProjectionMatrix();}
   }
-  return{move,ballCamera,aim,screenUp,reset(){active=false;overhead=false;}};
+  return{move,ballCamera,aim,screenUp,phone,framing,reset(){active=false;overhead=false;}};
 })();
 const npPreviousCamera=updateCamera;
 updateCamera=function(dt,now){

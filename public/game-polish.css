@@ -61,3 +61,16 @@ input.t,select.t{background:#07111f;border:1px solid #526b8e;border-radius:5px;m
 @media(max-width:520px){.np-match-summary{gap:5px}.np-match-summary b{font-size:22px}.np-match-summary small{font-size:10px}.np-connection{top:65px}}
 
 #post.trainres .np-match-summary,#post.trainres .np-next-unlock,#post.trainres #np-post-party{display:none}
+
+/* Phone camera controls stay clear of the steering and boost fingers. */
+@media(pointer:coarse){
+ #tCam,#tRear{right:calc(14px + env(safe-area-inset-right,0px));width:110px;height:48px;bottom:auto;border-radius:10px;background:#0c192de6;border:1px solid #7693be;color:#eff6ff;font:700 11px var(--ui);touch-action:none;-webkit-touch-callout:none;user-select:none;padding:0 6px}
+ #tCam{top:calc(68px + env(safe-area-inset-top,0px))}
+ #tRear{top:calc(124px + env(safe-area-inset-top,0px))}
+ #tCam.on,#tRear.on{background:#163e65ed;border-color:#64b9ff;color:#bce4ff}
+ #tCam:focus-visible,#tRear:focus-visible{outline:3px solid #ffd451;outline-offset:2px}
+}
+@media(pointer:coarse) and (orientation:landscape) and (max-height:450px){
+ #boost{width:80px;height:80px;bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+ #boost .num{font-size:24px}#boost .lbl{bottom:12px;font-size:9px}
+}
