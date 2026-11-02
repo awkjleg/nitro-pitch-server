@@ -90,9 +90,37 @@ body.embed .back{display:none}
   <text x="60" y="92" fill="#ffd451" font-family="'Chakra Petch', sans-serif" font-weight="700" font-size="20" letter-spacing="5">NITRO PITCH · HOLIDAY EVENT</text>
   <text x="56" y="168" fill="#ffffff" font-family="'Russo One', 'Arial Black', sans-serif" font-size="78" letter-spacing="2">SNOWDRIFT SEASON</text>
   <rect x="60" y="192" width="330" height="44" fill="#2e8bff"/>
-  <text x="80" y="221" fill="#ffffff" font-family="'Chakra Petch', sans-serif" font-weight="700" font-size="20" letter-spacing="3">COMING THIS DECEMBER</text>
+  <text x="80" y="221" fill="#ffffff" font-family="'Chakra Petch', sans-serif" font-weight="700" font-size="20" letter-spacing="3" id="cdTag">COMING DECEMBER 1</text>
+  <g id="cdBox">
+    <rect x="60" y="252" width="80" height="78" fill="#0a1528" stroke="#ffd451" stroke-width="2" opacity=".92"/>
+    <text id="cd0" x="100" y="300" text-anchor="middle" fill="#ffffff" font-family="'Russo One', 'Arial Black', sans-serif" font-size="36">--</text>
+    <text x="100" y="321" text-anchor="middle" fill="#ffd451" font-family="'Chakra Petch', sans-serif" font-weight="700" font-size="12" letter-spacing="2">DAYS</text>
+    <rect x="150" y="252" width="80" height="78" fill="#0a1528" stroke="#ffd451" stroke-width="2" opacity=".92"/>
+    <text id="cd1" x="190" y="300" text-anchor="middle" fill="#ffffff" font-family="'Russo One', 'Arial Black', sans-serif" font-size="36">--</text>
+    <text x="190" y="321" text-anchor="middle" fill="#ffd451" font-family="'Chakra Petch', sans-serif" font-weight="700" font-size="12" letter-spacing="2">HOURS</text>
+    <rect x="240" y="252" width="80" height="78" fill="#0a1528" stroke="#ffd451" stroke-width="2" opacity=".92"/>
+    <text id="cd2" x="280" y="300" text-anchor="middle" fill="#ffffff" font-family="'Russo One', 'Arial Black', sans-serif" font-size="36">--</text>
+    <text x="280" y="321" text-anchor="middle" fill="#ffd451" font-family="'Chakra Petch', sans-serif" font-weight="700" font-size="12" letter-spacing="2">MIN</text>
+    <rect x="330" y="252" width="80" height="78" fill="#0a1528" stroke="#ffd451" stroke-width="2" opacity=".92"/>
+    <text id="cd3" x="370" y="300" text-anchor="middle" fill="#ffffff" font-family="'Russo One', 'Arial Black', sans-serif" font-size="36">--</text>
+    <text x="370" y="321" text-anchor="middle" fill="#ffd451" font-family="'Chakra Petch', sans-serif" font-weight="700" font-size="12" letter-spacing="2">SEC</text>
+  </g>
 </svg>
 <a class="back" href="/">&#8249; Back to the game</a>
-<script>if(/[?&]embed=1/.test(location.search))document.body.classList.add('embed');</script>
+<script>
+if(/[?&]embed=1/.test(location.search))document.body.classList.add('embed');
+// countdown to the Snowdrift Season release: 1 December 2026, midnight US Eastern time
+(function(){
+  var RELEASE=Date.UTC(2026,11,1,5,0,0),pad=function(n){return n<10?'0'+n:String(n);};
+  function tick(){
+    var ms=RELEASE-Date.now();
+    if(ms<=0){document.getElementById('cdTag').textContent='OUT NOW · PLAY IT';document.getElementById('cdBox').style.display='none';return;}
+    var s=Math.floor(ms/1000),v=[Math.floor(s/86400),Math.floor(s%86400/3600),Math.floor(s%3600/60),s%60];
+    for(var i=0;i<4;i++)document.getElementById('cd'+i).textContent=i?pad(v[i]):String(v[i]);
+    setTimeout(tick,1000-Date.now()%1000);
+  }
+  tick();
+})();
+</script>
 </body>
 </html>

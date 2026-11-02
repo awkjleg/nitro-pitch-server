@@ -276,7 +276,12 @@ const gBoom = { on: false, key: "", t: 0, ball: null, fired: false };
   if (tiles) {
     const t = document.createElement("button"); t.type = "button"; t.className = "tile c-gold"; t.id = "np-soon";
     const tin = h("span", "tin"); const ic = icon("star"); ic.classList.add("big"); const wm = icon("star"); wm.classList.add("wm");
-    tin.append(ic, wm, h("b", "", "Coming soon"), h("small", "", "Snowdrift Season: a sneak peek at the Christmas items on the way."));
+    const sub = h("small", "", "");
+    tin.append(ic, wm, h("b", "", "Coming soon"), sub);
+    // Snowdrift Season comes out on 1 December, midnight US Eastern time
+    const RELEASE = Date.UTC(2026, 11, 1, 5, 0, 0);
+    const left = () => { const ms = RELEASE - Date.now(); if (ms <= 0) { sub.textContent = "Snowdrift Season is out now!"; return; } const m = Math.floor(ms / 60000), d = Math.floor(m / 1440), hh = Math.floor(m % 1440 / 60); sub.textContent = "Snowdrift Season, the Christmas event: out in " + (d ? d + "d " + hh + "h" : hh + "h " + m % 60 + "m") + "."; };
+    left(); setInterval(left, 30000);
     t.append(tin); tiles.prepend(t);
     const pop = h("div", ""); pop.id = "soonPop"; pop.hidden = true; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-modal", "true"); pop.setAttribute("aria-label", "Coming soon");
     const card = h("div", "soon-card"), head = h("div", "soon-head");
