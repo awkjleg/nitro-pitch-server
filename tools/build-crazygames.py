@@ -75,7 +75,28 @@ CG = r'''
   document.head.append(style);
   const SDK = () => window.CrazyGames && window.CrazyGames.SDK;
   let ready = false, playing = false;
-  (async () => { try { await SDK().init(); ready = true; try { SDK().game.loadingStop(); } catch {} } catch {} })();
+  // saves: the CrazyGames Data module keeps the profile with the player's CrazyGames account (any device once logged
+  // in; this browser for guests). On first use the progress already in this browser moves into it.
+  const cgStore = {
+    load: async () => { try { const s = SDK().data.getItem("np-cloud"); return s ? JSON.parse(s) : null; } catch { return null; } },
+    save: async d => { SDK().data.setItem("np-cloud", JSON.stringify(d)); }
+  };
+  async function cgAccount() {
+    try { await adoptStore(cgStore, true); } catch {}
+    // their CrazyGames username is their name in the game
+    try {
+      if (!SDK().user.isUserAccountAvailable) return;
+      const u = await SDK().user.getUser();
+      const nm = u && u.username ? cleanName(u.username).slice(0, 14) : "";
+      if (nm && profile.name !== nm) { profile.name = nm; $("nick").value = nm; me.name = nm; saveProfile(); lobbyPresence(); renderMenuChrome(); }
+    } catch {}
+  }
+  (async () => {
+    try { await SDK().init(); ready = true; } catch { return; }
+    try { SDK().game.loadingStop(); } catch {}
+    await cgAccount();
+    try { SDK().user.addAuthListener(() => cgAccount()); } catch {}
+  })();
   setInterval(() => {
     if (!ready) return;
     const now = mode !== "menu" && !paused && ["countdown", "play", "goal", "replay"].includes(match.ph);
