@@ -41,7 +41,7 @@
   function addActions(container) {
     for (const [label, allowed] of [['Reject advertising', false], ['Allow advertising', true]]) {
       const button = document.createElement('button');
-      button.type = 'button'; button.textContent = label;
+      button.type = 'button'; button.textContent = label; if (allowed) button.dataset.allow = '';
       button.addEventListener('click', () => save(allowed));
       container.appendChild(button);
     }
@@ -51,7 +51,7 @@
     if (!dialog) {
       dialog = document.createElement('dialog'); dialog.id = 'np-cookie-dialog';
       dialog.setAttribute('aria-labelledby', 'np-cookie-title');
-      dialog.innerHTML = '<h2 id="np-cookie-title">Advertising cookies</h2><p>Allow Google AdSense and its advertising measurement technologies? You can reject advertising and keep playing. Game saves, settings, and sign-in storage are separate.</p><p><a href="/cookies.html">Read the cookies policy</a></p><div class="np-cookie-actions"></div><button type="button" data-close>Close without changes</button>';
+      dialog.innerHTML = '<div class="np-eyebrow">Your choice</div><h2 id="np-cookie-title">Advertising cookies</h2><p>Allow Google AdSense and its advertising measurement technologies? You can reject advertising and keep playing. Game saves, settings, and sign-in storage are separate.</p><p><a href="/cookies.html">Read the cookies policy</a></p><div class="np-cookie-actions"></div><button type="button" data-close>Close without changes</button>';
       addActions(dialog.querySelector('.np-cookie-actions'));
       dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
       document.body.appendChild(dialog);
@@ -60,7 +60,7 @@
   }
   function init() {
     const style = document.createElement('style');
-    style.textContent = '#np-cookie-dialog{box-sizing:border-box;margin:auto;max-width:580px;width:calc(100% - 32px);max-height:85vh;overflow:auto;background:#0c1526;color:#edf4ff;border:1px solid #60728f;border-radius:12px;padding:26px;font:16px/1.6 "Segoe UI",sans-serif;box-shadow:0 15px 50px #0008}#np-cookie-dialog::backdrop{background:#03080ec9}#np-cookie-dialog h2{font-size:24px;margin:0 0 12px;color:#ffd451}#np-cookie-dialog a{color:#91c5ff}#np-cookie-dialog button{font:700 15px/1.4 "Segoe UI",sans-serif;background:#182942;color:#edf4ff;border:1px solid #91a8c8;border-radius:7px;padding:12px 16px;cursor:pointer;min-height:44px}#np-cookie-dialog button:focus-visible{outline:3px solid #ffd451;outline-offset:3px}.np-cookie-actions{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}';
+    style.textContent = '#np-cookie-dialog{box-sizing:border-box;margin:auto;max-width:620px;width:calc(100% - 32px);max-height:85vh;overflow:auto;background:linear-gradient(180deg,rgba(10,18,34,.98),rgba(8,12,22,.98));color:#edf4ff;border:1px solid rgba(150,180,255,.24);border-radius:18px;padding:26px 24px 20px;font:16px/1.6 "Chakra Petch","Segoe UI",sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.52)}#np-cookie-dialog::backdrop{background:rgba(3,8,14,.76)}#np-cookie-dialog .np-eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#ffd451;font-weight:700;margin-bottom:10px}#np-cookie-dialog h2{margin:0 0 12px;color:#fff;font:400 clamp(1.8rem,3vw,2.6rem)/1.1 "Russo One","Arial Black",Impact,sans-serif;letter-spacing:.05em;text-transform:uppercase}#np-cookie-dialog p{margin:0 0 12px}#np-cookie-dialog a{color:#91c5ff}#np-cookie-dialog button{font:700 14px/1.2 "Chakra Petch","Segoe UI",sans-serif;letter-spacing:.1em;text-transform:uppercase;background:rgba(255,255,255,.04);color:#edf4ff;border:1px solid rgba(150,180,255,.3);border-radius:12px;padding:14px 18px;cursor:pointer;min-height:48px;transition:filter .15s,background .15s}#np-cookie-dialog button:hover{background:rgba(255,255,255,.1)}#np-cookie-dialog button[data-allow]{background:linear-gradient(180deg,#ffd451,#ff9a1e);color:#111;border-color:transparent}#np-cookie-dialog button[data-allow]:hover{filter:brightness(1.08)}#np-cookie-dialog button[data-close]{background:none;border-color:transparent;color:#b0bdd6;padding:10px 4px;min-height:0;font-size:12px}#np-cookie-dialog button:focus-visible{outline:3px solid #ffd451;outline-offset:3px}.np-cookie-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;margin:18px 0 6px}';
     document.head.appendChild(style);
     document.querySelectorAll('[data-cookie-settings]').forEach(el => el.addEventListener('click', showSettings));
     updateStatus();

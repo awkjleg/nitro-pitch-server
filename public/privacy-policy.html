@@ -1,173 +1,134 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Nitro Pitch privacy policy, ad disclosures, cookies, data collection, and terms information." />
-  <meta name="theme-color" content="#0b1020" />
-  <title>Nitro Pitch Privacy Policy</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Chakra+Petch:wght@400;500;600;700&display=swap">
-  <style>
-    :root{
-      --bg:#060a14;
-      --ink:#e8eefc;
-      --dim:#8d9bbd;
-      --panel:rgba(9,15,32,.86);
-      --line:rgba(150,180,255,.2);
-      --blue:#2e8bff;
-      --orange:#ff8a1e;
-      --gold:#ffd451;
-      --good:#4ee39a;
-      --danger:#ff5d6c;
-      --display:"Russo One","Arial Black",Impact,sans-serif;
-      --ui:"Chakra Petch","Segoe UI",system-ui,sans-serif;
-      color-scheme:dark;
-    }
-    *{box-sizing:border-box}
-    html,body{margin:0;height:100%}
-    body{
-      background:radial-gradient(circle at top, rgba(46,139,255,.18), transparent 25%),linear-gradient(180deg,#060a14 0%, #0b1020 100%);
-      color:var(--ink);
-      font-family:var(--ui);
-      line-height:1.7;
-    }
-    .page{max-width:1100px;margin:0 auto;padding:32px 18px 80px}
-    .topbar{
-      display:flex;align-items:center;justify-content:space-between;gap:16px;
-      padding:10px 0 24px;border-bottom:1px solid var(--line);margin-bottom:26px;
-    }
-    .brand{display:flex;align-items:center;gap:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);text-decoration:none}.brand:focus-visible{outline:3px solid var(--gold);outline-offset:6px;border-radius:12px}
-    .brand-mark{display:block;width:64px;height:64px;flex-shrink:0;border-radius:12px;object-fit:contain}
-    .brand-name{font-family:var(--display);font-size:24px;letter-spacing:.05em}
-    .back-link{color:var(--gold);text-decoration:none;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-    .hero{
-      background:linear-gradient(135deg,rgba(30,46,88,.92),rgba(9,15,32,.96));
-      border:1px solid var(--line);border-radius:18px;padding:28px 26px;box-shadow:0 18px 44px rgba(0,0,0,.38)
-    }
-    .eyebrow{font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
-    h1{
-      margin:0 0 12px;
-      font-family:var(--display);font-size:clamp(2.2rem,5vw,4rem);line-height:1.04;letter-spacing:.05em;text-transform:uppercase
-    }
-    .lead{margin:0;max-width:780px;color:#dfe9ff;font-size:1.04rem}
-    .content{display:grid;gap:24px;margin-top:28px}
-    .card{
-      background:rgba(9,15,32,.88);border:1px solid var(--line);border-radius:18px;padding:22px 24px;box-shadow:0 12px 26px rgba(0,0,0,.25)
-    }
-    .card h2{margin:0 0 12px;font-family:var(--display);font-size:1.8rem;letter-spacing:.04em;text-transform:uppercase;color:var(--gold)}
-    .card p,.card li{color:#edf4ff;font-size:0.98rem}
-    .card ul{margin:10px 0 0 18px;padding:0}
-    .card li + li{margin-top:8px}
-    .note{background:rgba(255,212,81,.08);border:1px solid rgba(255,212,81,.28);border-radius:12px;padding:14px 16px;color:#f8f1c8}
-    .small{color:var(--dim)}
-    a{color:var(--blue)}
-    @media (max-width:640px){
-      .topbar{flex-direction:column;align-items:flex-start}
-      .hero{padding:22px 18px}
-      .card{padding:18px 18px 16px}
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#060a14">
+<meta name="description" content="Nitro Pitch privacy policy: what the game collects, cookies and browser storage, advertising, and your choices.">
+<title>Privacy Policy | Nitro Pitch</title>
+<link rel="canonical" href="https://nitropitch.app/privacy-policy.html">
+<link rel="stylesheet" href="/legal.css">
+
 <link rel="icon" type="image/png" sizes="48x48" href="/nitro-pitch-icon-48.png">
 <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 </head>
 <body>
-  <div class="page">
-    <div class="topbar">
-      <a class="brand" href="/" aria-label="Nitro Pitch home">
-        <img class="brand-mark" src="/apple-touch-icon.png" width="64" height="64" alt="Nitro Pitch logo" decoding="async">
-        <span class="brand-name">Nitro Pitch</span>
-      </a>
-      <a class="back-link" href="/">Back to Game</a>
-    </div>
-
-    <header class="hero">
-      <div class="eyebrow">Privacy Policy</div>
-      <h1>Privacy Policy &amp; Advertising Disclosure</h1>
-      <p class="lead">This Privacy Policy explains how Nitro Pitch collects, uses, stores, shares, and protects information related to your game account, cookies, advertising, gameplay, and third-party services.</p>
-    </header>
-
-    <nav aria-label="Policies"><a href="/terms-and-conditions.html">Terms</a><a href="/privacy-policy.html">Privacy</a><a href="/cookies.html">Cookies</a><a href="/">Back to game</a></nav>
-    <main class="content">
-      <section class="card">
-        <h2>1. Information We Collect</h2>
-        <p>We may collect information you provide directly, such as your username, email address, account details, support messages, and any information you share while using the game. We may also collect technical details such as device type, browser information, IP address, gameplay activity, crash or error data, ad interaction data, and analytics information related to our services.</p>
-        <p class="note">We do not sell personal information. We may share limited data with service providers that help operate the game, serve ads, analyze performance, and support account functionality.</p>
-      </section>
-
-      <section class="card">
-        <h2>2. Cookies, Local Storage &amp; Similar Technologies</h2>
-        <p>We use cookies, local storage, and similar technologies to recognize your device, maintain account sessions, remember gameplay settings, support login or consent preferences, and measure the effectiveness of ads and analytics. These technologies may also be used by our advertising partners. See the <a href="/cookies.html">Cookies &amp; Browser Storage Policy</a> for the storage inventory and <a href="/cookies.html#choices">advertising controls</a>.</p>
-        <ul>
-          <li>Essential cookies help keep the game functioning and maintain sessions.</li>
-          <li>Preference cookies remember settings and consent choices.</li>
-          <li>Analytics cookies help us understand usage patterns and improve the game.</li>
-          <li>Advertising cookies may be used by Google AdSense and third-party ad partners.</li>
-        </ul>
-      </section>
-
-      <section class="card">
-        <h2>3. Google AdSense &amp; Required Advertising Disclosures</h2>
-        <p>Our game includes Google AdSense, whose script is requested only after you allow advertising through our cookie controls. These services may use cookies and related technologies to display personalized or non-personalized advertisements based on your interests, app usage, or your visits to websites participating in the Google advertising network.</p>
-        <p>Google may use data collected through advertising cookies to measure ad performance and personalize ad delivery. You can learn more about Google’s advertising practices and privacy controls here: <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noreferrer">Google Advertising Policies</a>.</p>
-        <p>Advertising partners may receive information such as device identifiers, browser information, ad interaction data, and approximate usage or location data so they can deliver relevant ads or measure campaign performance.</p>
-      </section>
-
-      <section class="card">
-        <h2>4. Advertising Partners</h2>
-        <p>We may work with ad networks, measurement providers, and third-party services to deliver advertising, support analytics, and improve the player experience. These partners may use cookies, device identifiers, or similar technologies to deliver ads, limit ad frequency, or measure ad effectiveness.</p>
-        <ul>
-          <li>Ad networks may use cookies or identifiers to serve ads.</li>
-          <li>Measurement providers may track conversions and ad performance.</li>
-          <li>Third-party vendors may use data to personalize or improve relevant advertising.</li>
-        </ul>
-      </section>
-
-      <section class="card">
-        <h2>5. Data Collection &amp; Use</h2>
-        <p>We use the information collected to:</p>
-        <ul>
-          <li>Provide and improve gameplay and account features.</li>
-          <li>Maintain secure login and account management.</li>
-          <li>Prevent fraud, abuse, or cheating.</li>
-          <li>Measure app health, usage trends, and ad performance.</li>
-          <li>Support customer service and respond to account issues.</li>
-          <li>Ensure legal, security, and operational compliance.</li>
-        </ul>
-      </section>
-
-      <section class="card">
-        <h2>6. Third-Party Services &amp; Domain Migration</h2>
-        <p>We may use third-party services for hosting, analytics, authentication, crash reporting, support tools, warnings, and advertising. These services may process some data on our behalf under their own privacy policies. When the site moves from nitropitch.bibleway.workers.dev to nitropitch.app, a browser migration can copy saved game data and readable sign-in persistence to the new address. A single-use encrypted transfer is temporarily held on our Cloudflare server for up to five minutes. The decryption key stays in your browser tab, and the server copy is deleted after redemption or expiry. The old browser copy is kept; existing destination saves are protected from silent replacement. See the <a href="/cookies.html">cookies and storage page</a> for limitations and controls. We limit the information shared to what is necessary for the service to function and use reasonable safeguards where available.</p>
-      </section>
-
-      <section class="card">
-        <h2>7. Children’s Privacy</h2>
-        <p>Nitro Pitch is not intended for children under the age of 13 without appropriate parental consent. We do not knowingly collect personal information from children under 13 for advertising or marketing purposes. If we become aware that a child under 13 has provided personal data without valid parental consent, we will take reasonable steps to delete or restrict that information.</p>
-      </section>
-
-      <section class="card">
-        <h2>8. Your Privacy Rights</h2>
-        <p>Depending on your location, you may have rights to access, correct, delete, or restrict personal information, or to object to certain forms of processing. If applicable, you may also request information about the data we maintain about you. To exercise those rights, contact the site owner through the game support or contact information provided on the website.</p>
-      </section>
-
-      <section class="card">
-        <h2>9. Terms &amp; Your Choices</h2>
-        <p>The <a href="/terms-and-conditions.html">Terms &amp; Conditions</a> describe account responsibilities, fair play, and community rules. The game may ask you to acknowledge those terms and this privacy notice. Acknowledgment is remembered in browser storage; it is not consent to optional advertising.</p>
-        <p>The <a href="/cookies.html#choices">cookies page</a> lets you allow or reject advertising separately and change your choice later. Terms acknowledgment does not allow advertising cookies.</p>
-      </section>
-
-      <section class="card">
-        <h2>10. Changes to This Policy</h2>
-        <p>We may update this Privacy Policy from time to time. Any changes will be posted here and may be shown to users before they continue using the game. Continued use of the game after changes are posted indicates your agreement to those changes.</p>
-      </section>
-
-      <section class="card">
-        <h2>11. Contact</h2>
-        <p>If you have questions about this policy, cookies, advertising disclosures, or your personal information, contact the site owner using the support or contact details available on the game or website. We will review requests in line with applicable privacy laws and respond in a reasonable timeframe.</p>
-      </section>
-    </main>
-  </div>
+<a class="skip" href="#main">Skip to content</a>
+<div class="page">
+<div class="topbar">
+<a class="brand" href="/">NITRO PITCH</a>
+<nav aria-label="Policies">
+<a href="/about">About</a>
+<a href="/terms-and-conditions.html">Terms</a>
+<a href="/privacy-policy.html" aria-current="page">Privacy</a>
+<a href="/cookies.html">Cookies</a>
+<a href="/">Back to game</a>
+</nav>
+</div>
+<header class="hero">
+<span class="eyebrow">Your data, explained</span>
+<h1>Privacy Policy</h1>
+<p class="lead">How Nitro Pitch collects, uses, stores, shares and protects information about your game account, cookies, advertising, gameplay and third-party services.</p>
+<p class="updated">Last updated: November 2, 2026</p>
+</header>
+<div class="layout">
+<aside class="contents">
+<b>On this page</b>
+<nav aria-label="On this page">
+<a href="#information-we-collect">1. Information We Collect</a>
+<a href="#cookies-local-storage-and-similar-technologies">2. Cookies, Local Storage &amp; Similar Technologies</a>
+<a href="#google-adsense-and-required-advertising-disclosures">3. Google AdSense &amp; Required Advertising Disclosures</a>
+<a href="#advertising-partners">4. Advertising Partners</a>
+<a href="#data-collection-and-use">5. Data Collection &amp; Use</a>
+<a href="#third-party-services-and-domain-migration">6. Third-Party Services &amp; Domain Migration</a>
+<a href="#children-s-privacy">7. Children’s Privacy</a>
+<a href="#your-privacy-rights">8. Your Privacy Rights</a>
+<a href="#terms-and-your-choices">9. Terms &amp; Your Choices</a>
+<a href="#changes-to-this-policy">10. Changes to This Policy</a>
+<a href="#contact">11. Contact</a>
+</nav>
+</aside>
+<main id="main">
+<section class="card" id="information-we-collect">
+<h2>1. Information We Collect</h2>
+<p>We may collect information you provide directly, such as your username, email address, account details, support messages, and any information you share while using the game. We may also collect technical details such as device type, browser information, IP address, gameplay activity, crash or error data, ad interaction data, and analytics information related to our services.</p>
+<p class="note">We do not sell personal information. We may share limited data with service providers that help operate the game, serve ads, analyze performance, and support account functionality.</p>
+</section>
+<section class="card" id="cookies-local-storage-and-similar-technologies">
+<h2>2. Cookies, Local Storage &amp; Similar Technologies</h2>
+<p>We use cookies, local storage, and similar technologies to recognize your device, maintain account sessions, remember gameplay settings, support login or consent preferences, and measure the effectiveness of ads and analytics. These technologies may also be used by our advertising partners. See the <a href="/cookies.html">Cookies &amp; Browser Storage Policy</a> for the storage inventory and <a href="/cookies.html#choices">advertising controls</a>.</p>
+<ul>
+<li>Essential cookies help keep the game functioning and maintain sessions.</li>
+<li>Preference cookies remember settings and consent choices.</li>
+<li>Analytics cookies help us understand usage patterns and improve the game.</li>
+<li>Advertising cookies may be used by Google AdSense and third-party ad partners.</li>
+</ul>
+</section>
+<section class="card" id="google-adsense-and-required-advertising-disclosures">
+<h2>3. Google AdSense &amp; Required Advertising Disclosures</h2>
+<p>Our game includes Google AdSense, whose script is requested only after you allow advertising through our cookie controls. These services may use cookies and related technologies to display personalized or non-personalized advertisements based on your interests, app usage, or your visits to websites participating in the Google advertising network.</p>
+<p>Google may use data collected through advertising cookies to measure ad performance and personalize ad delivery. You can learn more about Google’s advertising practices and privacy controls here: <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noreferrer">Google Advertising Policies</a>.</p>
+<p>Advertising partners may receive information such as device identifiers, browser information, ad interaction data, and approximate usage or location data so they can deliver relevant ads or measure campaign performance.</p>
+</section>
+<section class="card" id="advertising-partners">
+<h2>4. Advertising Partners</h2>
+<p>We may work with ad networks, measurement providers, and third-party services to deliver advertising, support analytics, and improve the player experience. These partners may use cookies, device identifiers, or similar technologies to deliver ads, limit ad frequency, or measure ad effectiveness.</p>
+<ul>
+<li>Ad networks may use cookies or identifiers to serve ads.</li>
+<li>Measurement providers may track conversions and ad performance.</li>
+<li>Third-party vendors may use data to personalize or improve relevant advertising.</li>
+</ul>
+</section>
+<section class="card" id="data-collection-and-use">
+<h2>5. Data Collection &amp; Use</h2>
+<p>We use the information collected to:</p>
+<ul>
+<li>Provide and improve gameplay and account features.</li>
+<li>Maintain secure login and account management.</li>
+<li>Prevent fraud, abuse, or cheating.</li>
+<li>Measure app health, usage trends, and ad performance.</li>
+<li>Support customer service and respond to account issues.</li>
+<li>Ensure legal, security, and operational compliance.</li>
+</ul>
+</section>
+<section class="card" id="third-party-services-and-domain-migration">
+<h2>6. Third-Party Services &amp; Domain Migration</h2>
+<p>We may use third-party services for hosting, analytics, authentication, crash reporting, support tools, warnings, and advertising. These services may process some data on our behalf under their own privacy policies. When the site moves from nitropitch.bibleway.workers.dev to nitropitch.app, a browser migration can copy saved game data and readable sign-in persistence to the new address. A single-use encrypted transfer is temporarily held on our Cloudflare server for up to five minutes. The decryption key stays in your browser tab, and the server copy is deleted after redemption or expiry. The old browser copy is kept; existing destination saves are protected from silent replacement. See the <a href="/cookies.html">cookies and storage page</a> for limitations and controls. We limit the information shared to what is necessary for the service to function and use reasonable safeguards where available.</p>
+</section>
+<section class="card" id="children-s-privacy">
+<h2>7. Children’s Privacy</h2>
+<p>Nitro Pitch is not intended for children under the age of 13 without appropriate parental consent. We do not knowingly collect personal information from children under 13 for advertising or marketing purposes. If we become aware that a child under 13 has provided personal data without valid parental consent, we will take reasonable steps to delete or restrict that information.</p>
+</section>
+<section class="card" id="your-privacy-rights">
+<h2>8. Your Privacy Rights</h2>
+<p>Depending on your location, you may have rights to access, correct, delete, or restrict personal information, or to object to certain forms of processing. If applicable, you may also request information about the data we maintain about you. To exercise those rights, contact the site owner through the game support or contact information provided on the website.</p>
+</section>
+<section class="card" id="terms-and-your-choices">
+<h2>9. Terms &amp; Your Choices</h2>
+<p>The <a href="/terms-and-conditions.html">Terms &amp; Conditions</a> describe account responsibilities, fair play, and community rules. The game may ask you to acknowledge those terms and this privacy notice. Acknowledgment is remembered in browser storage; it is not consent to optional advertising.</p>
+<p>The <a href="/cookies.html#choices">cookies page</a> lets you allow or reject advertising separately and change your choice later. Terms acknowledgment does not allow advertising cookies.</p>
+</section>
+<section class="card" id="changes-to-this-policy">
+<h2>10. Changes to This Policy</h2>
+<p>We may update this Privacy Policy from time to time. Any changes will be posted here and may be shown to users before they continue using the game. Continued use of the game after changes are posted indicates your agreement to those changes.</p>
+</section>
+<section class="card" id="contact">
+<h2>11. Contact</h2>
+<p>If you have questions about this policy, cookies, advertising disclosures, or your personal information, contact the site owner using the support or contact details available on the game or website. We will review requests in line with applicable privacy laws and respond in a reasonable timeframe.</p>
+</section>
+</main>
+</div>
+<footer>
+<nav aria-label="Policies">
+<a href="/about">About</a>
+<a href="/terms-and-conditions.html">Terms</a>
+<a href="/privacy-policy.html" aria-current="page">Privacy</a>
+<a href="/cookies.html">Cookies</a>
+<a href="/">Back to game</a>
+</nav>
+<p>Nitro Pitch · Play fair. Respect other players.</p>
+</footer>
+</div>
 </body>
 </html>

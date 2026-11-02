@@ -7,6 +7,7 @@ import secureProgress from "./secure-progress.txt";
 import gamePolish from "./game-polish.txt";
 import drivingUpdates from "./driving-updates.txt";
 import playerFeatures from "./player-features.txt";
+import inviteAlerts from "./invite-alerts.txt";
 // The original game is a single prebuilt HTML asset. Keep the small, reviewed
 // compatibility changes here while the asset stays unchanged. Test these anchors
 // whenever replacing public/index.html with a new game build.
@@ -17,7 +18,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111015;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111016;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -69,7 +70,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.17\",\n  \"title\": \"Update 5.17: Reworked ball camera\",\n  \"notes\": [\n    \"Ball cam now moves vertically around the car to frame aerial and overhead plays.\",\n    \"Wall driving keeps a level camera horizon, and ball cam respects your saved camera angle.\",\n    \"Faster tracking and reduced double smoothing help follow balls passing across the car.\",\n    \"Phone framing, look-back and saved camera preferences are preserved.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.18\",\n  \"title\": \"Update 5.18: Invite alerts\",\n  \"notes\": [\n    \"Invite alerts: turn them on and your computer or Chromebook shows a notification when someone invites you to a party or clan while Nitro Pitch is in another tab.\",\n    \"The advertising cookies, terms and player pop-ups now match the rest of the game.\",\n    \"The Privacy Policy page has the same menu as the other pages, with links back to the game.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -93,7 +94,7 @@ const patches = [
   },
   {
     "before": "requestAnimationFrame(frame);\n})();\n</script>",
-    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n/* NP_MATCH_EXPERIENCE */\n/* NP_PHONE_CONTROLS */\n/* NP_CLAN_EMBLEMS */\n/* NP_MOBILE_MENUS */\n})();\n</script>"
+    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n/* NP_MATCH_EXPERIENCE */\n/* NP_PHONE_CONTROLS */\n/* NP_CLAN_EMBLEMS */\n/* NP_MOBILE_MENUS */\n/* NP_INVITE_ALERTS */\n})();\n</script>"
   },
   {
     "before": "<button class=\"nb\" id=\"navSettings\" type=\"button\">",
@@ -317,5 +318,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus);
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts);
 }

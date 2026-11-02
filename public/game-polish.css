@@ -80,3 +80,12 @@ input.t,select.t{background:#07111f;border:1px solid #526b8e;border-radius:5px;m
 .np-clan-logo::before{content:"";position:absolute;inset:2px;z-index:-1;clip-path:inherit;background:linear-gradient(145deg,#ffffff18,#0006),var(--cl-bg,#182943)}
 .lbl .np-clan-logo img{width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 2px 2px #0006);margin-top:-3px}.np-clan-logo b{font:700 10px var(--ui);max-width:100%;letter-spacing:0;text-align:center;margin-top:-4px}
 .lbl .n{flex-shrink:0}.lbl>li>.np-clan-logo{margin-right:2px}.lbl>li>.nm{min-width:0}
+/* Update 5.18: pop-ups added around the game use the same look as the game's own (square box, gradient top edge, slanted buttons) */
+#notifPop{position:fixed;z-index:61;inset:0;display:grid;place-items:center;padding:16px;background:rgba(2,5,12,.66);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+#notifPop[hidden]{display:none}
+#notifPop .cf-box{border-color:rgba(255,212,81,.45)}
+#nitropitch-terms-modal dialog,#np-cookie-dialog,.np-player-dialog{border-radius:0!important;border:1px solid var(--line,rgba(150,180,255,.2))!important;border-top:3px solid transparent!important;border-image:linear-gradient(90deg,#2e8bff,#ffd451,#ff8a1e) 1!important;background:linear-gradient(180deg,#0f1d36,#070d1a)!important;box-shadow:0 30px 90px rgba(0,0,0,.6)!important;font-family:var(--ui,"Chakra Petch","Segoe UI",sans-serif)!important}
+#nitropitch-terms-modal h2,#np-cookie-dialog h2,.np-player-dialog h2{font-family:var(--display,"Russo One",sans-serif)!important;color:#fff!important;text-transform:uppercase;letter-spacing:.04em}
+#nitropitch-terms-modal button,#np-cookie-dialog button:not([data-close]),.np-player-dialog .np-action{border-radius:0!important;border:0!important;clip-path:polygon(10px 0,100% 0,calc(100% - 10px) 100%,0 100%);padding:0 26px!important;min-height:44px;font:700 13px/1 var(--ui,"Chakra Petch",sans-serif)!important;letter-spacing:.12em!important;text-transform:uppercase;color:#edf4ff!important;background:rgba(255,255,255,.1)!important;box-shadow:none!important;cursor:pointer}
+#nitropitch-terms-modal button:first-of-type,#np-cookie-dialog button[data-allow]{background:linear-gradient(180deg,#2e8bff,#1f62bf)!important;color:#fff!important}
+#nitropitch-terms-modal button:hover,#np-cookie-dialog button:not([data-close]):hover,.np-player-dialog .np-action:hover:not(:disabled){filter:brightness(1.18)}

@@ -1,0 +1,50 @@
+// ---- invite alerts: a computer notification for party and clan invites while the game tab is in the background
+(() => {
+  const OK = typeof Notification === "function" && window.isSecureContext;
+  const ASKED = "np_notif_asked";
+  const away = () => document.hidden || !document.hasFocus();
+  function alert(title, body, tag) {
+    if (!OK || Notification.permission !== "granted" || !away()) return;
+    try {
+      const n = new Notification(title, { body, tag, icon: "/nitro-pitch-icon.png", badge: "/nitro-pitch-icon-48.png" });
+      n.onclick = () => { window.focus(); n.close(); };
+      setTimeout(() => n.close(), 30000);
+    } catch {}
+  }
+  const partyInv = showPartyInvite;
+  showPartyInvite = function (inv) {
+    const fresh = !partyInvites.has(inv.peer);
+    partyInv(inv);
+    if (fresh && partyInvites.has(inv.peer)) alert("Party invite", cleanName(inv.name || "A player") + " (Level " + (inv.lv | 0) + ") invited you to their party. Open Nitro Pitch to accept.", "np-party-" + inv.peer);
+  };
+  const told = new Set();
+  const clanInv = showClanInvite;
+  showClanInvite = function () {
+    clanInv();
+    for (const i of clan.invites || []) {
+      if (!i || told.has(i.id)) continue;
+      told.add(i.id);
+      alert("Clan invite", cleanName(i.fromName || "Someone") + " invited you to join " + String(i.clanName || "their clan").slice(0, 20) + ".", "np-clan-" + i.id);
+    }
+  };
+  // ask once (and again after a week if they said "Not now"), on the main menu, never over another pop-up
+  const pop = document.createElement("div");
+  pop.id = "notifPop"; pop.className = "cf-pop"; pop.hidden = true;
+  pop.setAttribute("role", "dialog"); pop.setAttribute("aria-modal", "true"); pop.setAttribute("aria-labelledby", "notifTitle");
+  pop.innerHTML = '<div class="cf-box"><h2 id="notifTitle">Turn on invite alerts?</h2><p>Get a notification on your computer when a friend invites you to a party or clan, even while Nitro Pitch is in another tab.</p><div class="cf-btns"><button class="sbtn pri" id="notifYes" type="button"><span>Turn on</span></button><button class="sbtn" id="notifNo" type="button"><span>Not now</span></button></div></div>';
+  document.body.append(pop);
+  const later = () => { try { localStorage.setItem(ASKED, String(Date.now())); } catch {} };
+  $("notifYes").onclick = async () => {
+    pop.hidden = true; later();
+    try { const p = await Notification.requestPermission(); toast(p === "granted" ? "Invite alerts are on" : "Invite alerts are off. You can allow them in your browser's site settings."); } catch {}
+  };
+  $("notifNo").onclick = () => { pop.hidden = true; later(); };
+  const busy = () => mode !== "menu" || [...document.querySelectorAll('[role="dialog"]')].some(d => d !== pop && !d.hidden && d.offsetParent !== null) || document.getElementById("nitropitch-terms-modal") || document.getElementById("np-cookie-dialog")?.open;
+  if (OK && Notification.permission === "default") {
+    const t = setInterval(() => {
+      let last = 0; try { last = +localStorage.getItem(ASKED) || 0; } catch {}
+      if (Notification.permission !== "default" || Date.now() - last < 7 * 864e5) { clearInterval(t); return; }
+      if (!busy() && !document.hidden) { clearInterval(t); pop.hidden = false; }
+    }, 4000);
+  }
+})();
