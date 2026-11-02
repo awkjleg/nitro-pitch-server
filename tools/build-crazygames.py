@@ -69,7 +69,7 @@ CG = r'''
   const sel = renderGarageSel;
   renderGarageSel = function () { sel.apply(this, arguments); if (gTab === "body") { const it = gList(gTab)[gSel] || gList(gTab)[0]; const t = $("gInfo"); if (t && HB[it.hb]) t.textContent = t.textContent.replace(it.hb + " hitbox", HB[it.hb] + " hitbox"); } };
   const style = document.createElement("style");
-  style.textContent = "body{-webkit-user-select:none;-moz-user-select:none;user-select:none}input,textarea{-webkit-user-select:text;user-select:text}#setAcct,#fbBtn,#linksBtn,#np-about,#acctBtn,#navAccount,#notifPop,[data-rp=\"share\"],.ctab[data-ct=\"clan\"],.ctab[data-ct=\"lb\"],.lc-tab[data-lt=\"clan\"],.lc-rep{display:none!important}";
+  style.textContent = "body{-webkit-user-select:none;-moz-user-select:none;user-select:none}input,textarea{-webkit-user-select:text;user-select:text}#setAcct,#fbBtn,#linksBtn,#np-about,#acctBtn,#navAccount,#notifPop,[data-rp=\"share\"],.ctab[data-ct=\"clan\"],.ctab[data-ct=\"lb\"],.lc-tab[data-lt=\"clan\"],.lc-rep{display:none!important}body.cg-nochat #lchat,body.cg-nochat #npTouchChat,body.cg-nochat #tChat{display:none!important}#cgLegal{position:fixed;left:50%;transform:translateX(-50%);bottom:34px;white-space:nowrap;z-index:20;font:12px/1.3 \"Chakra Petch\",sans-serif;color:#9fb0d4}#cgLegal[hidden]{display:none}#cgLegal a{color:#cfe2ff}";
   document.head.append(style);
   const SDK = () => window.CrazyGames && window.CrazyGames.SDK;
   let ready = false, playing = false;
@@ -103,15 +103,32 @@ CG = r'''
     // Instant Multiplayer (a party leader starting from CrazyGames): straight to the party, ready to invite friends
     try { if (SDK().game.isInstantMultiplayer && !invite) { showScreen("home"); toast("Invite friends with the Invite button, then search together or start a private match"); } } catch {}
   })();
-  // the CrazyGames invite button and links carry your party code
-  let cgRoom = "";
+  // the party is the CrazyGames "room": its code is the room id, open to friends until it is full (6)
+  let cgRoom = "", cgLink = "";
   setInterval(() => {
     if (!ready) return;
-    const c = roomApi && onlineOk ? partyCodeShown() : "";
-    if (!c || c === cgRoom) return;
-    cgRoom = c;
+    const c = roomApi && onlineOk ? partyCodeShown() : "", ps = c ? partyState() : null, open = !!ps && ps.size < PARTY_MAX;
+    const key = c + "|" + open;
+    if (!c || key === cgRoom) return;
+    cgRoom = key;
+    try { SDK().game.updateRoom({ roomId: c, isJoinable: open, inviteParams: { roomId: c } }); } catch {}
+    try { cgLink = SDK().game.inviteLink({ roomId: c }); } catch {}
     try { SDK().game.showInviteButton({ roomId: c }); } catch {}
   }, 2000);
+  // a friend's invite accepted while the game is already open: join their party
+  const cgJoin = params => { const code = normPartyCode(params && (params.roomId || params.roomName) || ""); if (!code) return; const t0 = Date.now(), t = setInterval(() => { if (Date.now() - t0 > 45000) { clearInterval(t); return; } if (roomApi && onlineOk && mode === "menu") { clearInterval(t); if (partyJoinCode(code)) toast("Joining your friend's party…"); } }, 700); };
+  const cgHooks = setInterval(() => { if (!ready) return; clearInterval(cgHooks); try { SDK().game.addJoinRoomListener(cgJoin); } catch {} }, 500);
+  // chat follows CrazyGames' disableChat setting
+  const chatOff = () => { let off = false; try { off = !!(SDK().game.settings && SDK().game.settings.disableChat); } catch {} document.body.classList.toggle("cg-nochat", off); return off; };
+  { const qc = quickChat; quickChat = function () { if (ready && chatOff()) return; return qc.apply(this, arguments); }; }
+  const cgChat = setInterval(() => { if (!ready) return; clearInterval(cgChat); chatOff(); try { SDK().game.addSettingsChangeListener(() => chatOff()); } catch {} }, 500);
+  // the Terms and Privacy Policy, shown on the main menu
+  {
+    const legal = document.createElement("div"); legal.id = "cgLegal";
+    legal.innerHTML = 'By playing you agree to the <a href="https://nitropitch.app/terms-and-conditions.html" target="_blank" rel="noopener">Terms</a> and <a href="https://nitropitch.app/privacy-policy.html" target="_blank" rel="noopener">Privacy Policy</a>';
+    document.body.append(legal);
+    setInterval(() => { legal.hidden = !(mode === "menu" && screen === "home"); }, 500);
+  }
   {
     const copy = $("partyCodeCopy").onclick;
     $("partyCodeCopy").onclick = async function () {
