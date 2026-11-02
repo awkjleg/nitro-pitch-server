@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {catalog,Ranked,economy,levelInfo} from '../src/reward-rules.js';
-import {cleanEv,snowMatch,openHolidayDrop,SNOW_START,SNOW_CH} from '../src/snowdrift.js';
+import {cleanEv,snowQuests,openChristmasDrop,claimAdvent,SNOW_START,ADVENT} from '../src/snowdrift.js';
 import {ApiError,reply} from '../src/firebase-auth.js';
 import {validCar,validGame,validHit,resultEvidence} from '../src/room-guard.js';
 const source=(await readFile(new URL('../src/progress.js',import.meta.url),'utf8')).replace(/^import .*;$/gm,'').replaceAll('export ','');
@@ -12,7 +12,7 @@ async function fixture(raw={}){
  const clone=v=>v===undefined?undefined:structuredClone(v);
  const storage={get:async k=>clone(data.get(k)),put:async(k,v)=>data.set(k,clone(v)),list:async({prefix})=>new Map([...data].filter(([k])=>k.startsWith(prefix))),transaction:async fn=>{const snapshot=clone(data);try{return await fn(storage);}catch(e){data.clear();for(const[k,v]of snapshot)data.set(k,v);throw e;}}};
  const ctx={storage},env={ROOMS:{idFromName:x=>x,get:()=>({fetch:async()=>Response.json({mid:'online1',st:[200,1,0,0,1,0],score:[1,0],won:true,mvp:true,online:true,ranked:true,playlist:1,team:0,kind:'ranked',roster:[{uid:'a',team:0},{uid:'b',team:1}],elapsed:300})})}};
- const c=vm.createContext({cleanEv,snowMatch,openHolidayDrop,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
+ const c=vm.createContext({cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
  vm.runInContext(source+'\nglobalThis.Progress=Progress;globalThis.cleanProfile=cleanProfile;',c);const ledger=new c.Progress(ctx,env);
  return {data,docs,env,ledger,advance:ms=>now+=ms,clean:c.cleanProfile,async call(action,b={},uid='a'){const response=await ledger.fetch(new Request('https://progress/action',{method:'POST',body:JSON.stringify({body:{action,...b},user:{uid,username:uid},token:'test'})}));return {status:response.status,...await response.json()};}};
 }
@@ -87,20 +87,25 @@ test('levels leaderboard merges saved levels with older accounts, rejects invali
  assert.equal((await f.call('leaderboard',{field:'password',limit:25})).status,400);assert(f.data.has('legacy-leaderboard'));
  f.docs.set('gifts/levelGift',{to:'a',xp:500000,claimed:false});const gift=await f.call('gift',{id:'level-gift',gift:'levelGift'});const after=await f.call('leaderboard',{field:'level',limit:25});assert.equal(after.rows.find(x=>x.uid==='a').level,gift.profile.level);assert(gift.profile.level>p.profile.level);
 });
-test('Snowdrift is switched off: nothing unlocks and no Holiday Drop opens',()=>{
- const p={own:{},xp:0,ev:{hd:3}};assert.equal(snowMatch(p,catalog,SNOW_START+1000,[300,2,0,1,3,0],true),null);assert.equal(openHolidayDrop(p,catalog,()=>0.5),null);assert.deepEqual(p.own,{});
+test('Christmas Drops: one per quest during the event, any Christmas item, nothing before 1 December',()=>{
+ const p={own:{},xp:0,ev:null};
+ assert.equal(snowQuests(p,SNOW_START-1000,2),0);assert.equal(p.ev,null);
+ p.ev={hd:1};assert.equal(openChristmasDrop(p,catalog,()=>0.5,SNOW_START-1000),null);assert.deepEqual(p.own,{});
+ assert.equal(snowQuests(p,SNOW_START+1000,2),2);assert.equal(p.ev.hd,3);
+ const names=new Set();let guard=0;p.ev.hd=100;
+ while(p.ev.hd>0&&guard++<100){const g=openChristmasDrop(p,catalog,Math.random,SNOW_START+5000);if(g.xp){assert.equal(g.xp,2000);break;}names.add(g.kind+':'+g.name);assert(catalog[g.kind][g.i].ev);}
+ const all=Object.entries(catalog).flatMap(([k,l])=>l.filter(x=>x.ev).map(x=>k+':'+x.name)).filter(x=>x!=='title:Holiday Hero');
+ assert.equal(names.size,all.length);assert(!names.has('title:Holiday Hero'));
 });
-test('Snowdrift rules (when switched on) unlock items only during the event, and Holiday Drops give the rare three then XP',()=>{
- const p={own:{},xp:0,ev:null};const st=[300,2,0,1,3,0];const snowMatchOn=(a,b,c,d,e)=>snowMatch(a,b,c,d,e,true),openOn=(a,b,c)=>openHolidayDrop(a,b,c,true);
- assert.equal(snowMatchOn(p,catalog,SNOW_START-1000,st,true),null);assert.equal(p.ev,null);
- const first=snowMatchOn(p,catalog,SNOW_START+1000,st,true);assert.deepEqual(first.unlocked.map(x=>x.name),['Holly Sprig']);assert.equal(first.drops,0);
- for(let i=0;i<4;i++)snowMatchOn(p,catalog,SNOW_START+2000+i,st,true);
- assert.equal(p.ev.m,5);assert.equal(p.ev.hd,1);assert(p.own.title.includes(catalog.title.findIndex(x=>x.name==='Snow Driver'&&x.ev)));
- for(let i=0;i<200;i++)snowMatchOn(p,catalog,SNOW_START+5000+i,[300,1,0,1,1,0],true);
- assert(p.own.title.includes(catalog.title.findIndex(x=>x.name==='Holiday Hero')));
- const names=new Set();for(let i=0;i<3;i++)names.add(openOn(p,catalog,()=>0.5).name);
- assert.deepEqual([...names].sort(),['Blizzard','Northern Lights','Snow Globe']);
- const xp=p.xp;assert.equal(openOn(p,catalog,()=>0.5).xp,2000);assert.equal(p.xp,xp+2000);
- p.ev.hd=0;assert.equal(openOn(p,catalog,()=>0.5),null);
- for(const [, , kind, name] of SNOW_CH)assert(catalog[kind].findIndex(x=>x.name===name&&x.ev)>=0,name);
+test('advent calendar: one door a day from 1 December, missed days can be opened later, each once',()=>{
+ const p={own:{},xp:0,ev:null},day=d=>SNOW_START+(d-1)*864e5+3600e3;
+ assert.equal(claimAdvent(p,catalog,SNOW_START-1000,1),null);
+ assert.equal(claimAdvent(p,catalog,day(1),2),null);
+ const d1=claimAdvent(p,catalog,day(1),1);assert.equal(d1.got[0].name,'Holly Sprig');assert(p.own.antenna.length===1);
+ assert.equal(claimAdvent(p,catalog,day(1),1),null);
+ const d3=claimAdvent(p,catalog,day(5),3);assert.equal(d3.got[0].xp,1500);assert.equal(p.xp,1500);
+ assert.equal(claimAdvent(p,catalog,day(30),26),null);
+ const d25=claimAdvent(p,catalog,day(25),25);assert.equal(d25.got[0].name,'Holiday Hero');assert.equal(d25.got[1].drops,3);
+ assert.equal(ADVENT.length,25);
+ for(const rewards of ADVENT)for(const [t,k,n] of rewards)if(t==='item')assert(catalog[k].findIndex(x=>x.name===n&&x.ev)>=0,n);
 });

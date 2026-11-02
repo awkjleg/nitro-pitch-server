@@ -1,7 +1,7 @@
 import {DurableObject} from 'cloudflare:workers';
 import {ApiError,reply,identify,readJson,firebaseDoc,ADMIN_UID} from './firebase-auth.js';
 import {catalog,Ranked,economy,levelInfo} from './reward-rules.js';
-import {cleanEv,snowMatch,openHolidayDrop} from './snowdrift.js';
+import {cleanEv,snowQuests,openChristmasDrop,claimAdvent} from './snowdrift.js';
 const ID=/^[A-Za-z0-9_-]{1,128}$/, midOK=/^[A-Za-z0-9_-]{1,80}$/;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const n=(v,max=1e9)=>Number.isFinite(v)?clamp(Math.trunc(v),0,max):0;
@@ -33,7 +33,7 @@ export function awardMatch(p,e,now=Date.now(),averages=[500,500]){
  p.xp+=base+bonus;p.games++;if(e.won)p.wins++;p.goals+=st[1];p.saves+=st[3];if(mv)p.mvps++;
  const quests=E.advanceQuests({...e,mvp:!!mv});for(const q of quests){p.xp+=q.xp;lines.push([q.text,q.xp,true]);}
  const xp0=p.xp,px=base+bonus+quests.reduce((s,q)=>s+q.px,0),tiers=E.addPassXp(px);if(p.xp>xp0)lines.push(['Nitro Pass rewards',p.xp-xp0,true]);
- const snow=snowMatch(p,catalog,now,st,e.won);
+ const snow=snowQuests(p,now,quests.length);
  let rank=null;
  if(e.ranked&&[1,2,3].includes(e.playlist)){
   const r=p.rk[e.playlist-1],b={mmr:r[0],played:r[1],info:Ranked.info(r[0])},rt0=p.rt,d=Ranked.delta(averages[e.team],averages[1-e.team],e.won,r[1]);
@@ -141,7 +141,8 @@ export class Progress extends DurableObject{
     for(const x of picked.filter(x=>!x.drop))p.own[x.kind]=p.own[x.kind].filter(i=>i!==x.i);
     const pool=E.dropPool(r+1);let got;if(pool.length){got={...pool[crypto.getRandomValues(new Uint32Array(1))[0]%pool.length],rar:r+1};p.own[got.kind].push(got.i);}else{E.addDrop(r+1);got={drop:r+1};}result={got,picked};
    }
-  }else if(b.action==='holiday-drop'){const got=openHolidayDrop(p,catalog,()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296);if(!got)throw new ApiError('You have no Holiday Drops to open',409);result={got};
+  }else if(b.action==='holiday-drop'){const got=openChristmasDrop(p,catalog,()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296,now);if(!got)throw new ApiError('You have no Christmas Drops to open',409);result={got};
+  }else if(b.action==='advent'){const got=claimAdvent(p,catalog,now,b.day);if(!got)throw new ApiError('That door can\u2019t be opened',409);result=got;
   }else if(b.action==='reroll'){if(!economy(p,now).rerollQuest(b.index))throw new ApiError('You have used today’s reroll',409);
   }else if(b.action==='gift'){
    if(!midOK.test(b.gift||''))throw new ApiError('Invalid gift');const key='gift:'+b.gift;

@@ -234,3 +234,27 @@ body.np-pop-busy .np-quick-start{visibility:hidden}
 .snow-need{font-size:12px;color:#cfd7ee}.snow-c .bar{height:6px}.snow-c .bar i{background:linear-gradient(90deg,#9fdcff,#ffffff)}
 .snow-st{font:700 12px var(--ui);color:#9fb0d4}.snow-c.got .snow-st{color:#3fe08f}
 @media (max-width:760px){.snow-head{flex-direction:column;align-items:stretch}}
+/* Snowdrift Season: advent calendar, Christmas Drops, collection */
+.snow-dropbox{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(0,0,0,.35);border-radius:10px;box-shadow:inset 0 0 0 1px rgba(255,77,87,.45),0 0 24px rgba(255,77,87,.15)}
+.snow-gift{width:96px;height:66px}.snow-gift canvas{width:100%;height:100%}
+.snow-dropbox .snow-dl{flex:0 0 auto}
+.snow-note{border-left-color:#bfe8ff!important}
+.snow-cal{padding:14px 16px;border-radius:12px;box-shadow:inset 0 0 0 1px rgba(191,232,255,.25)}
+.snow-doors{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin-top:10px}
+.snow-door{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:118px;padding:8px 10px;border:0;border-radius:8px;font:inherit;color:#edf4ff;text-align:left;cursor:default;background:repeating-linear-gradient(135deg,#123a6b 0 10px,#0f3260 10px 20px)}
+.snow-door b{font:24px/1 var(--display)}
+.snow-door small{font-size:11px;line-height:1.3;color:#cfd7ee}
+.snow-door.shut{opacity:.55}
+.snow-door.shut b{color:#9fb0d4}
+.snow-door.ready{cursor:pointer;background:linear-gradient(160deg,#d6283a,#7a0f1c);box-shadow:0 0 0 2px #ffd451,0 0 22px rgba(255,212,81,.45);animation:snowPulse 1.6s ease-in-out infinite}
+.snow-door.ready:hover{filter:brightness(1.12)}
+.snow-door.done{background:linear-gradient(160deg,#16324f,#0b1a30);box-shadow:inset 0 0 0 1px #3fe08f}
+.snow-door.done small{color:#3fe08f}
+.snow-door.big{grid-column:span 2;background-image:repeating-linear-gradient(135deg,#6b4a00 0 10px,#5a3d00 10px 20px)}
+.snow-door.big.ready{background:linear-gradient(160deg,#ffd451,#b8790a);color:#1a1200}.snow-door.big.ready small{color:#2a1d00}
+.snow-dth{width:100%;height:52px;display:grid;place-items:center;overflow:hidden}.snow-dth canvas,.snow-dth .bthumb{max-width:100%;max-height:100%}
+.snow-xp{font:20px var(--display);color:#ffd451}
+@keyframes snowPulse{50%{box-shadow:0 0 0 2px #ffd451,0 0 34px rgba(255,212,81,.7)}}
+.snow-col{padding:14px 16px;border-radius:12px}
+.snow-col .snow-grid{margin-top:10px}
+@media (prefers-reduced-motion:reduce){.snow-door.ready{animation:none}}

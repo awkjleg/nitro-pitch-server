@@ -1,115 +1,186 @@
-// ---- Snowdrift Season (Christmas event, 1 December to 5 January): 27 items from challenges, the 3 rarest from Holiday
-// Drops. The server counts the matches and hands out the items (src/snowdrift.js has the same list).
-// (function declarations and var: lockOf can ask about an item before this part of the script has run)
+// ---- Snowdrift Season (Christmas event), from 1 December (midnight US Eastern): every quest finished during the event
+// gives a Christmas Drop (any of the 30 Christmas items), and an advent calendar has a door a day from 1 to 25
+// December. Before then none of it shows. The server decides everything (src/snowdrift.js has the same lists).
+// (function declarations: lockOf can ask about an item before this part of the script has run)
 function snowData() {
   return snowData.d || (snowData.d = {
-    at: Date.UTC(2026, 11, 1, 5), end: Date.UTC(2027, 0, 6, 5), every: 5,
-    ch: [["m", 1, "antenna", "Holly Sprig"], ["m", 5, "title", "Snow Driver"], ["g", 5, "antenna", "Candy Cane"], ["m", 10, "banner", "Snowy Night"],
-      ["w", 5, "topper", "Elf Hat"], ["g", 15, "decal", "Candy Stripe"], ["s", 10, "boost", "Snowfall"], ["m", 20, "wheel", "Ice Studs"],
-      ["w", 10, "topper", "Gingerbread Pal"], ["g", 25, "title", "Elf on the Pitch"], ["g", 30, "antenna", "Bauble"], ["m", 30, "decal", "Gift Wrap"],
-      ["s", 20, "paint", "Frosted"], ["w", 15, "title", "North Pole Pro"], ["w", 20, "antenna", "Frostflake"], ["m", 40, "topper", "Santa Cap"],
-      ["g", 40, "decal", "Ugly Sweater"], ["w", 25, "wheel", "Peppermint"], ["s", 30, "boost", "Sleigh Bells"], ["m", 50, "banner", "Candy Cane"],
-      ["w", 30, "topper", "Rooftop Pine"], ["g", 60, "decal", "Frostbite"], ["m", 75, "wheel", "Wreath Rims"], ["w", 40, "boost", "Peppermint Twist"],
-      ["g", 100, "boom", "Present Pop"], ["m", 100, "banner", "Fireside"], ["all", 26, "title", "Holiday Hero"]],
-    drop: [["topper", "Snow Globe"], ["boom", "Blizzard"], ["boom", "Northern Lights"]]
+    at: Date.UTC(2026, 11, 1, 5), end: Date.UTC(2027, 0, 6, 5),
+    advent: [[["item", "antenna", "Holly Sprig"]], [["drop", 1]], [["xp", 1500]], [["item", "title", "Snow Driver"]], [["drop", 1]],
+      [["item", "banner", "Snowy Night"]], [["xp", 2000]], [["drop", 1]], [["item", "antenna", "Candy Cane"]], [["drop", 1]],
+      [["xp", 2500]], [["item", "topper", "Elf Hat"]], [["drop", 2]], [["item", "decal", "Candy Stripe"]], [["drop", 1]],
+      [["item", "boost", "Snowfall"]], [["xp", 3000]], [["drop", 2]], [["item", "wheel", "Ice Studs"]], [["item", "title", "Elf on the Pitch"]],
+      [["drop", 2]], [["item", "paint", "Frosted"]], [["xp", 5000]], [["item", "topper", "Santa Cap"]], [["item", "title", "Holiday Hero"], ["drop", 3]]]
   });
 }
-// switched off: the items stay hidden and locked, only the countdown shows (src/snowdrift.js has the same switch)
-function snowLive() { return false; }
-function snowNeed(c) { const [stat, n] = c; return stat === "all" ? "Finish every other challenge" : (stat === "m" ? "Play " : stat === "g" ? "Score " : stat === "s" ? "Make " : "Win ") + n + (stat === "m" || stat === "w" ? " matches" : stat === "g" ? " goals" : " saves"); }
+function snowLive() { return Date.now() >= snowData().at; }
 function snowLock(kind, it) {
-  if (!snowLive()) return "Snowdrift Season · coming soon";
-  const D = snowData();
-  if (D.drop.some(([k, n]) => k === kind && n === it.name)) return "From Holiday Drops";
-  const c = D.ch.find(([, , k, n]) => k === kind && n === it.name);
-  return c ? snowNeed(c) + " in Snowdrift Season" : "Snowdrift Season";
+  if (!snowLive()) return "Locked";
+  return kind === "title" && it.name === "Holiday Hero" ? "Advent calendar, December 25" : "From Christmas Drops";
 }
 // rarities (the server's catalog has the same)
 for (const [kind, list] of [["decal", [["Ugly Sweater", 3], ["Candy Stripe", 2], ["Gift Wrap", 2], ["Frostbite", 4]]], ["wheel", [["Peppermint", 3], ["Ice Studs", 2], ["Wreath Rims", 4]]],
   ["boost", [["Snowfall", 2], ["Sleigh Bells", 3], ["Peppermint Twist", 4]]], ["boom", [["Present Pop", 4], ["Blizzard", 5], ["Northern Lights", 6]]], ["paint", [["Frosted", 2]]],
   ["topper", [["Santa Cap", 3], ["Elf Hat", 2], ["Rooftop Pine", 4], ["Snow Globe", 5], ["Gingerbread Pal", 2]]], ["antenna", [["Candy Cane", 2], ["Frostflake", 3], ["Bauble", 2], ["Holly Sprig", 1]]],
-  ["banner", [["Snowy Night", 2], ["Candy Cane", 3], ["Fireside", 4]]]])
+  ["banner", [["Snowy Night", 2], ["Candy Cane", 3], ["Fireside", 4]]], ["title", [["Snow Driver", 0], ["Elf on the Pitch", 1], ["North Pole Pro", 2], ["Holiday Hero", 5]]]])
   for (const [name, rar] of list) { const it = listOf(kind).find(x => x.name === name && x.ev); if (it) it.rar = rar; }
+const SNOW_KINDS = ["topper", "antenna", "decal", "wheel", "boost", "boom", "paint", "banner", "title"];
 const snowIdx = (kind, name) => listOf(kind).findIndex(x => x.name === name && x.ev);
-let snowEv = null, snowOwned = null, snowAsked = false;
-function snowOwnedNow() { const out = new Set(); for (const [, , kind, name] of snowData().ch.concat(snowData().drop.map(([k, n]) => [0, 0, k, n]))) { const i = snowIdx(kind, name); if (i >= 0 && owns(kind, i)) out.add(kind + ":" + i); } return out; }
+const snowItems = () => SNOW_KINDS.flatMap(kind => listOf(kind).map((it, i) => ({ kind, i, it })).filter(x => x.it.ev));
+// a present for Christmas Drops
+function snowGiftThumb() {
+  const cv = document.createElement("canvas"); cv.width = 200; cv.height = 136; const g = cv.getContext("2d");
+  g.save(); g.shadowColor = "#ff4d57"; g.shadowBlur = 24; g.fillStyle = "#b51f30"; g.fillRect(58, 52, 84, 70); g.restore();
+  g.fillStyle = "#d6283a"; g.fillRect(52, 40, 96, 20); g.fillStyle = "#b51f30"; g.fillRect(58, 60, 84, 62);
+  g.fillStyle = "#ffd451"; g.fillRect(93, 40, 14, 82); g.fillRect(52, 46, 96, 8);
+  g.beginPath(); g.ellipse(86, 34, 16, 9, -0.5, 0, 7); g.ellipse(114, 34, 16, 9, 0.5, 0, 7); g.fill();
+  g.fillStyle = "#fff3b0"; g.beginPath(); g.arc(100, 38, 6, 0, 7); g.fill();
+  g.fillStyle = "rgba(255,255,255,.85)"; for (const [x, y, r] of [[30, 30, 2.5], [170, 26, 2], [24, 100, 2], [178, 90, 2.5], [150, 120, 1.6], [40, 124, 1.6]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+  return cv;
+}
+// goal explosion pictures for the three Christmas ones
+{
+  const thumb = itemThumb;
+  itemThumb = function (t, i) {
+    const it = t === "boom" && BOOMS[i];
+    if (!it || !it.ev) return thumb.apply(this, arguments);
+    const cv = document.createElement("canvas"); cv.width = 200; cv.height = 136; const g = cv.getContext("2d"), cx = 100, cy = 70;
+    if (it.fx === "gift") {
+      g.fillStyle = "#2fa35a"; g.fillRect(78, 74, 44, 40); g.fillStyle = "#ffd451"; g.fillRect(96, 74, 8, 40);
+      for (let k = 0; k < 46; k++) { const a = -Math.PI / 2 + (k / 46 - 0.5) * 2.6, r = 24 + (k * 37 % 50); g.fillStyle = ["#d6283a", "#ffd451", "#2fbb66", "#ffffff"][k % 4]; g.save(); g.translate(cx + Math.cos(a) * r, cy + 4 + Math.sin(a) * r); g.rotate(k); g.fillRect(-4, -2, 8, 4); g.restore(); }
+    } else if (it.fx === "blizzard") {
+      g.strokeStyle = "rgba(191,232,255,.6)"; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, 40, 0.5, 5.2); g.stroke(); g.beginPath(); g.arc(cx, cy, 24, 2, 7.6); g.stroke();
+      g.fillStyle = "#e8f6ff"; for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; g.save(); g.translate(cx, cy); g.rotate(a); g.beginPath(); g.moveTo(0, -6); g.lineTo(5, -40); g.lineTo(-5, -40); g.closePath(); g.fill(); g.restore(); }
+      g.fillStyle = "#ffffff"; g.beginPath(); g.arc(cx, cy, 9, 0, 7); g.fill();
+    } else {
+      g.fillStyle = "#060b18"; g.fillRect(0, 0, 200, 136);
+      for (const [c, o] of [["rgba(47,227,154,.75)", 0], ["rgba(180,140,255,.6)", 22]]) { g.fillStyle = c; g.beginPath(); g.moveTo(0, 60 + o); for (let x = 0; x <= 200; x += 10) g.lineTo(x, 40 + o + Math.sin(x / 26 + o) * 16); g.lineTo(200, 100 + o); for (let x = 200; x >= 0; x -= 10) g.lineTo(x, 70 + o + Math.sin(x / 26 + o) * 16); g.closePath(); g.fill(); }
+      g.fillStyle = "#ffffff"; for (const [x, y] of [[20, 14], [70, 10], [150, 18], [184, 30], [120, 8]]) g.fillRect(x, y, 2, 2);
+    }
+    return cv;
+  };
+}
+let snowEv = null, snowAsked = false;
 window.NPProgressAPI?.listen(data => {
+  const before = snowEv ? snowEv.hd | 0 : null;
   if (data && data.ev) snowEv = data.ev;
-  setTimeout(() => {
-    const now = snowOwnedNow();
-    if (snowOwned) for (const k of now) if (!snowOwned.has(k)) { const [kind, i] = k.split(":"); toast("Snowdrift unlocked: " + listOf(kind)[+i].name + " (" + kindName(kind) + ")"); }
-    snowOwned = now;
-    if (screen === "pass" && passTab === "snow") renderPass();
-  }, 50);
+  if (snowLive() && before != null && snowEv && (snowEv.got | 0) > 0 && (snowEv.hd | 0) > before && !snowBusy) toast("Christmas Drop earned! Open it in Nitro Pass › Snowdrift");
+  if (screen === "pass" && passTab === "snow") setTimeout(() => renderPass(), 30);
 });
-// the Snowdrift tab in Nitro Pass (the admin can preview it before the event)
+let snowBusy = false;
+async function snowCall(action, data) {
+  snowBusy = true;
+  try { const r = await window.NPProgressAPI.call(action, { id: crypto.randomUUID(), ...data }); if (r.profile && r.profile.ev) snowEv = r.profile.ev; return r; }
+  finally { snowBusy = false; }
+}
+// the reveal uses the drop pop-up
+let snowReveal = false;
+function snowShow(title, thumb, rarCol, name, kind, item) {
+  const card = $("dpCard"), th = $("dpTh");
+  snowReveal = true; dpGot = item || { xp: 1 };
+  th.innerHTML = ""; th.append(snowGiftThumb());
+  card.classList.remove("rev"); card.classList.add("shake"); card.style.setProperty("--rar", "#ff4d57");
+  setTxt("dpRar", title); setTxt("dpName", "Opening…"); setTxt("dpKind", "");
+  $("dpEquip").hidden = true; $("dpBtns").hidden = true; $("dpAgain").hidden = true; $("dropPop").hidden = false;
+  try { sfx.ready(); } catch {}
+  setTimeout(() => {
+    card.classList.remove("shake"); card.classList.add("rev"); card.style.setProperty("--rar", rarCol);
+    th.innerHTML = ""; th.append(thumb); setTxt("dpName", name); setTxt("dpKind", kind);
+    $("dpEquip").hidden = !item; $("dpBtns").hidden = false;
+    const left = snowEv ? snowEv.hd | 0 : 0, ag = $("dpAgain"); ag.hidden = !left; if (left) ag.querySelector("span").textContent = "Open Another (" + left + ")";
+    try { sfx.levelUp(); } catch {}
+    if (screen === "pass") renderPass();
+  }, 1100);
+}
+function snowShowGot(title, g) {
+  if (g && g.kind) { const it = listOf(g.kind)[g.i]; snowShow(title, itemThumb(g.kind, g.i), rarCol(it), it.name, rarName(it) + " · " + kindName(g.kind), g); }
+  else if (g && g.xp) snowShow(title, h("b", "np-xp", "+" + g.xp.toLocaleString()), "#ffd451", "+" + g.xp.toLocaleString() + " XP", g.had ? "" : "");
+  else if (g && g.drops) snowShow(title, snowGiftThumb(), "#ff4d57", g.drops + " Christmas Drop" + (g.drops > 1 ? "s" : ""), g.had ? "You already had " + g.had + ", so here's a drop instead" : "Open them in Nitro Pass › Snowdrift");
+}
+async function openChristmasDrop() {
+  const A = window.npAccounts; if (!A || !A.user()) { toast("Log in to open Christmas Drops"); return; }
+  try { const r = await snowCall("holiday-drop"); snowShowGot("Christmas Drop", r.result.got); }
+  catch (e) { toast((e && e.message) || "Couldn't open the drop"); }
+}
+{
+  const again = $("dpAgain").onclick, ok = $("dpOk").onclick;
+  $("dpAgain").onclick = function () { if (snowReveal) { openChristmasDrop(); return; } return again.apply(this, arguments); };
+  $("dpOk").onclick = function () { snowReveal = false; return ok.apply(this, arguments); };
+  const eq = $("dpEquip").onclick; $("dpEquip").onclick = function () { snowReveal = false; return eq.apply(this, arguments); };
+}
+// ---- the Snowdrift tab in Nitro Pass (from 1 December)
 {
   const tabs = document.querySelector("#pass .ctabs"), tb = document.createElement("button");
   tb.type = "button"; tb.className = "ctab snow-tab"; tb.dataset.pt = "snow"; tb.setAttribute("role", "tab");
   tb.append("Snowdrift"); const badge = h("span", "cbadge", ""); badge.hidden = true; tb.append(badge);
-  tabs.append(tb); tb.onclick = () => { passTab = "snow"; renderPass(); };
+  tb.hidden = !snowLive(); tabs.append(tb); tb.onclick = () => { passTab = "snow"; renderPass(); };
   const box = h("div", "np-snow"); box.id = "npSnow"; box.hidden = true; $("npDrops").after(box);
   const pass = renderPass;
   renderPass = function () {
     pass.apply(this, arguments);
     tb.hidden = !snowLive();
     if (tb.hidden && passTab === "snow") { passTab = "rewards"; pass.apply(this, arguments); }
-    const hd = snowEv ? snowEv.hd | 0 : 0; badge.hidden = !hd; badge.textContent = String(hd);
-    box.hidden = passTab !== "snow";
+    const n = (snowEv ? snowEv.hd | 0 : 0) + snowDoorsOpen(); badge.hidden = !n || tb.hidden; badge.textContent = String(n);
+    box.hidden = passTab !== "snow" || tb.hidden;
     if (!box.hidden) renderSnow();
   };
+  // during the event the quests tab says what quests are worth
+  const quests = renderQuests;
+  renderQuests = function () { quests.apply(this, arguments); if (snowLive()) $("npQuests").prepend(h("div", "note snow-note", "Snowdrift Season: every quest you finish also gives a Christmas Drop.")); };
 }
+const snowToday = () => Math.floor((Date.now() - snowData().at) / 864e5) + 1;
+function snowDoorsOpen() { if (!snowLive() || !snowEv) return 0; let n = 0; for (let d = 1; d <= Math.min(25, snowToday()); d++) if (!(snowEv.adv & (1 << (d - 1)))) n++; return n; }
+function snowRewardText(rw) { return rw.map(([t, a, b]) => t === "xp" ? "+" + a.toLocaleString() + " XP" : t === "drop" ? a + " Christmas Drop" + (a > 1 ? "s" : "") : b).join(" + "); }
 function renderSnow() {
-  const box = $("npSnow"), D = snowData(), ev = snowEv || { m: 0, g: 0, s: 0, w: 0, hd: 0 }, live = snowLive(), over = Date.now() >= D.end;
-  const A = window.npAccounts, signed = !!(A && A.user && A.user());
+  const box = $("npSnow"), D = snowData(), A = window.npAccounts, signed = !!(A && A.user && A.user());
   if (signed && !snowEv && !snowAsked && window.NPProgressAPI) { snowAsked = true; window.NPProgressAPI.call("load").then(r => { if (r && r.profile && r.profile.ev) { snowEv = r.profile.ev; renderPass(); } }).catch(() => {}); }
+  const ev = snowEv || { hd: 0, adv: 0 }, today = snowToday(), over = Date.now() >= D.end;
   box.innerHTML = "";
   const head = h("div", "panel snow-head"), ht = h("div", "snow-ht");
-  ht.append(h("small", "", over ? "Event over · your items are yours to keep" : live ? "Christmas event · until January 5" : "Starts December 1 · admin preview"), h("h2", "", "Snowdrift Season"),
-    h("p", "", "Matches during the event (online or against bots) count for every challenge. Each challenge unlocks an item for good. Every " + D.every + " event matches also earn a Holiday Drop."));
-  const stats = h("div", "snow-stats");
-  for (const [k, l] of [["m", "Matches"], ["g", "Goals"], ["s", "Saves"], ["w", "Wins"]]) { const d = h("div", ""); d.append(h("b", "", String(ev[k] | 0)), h("small", "", l)); stats.append(d); }
-  head.append(ht, stats); box.append(head);
-  // Holiday Drops
-  const dp = h("div", "panel snow-drops"), dl = h("div", "snow-dl");
-  dl.append(h("b", "", "Holiday Drops"), h("span", "", (ev.hd | 0) + " to open · next in " + (D.every - (ev.m | 0) % D.every) + " match" + (D.every - (ev.m | 0) % D.every === 1 ? "" : "es")),
-    h("small", "", "The only way to get the three rarest Snowdrift items. Once you have all three, a drop gives 2,000 XP."));
-  const open = sbtn("Open Holiday Drop", "pri", async () => {
-    const b = open;
-    if (!signed) { toast("Log in to open Holiday Drops"); return; }
-    b.disabled = true;
-    try {
-      const r = await window.NPProgressAPI.call("holiday-drop", { id: crypto.randomUUID() });
-      if (r.profile && r.profile.ev) snowEv = r.profile.ev;
-      const g = r.result && r.result.got;
-      toast(g && g.xp ? "Holiday Drop: +2,000 XP. You have all three rare items!" : g ? "Holiday Drop: " + g.name + "!" : "Holiday Drop opened");
-      try { sfx.levelUp(); } catch {}
-    } catch (e) { toast((e && e.message) || "Couldn't open the drop"); }
-    renderPass();
+  ht.append(h("small", "", over ? "Event over · your items are yours to keep" : "Christmas event · until January 5"), h("h2", "", "Snowdrift Season"),
+    h("p", "", "Open a door of the advent calendar every day until Christmas, and finish quests for Christmas Drops. Each drop holds one of 30 Christmas items you don't have yet."));
+  // Christmas Drops
+  const dp = h("div", "snow-dropbox"), th = h("div", "snow-gift"); th.append(snowGiftThumb());
+  const dl = h("div", "snow-dl"); dl.append(h("b", "", (ev.hd | 0) + " Christmas Drop" + ((ev.hd | 0) === 1 ? "" : "s")), h("small", "", "1 for every quest you finish"));
+  const open = sbtn("Open", "pri", () => openChristmasDrop()); open.disabled = !(ev.hd > 0) || !signed;
+  dp.append(th, dl, open); head.append(ht, dp); box.append(head);
+  // the advent calendar
+  const cal = h("div", "panel snow-cal");
+  cal.append(h("div", "ph", ""));
+  cal.firstChild.append(h("span", "", "Advent calendar"), h("span", "ph-n", today <= 25 ? "Day " + Math.max(1, today) + " of 25 · missed doors stay open until Christmas" : "Merry Christmas!"));
+  const grid = h("div", "snow-doors");
+  D.advent.forEach((rw, k) => {
+    const day = k + 1, done = !!(ev.adv & (1 << k)), ready = !done && day <= today && day <= 25 && signed, big = day === 25;
+    const d = h("button", "snow-door" + (done ? " done" : ready ? " ready" : " shut") + (big ? " big" : "") + (day === today ? " today" : "")); d.type = "button";
+    d.append(h("b", "", String(day)));
+    const item = rw.find(r => r[0] === "item");
+    if (done || ready) { const t = h("div", "snow-dth"); if (item) { const i = snowIdx(item[1], item[2]); if (i >= 0) t.append(itemThumb(item[1], i)); } else t.append(rw[0][0] === "drop" ? snowGiftThumb() : h("span", "snow-xp", "XP")); d.append(t); }
+    d.append(h("small", "", done ? "✓ " + snowRewardText(rw) : ready ? snowRewardText(rw) : day <= today ? "Log in to open" : "Opens Dec " + day));
+    d.disabled = !ready;
+    if (ready) d.onclick = async () => {
+      d.disabled = true;
+      try { const r = await snowCall("advent", { day }); const g = r.result.got; snowShowGot("Day " + day, g.find(x => x.kind) || g[0]); if (g.length > 1) toast("Day " + day + ": " + snowRewardText(rw)); }
+      catch (e) { toast((e && e.message) || "Couldn't open that door"); renderPass(); }
+    };
+    grid.append(d);
   });
-  open.disabled = !(ev.hd > 0) || !live;
-  const rare = h("div", "snow-rare");
-  for (const [kind, name] of D.drop) { const i = snowIdx(kind, name); if (i < 0) continue; const it = listOf(kind)[i], got = owns(kind, i), c = h("div", "snow-ri" + (got ? " got" : "")); c.style.setProperty("--rar", RARITIES[it.rar || 5][1]); const th = h("div", "snow-th"); th.append(itemThumb(kind, i)); c.append(th, h("b", "", name), h("small", "", got ? "✓ Unlocked" : rarName(it) + " · " + kindName(kind))); rare.append(c); }
-  dp.append(dl, rare, open); box.append(dp);
-  // the challenges
-  const grid = h("div", "snow-grid");
-  const done = D.ch.filter(c => c[0] !== "all" && owns(c[2], snowIdx(c[2], c[3]))).length;
-  for (const c of D.ch) {
-    const [stat, n, kind, name] = c, i = snowIdx(kind, name); if (i < 0) continue;
-    const it = listOf(kind)[i], got = owns(kind, i), val = stat === "all" ? done : ev[stat] | 0;
-    const card = h("div", "snow-c" + (got ? " got" : "")); card.style.setProperty("--rar", RARITIES[it.rar || 0][1]);
-    const th = h("div", "snow-th"); th.append(itemThumb(kind, i));
-    const bar = h("div", "bar"), bi = document.createElement("i"); bi.style.width = Math.min(100, val / n * 100) + "%"; bar.append(bi);
-    card.append(th, h("b", "", name), h("small", "", (it.rar != null ? rarName(it) + " · " : "") + kindName(kind)), h("span", "snow-need", snowNeed(c)), bar, h("span", "snow-st", got ? "✓ Unlocked" : Math.min(val, n) + " / " + n));
-    if (got) { card.classList.add("click"); card.tabIndex = 0; card.title = "Open in the garage"; card.onclick = () => { gTab = kind; gSel = i; showScreen("garage"); }; }
-    grid.append(card);
+  cal.append(grid); box.append(cal);
+  // the collection
+  const col = h("div", "panel snow-col"), list = snowItems(), have = list.filter(x => owns(x.kind, x.i)).length;
+  col.append(h("div", "ph", "")); col.firstChild.append(h("span", "", "Christmas collection"), h("span", "ph-n", have + " / " + list.length));
+  const cg = h("div", "snow-grid");
+  for (const { kind, i, it } of list) {
+    const got = owns(kind, i), c = h("div", "snow-c" + (got ? " got" : "")); c.style.setProperty("--rar", RARITIES[it.rar || 0][1]);
+    const t = h("div", "snow-th"); t.append(itemThumb(kind, i));
+    c.append(t, h("b", "", it.name), h("small", "", rarName(it) + " · " + kindName(kind)), h("span", "snow-st", got ? "✓ Unlocked" : snowLock(kind, it)));
+    if (got) { c.classList.add("click"); c.tabIndex = 0; c.title = "Open in the garage"; c.onclick = () => { gTab = kind; gSel = i; showScreen("garage"); }; }
+    cg.append(c);
   }
-  box.append(grid);
+  col.append(cg); box.append(col);
 }
 // once the event is live: a one-time pop-up on the menu
 {
   const pop = h("div", "np-corner"); pop.id = "snowPop"; pop.hidden = true; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-labelledby", "snowTitle");
-  pop.innerHTML = '<div class="cf-box"><h2 id="snowTitle">Snowdrift Season is here!</h2><p>27 holiday challenges and Holiday Drops with 30 Christmas items. Until January 5.</p><div class="cf-btns"><button class="sbtn pri" id="snowGo" type="button"><span>Let\'s go</span></button><button class="sbtn" id="snowLater" type="button"><span>Later</span></button></div></div>';
+  pop.innerHTML = '<div class="cf-box"><h2 id="snowTitle">Snowdrift Season is here!</h2><p>Open today\'s advent calendar door, and finish quests for Christmas Drops with 30 Christmas items.</p><div class="cf-btns"><button class="sbtn pri" id="snowGo" type="button"><span>Let\'s go</span></button><button class="sbtn" id="snowLater" type="button"><span>Later</span></button></div></div>';
   document.body.append(pop);
   const seen = () => { try { localStorage.setItem("np-snow-intro", "1"); } catch {} pop.hidden = true; };
   $("snowGo").onclick = () => { seen(); passTab = "snow"; showScreen("pass"); renderPass(); };
@@ -122,4 +193,17 @@ function renderSnow() {
     quiet = ok ? quiet + 1 : 0;
     if (quiet >= 3) { clearInterval(t); pop.hidden = false; }
   }, 2000);
+}
+// the admin's Give items list leaves the Christmas items out until the event
+{
+  const render = renderAdmin;
+  renderAdmin = async function () {
+    await render.apply(this, arguments);
+    const box = document.querySelector("#adBody .ad-give");
+    if (adTab !== "give" || !box || snowLive()) return;
+    const [, kindSel, itemSel] = box.querySelectorAll("select");
+    if (!kindSel || !itemSel) return;
+    const prune = () => { for (const o of [...itemSel.options]) { const it = listOf(kindSel.value)[+o.value]; if (it && it.ev) o.remove(); } };
+    prune(); new MutationObserver(prune).observe(itemSel, { childList: true });
+  };
 }
