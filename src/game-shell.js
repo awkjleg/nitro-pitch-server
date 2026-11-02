@@ -22,7 +22,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111027;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111028;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -74,7 +74,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.29\",\n  \"title\": \"Update 5.29: Getting ready for December\",\n  \"notes\": [\n    \"Behind the scenes work for the Christmas event. Watch the countdown in More \u203a Coming soon.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.30\",\n  \"title\": \"Update 5.30: Nitro Pitch on more sites\",\n  \"notes\": [\n    \"The online lobby is ready for Nitro Pitch on other game sites. Players there can join the same lobby and matches as you.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
