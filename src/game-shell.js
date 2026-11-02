@@ -1,3 +1,6 @@
+import clanEmblems from "./clan-emblems.txt";
+import mobileMenus from "./mobile-menus.txt";
+import touchInput from "./touch-input.txt";
 import phoneControls from "./phone-controls.txt";
 import matchExperience from "./match-experience.txt";
 import secureProgress from "./secure-progress.txt";
@@ -14,7 +17,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111013;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111014;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -66,7 +69,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.15\",\n  \"title\": \"Update 5.15: A clearer camera on phones\",\n  \"notes\": [\n    \"Phone ball cam turns more steadily and keeps a calmer horizon while driving on walls.\",\n    \"Phone framing gives the car more room, limits portrait lens distortion and adapts when you rotate your screen.\",\n    \"A larger Ball Cam button shows ON or OFF. Hold Look Back to check behind you without changing camera mode.\",\n    \"Phone gameplay camera shake is disabled without changing your saved desktop camera settings.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.16\",\n  \"title\": \"Update 5.16: Built for your phone\",\n  \"notes\": [\n    \"Phone menus now use compact cards, readable controls and a proper landscape lobby with your car beside the menu.\",\n    \"Party and chat open in their own panel. Quick actions live under More, keeping the player card clear.\",\n    \"Garage, playlists, Nitro Pass, career, settings, results and pop-ups now fit phone screens with scrollable lists and larger buttons.\",\n    \"Driving controls have a new layout for both orientations, improved joystick precision and reliable release when pausing or rotating.\",\n    \"Tutorial instructions now use touch controls. Retry and next-shot buttons are available from the practice pause menu.\",\n    \"Auto graphics on touch devices caps render resolution to reduce unnecessary GPU load. Refresh from the menu when prompted.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -90,7 +93,7 @@ const patches = [
   },
   {
     "before": "requestAnimationFrame(frame);\n})();\n</script>",
-    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n/* NP_MATCH_EXPERIENCE */\n/* NP_PHONE_CONTROLS */\n})();\n</script>"
+    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n/* NP_MATCH_EXPERIENCE */\n/* NP_PHONE_CONTROLS */\n/* NP_CLAN_EMBLEMS */\n/* NP_MOBILE_MENUS */\n})();\n</script>"
   },
   {
     "before": "<button class=\"nb\" id=\"navSettings\" type=\"button\">",
@@ -150,7 +153,7 @@ const patches = [
   },
   {
     "before": "</head>",
-    "after": "<script src=\"/progress-api.js\"></script>\n<link rel=\"stylesheet\" href=\"/game-polish.css\">\n</head>"
+    "after": "<script src=\"/progress-api.js\"></script>\n<link rel=\"stylesheet\" href=\"/game-polish.css\">\n<link rel=\"stylesheet\" href=\"/mobile.css\">\n</head>"
   },
   {
     "before": "function openDropUI(k) {",
@@ -239,6 +242,70 @@ const patches = [
   {
     "before": "  <div class=\"tb\" id=\"tCam\">CAM</div>",
     "after": "  <button type=\"button\" class=\"tb\" id=\"tCam\" aria-label=\"Toggle ball camera\" aria-pressed=\"false\">BALL CAM</button>\n  <button type=\"button\" class=\"tb\" id=\"tRear\" aria-label=\"Hold to look behind\">LOOK BACK</button>"
+  },
+  {
+    "before": "(() => {\n  const stick = $(\"stick\"), knob = $(\"knob\");\n  let sid = null, cx = 0, cy = 0;\n  stick.addEventListener(\"pointerdown\", e => { sid = e.pointerId; const r = stick.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; stick.setPointerCapture(sid); mv(e); });\n  stick.addEventListener(\"pointermove\", e => { if (e.pointerId === sid) mv(e); });\n  const end = e => { if (e.pointerId !== sid) return; sid = null; touch.x = touch.y = 0; knob.style.transform = \"\"; };\n  stick.addEventListener(\"pointerup\", end); stick.addEventListener(\"pointercancel\", end);\n  function mv(e) {\n    let dx = (e.clientX - cx) / 60, dy = (e.clientY - cy) / 60; const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }\n    touch.x = Math.abs(dx) > 0.12 ? dx : 0; touch.y = Math.abs(dy) > 0.12 ? dy : 0;\n    knob.style.transform = `translate(${dx * 40}px,${dy * 40}px)`;\n  }\n  for (const [id, key] of [[\"tJump\", \"jump\"], [\"tBoost\", \"boost\"], [\"tDrift\", \"drift\"], [\"tRollL\", \"rollL\"], [\"tRollR\", \"rollR\"], [\"tItem\", \"item\"]]) {\n    const el = $(id);\n    el.addEventListener(\"pointerdown\", e => { touch[key] = true; el.classList.add(\"on\"); try { el.setPointerCapture(e.pointerId); } catch {} });\n    const up = () => { touch[key] = false; el.classList.remove(\"on\"); };\n    el.addEventListener(\"pointerup\", up); el.addEventListener(\"pointercancel\", up);\n  }\n  $(\"tCam\").addEventListener(\"click\", () => toggleBallCam());\n  $(\"tMenu\").addEventListener(\"click\", () => { if (inMatchView()) togglePause(); });\n})();\n",
+    "after": "/* NP_TOUCH_INPUT */\n"
+  },
+  {
+    "before": "const isTouch = matchMedia(\"(pointer: coarse)\").matches;",
+    "after": "const isTouch = matchMedia(\"(any-pointer: coarse)\").matches || navigator.maxTouchPoints > 0;"
+  },
+  {
+    "before": "<div class=\"tb\" id=\"tJump\">JUMP</div>",
+    "after": "<button type=\"button\" class=\"tb\" id=\"tJump\" aria-label=\"Jump\">JUMP</button>"
+  },
+  {
+    "before": "<div class=\"tb\" id=\"tBoost\">BOOST</div>",
+    "after": "<button type=\"button\" class=\"tb\" id=\"tBoost\" aria-label=\"Boost\">BOOST</button>"
+  },
+  {
+    "before": "<div class=\"tb\" id=\"tDrift\">SLIDE<br>ROLL</div>",
+    "after": "<button type=\"button\" class=\"tb\" id=\"tDrift\" aria-label=\"Powerslide and air roll\">SLIDE<br>ROLL</button>"
+  },
+  {
+    "before": "<div class=\"tb\" id=\"tRollL\" aria-label=\"Air roll left\">&#10226;</div>",
+    "after": "<button type=\"button\" class=\"tb\" id=\"tRollL\" aria-label=\"Air roll left\">&#10226;</button>"
+  },
+  {
+    "before": "<div class=\"tb\" id=\"tRollR\" aria-label=\"Air roll right\">&#10227;</div>",
+    "after": "<button type=\"button\" class=\"tb\" id=\"tRollR\" aria-label=\"Air roll right\">&#10227;</button>"
+  },
+  {
+    "before": "<div class=\"tb\" id=\"tItem\" hidden>ITEM</div>",
+    "after": "<button type=\"button\" class=\"tb\" id=\"tItem\" aria-label=\"Use item\" hidden>ITEM</button>"
+  },
+  {
+    "before": "<div class=\"tb\" id=\"tMenu\">II</div>",
+    "after": "<button type=\"button\" class=\"tb\" id=\"tMenu\" aria-label=\"Pause menu\">II</button>"
+  },
+  {
+    "before": "  const cap = Math.min(devicePixelRatio, 2);",
+    "after": "  const cap = Math.min(devicePixelRatio, isTouch ? 1.5 : 2);"
+  },
+  {
+    "before": "      li.append(n, nm, h(\"span\", \"v\", \"Lv \" + L.lv + \" \u00b7 \" + (c.xp | 0) + \" XP\"));",
+    "after": "      li.append(n, clanLogo(c), nm, h(\"span\", \"v\", \"Lv \" + L.lv + \" \u00b7 \" + (c.xp | 0) + \" XP\"));"
+  },
+  {
+    "before": "    li.append(v); list.append(li);",
+    "after": "    if (r.clanId && lbClans[r.clanId]) li.insertBefore(clanLogo(lbClans[r.clanId]), nm);\n    li.append(v); list.append(li);"
+  },
+  {
+    "before": "<button type=\"button\" class=\"lbt\" data-lb=\"clans\">Clans</button>",
+    "after": "<button type=\"button\" class=\"lbt\" data-lb=\"level\">Levels</button><button type=\"button\" class=\"lbt\" data-lb=\"clans\">Clans</button>"
+  },
+  {
+    "before": "if (![\"mmr\", \"wins\", \"goals\"].includes(field)) throw new Error(\"Unknown leaderboard.\");",
+    "after": "if (![\"mmr\", \"wins\", \"goals\", \"level\"].includes(field)) throw new Error(\"Unknown leaderboard.\");"
+  },
+  {
+    "before": "    } else { li.append(n, nm); v.textContent = (fin(r[k]) ? r[k] : 0) + (k === \"wins\" ? \" wins\" : \" goals\"); }",
+    "after": "    } else { li.append(n, nm); v.textContent = k === \"level\" ? \"Level \" + Math.max(1, Math.min(MAXLV, r.level | 0)) : (fin(r[k]) ? r[k] : 0) + (k === \"wins\" ? \" wins\" : \" goals\"); }"
+  },
+  {
+    "before": "    && !(r.wins > 20000 || r.goals > 100000 || r.mmr > 3000 || (r.wins > 0 && r.goals > r.wins * 60))).slice(0, 25);",
+    "after": "    && (k !== \"level\" || Number.isInteger(r.level) && r.level >= 1 && r.level <= MAXLV)\n    && !(r.wins > 20000 || r.goals > 100000 || r.mmr > 3000 || (r.wins > 0 && r.goals > r.wins * 60))).slice(0, 25);"
   }
 ];
 
@@ -250,5 +317,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls);
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus);
 }

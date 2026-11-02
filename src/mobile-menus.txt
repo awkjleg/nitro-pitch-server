@@ -1,0 +1,50 @@
+const NPMobileMenus = (() => {
+ const root=document.documentElement,menu=$('menu'),top=$('mTop'),tools=top.querySelector('.topR'),party=$('party');
+ const make=(tag,cls,text)=>{const e=document.createElement(tag);e.className=cls;if(text)e.textContent=text;return e;};
+ const button=(text,cls,fn)=>{const e=make('button',cls,text);e.type='button';e.addEventListener('click',fn);return e;};
+ let mobile=false,lastLayout='',returnFocus=null;
+ tools.id='npQuickToolsPanel';
+ const toolButton=button('MORE','',()=>setTools(!menu.classList.contains('np-tools-open')));toolButton.id='npQuickTools';toolButton.setAttribute('aria-controls',tools.id);toolButton.setAttribute('aria-expanded','false');toolButton.setAttribute('aria-label','Quick actions');top.append(toolButton);
+ const labels={friendsBtn:'Players online',linksBtn:'Game links',fbBtn:'Feedback',adminBtn:'Admin',settingsBtn:'Settings',soundBtn:'Sound',acctBtn:'Account'};
+ for(const [id,label]of Object.entries(labels))$(id)?.append(make('span','np-tool-label',label));
+ const shade=button('','',()=>setSocial(false));shade.id='npSocialShade';shade.setAttribute('aria-label','Close party and chat');shade.tabIndex=-1;$('home').append(shade);
+ const social=button('','nb',()=>setSocial(true));social.id='npSocialNav';social.setAttribute('aria-controls','party');social.setAttribute('aria-expanded','false');
+ const wrap=make('span'),icon=make('i','ic'),text=make('span');icon.dataset.ic='users';text.append(make('b','','Party & Chat'),make('small','','Team up and talk'));wrap.append(icon,text);social.append(wrap);$('home').querySelector('.nav').append(social);
+ const head=make('div','np-social-head');head.append(make('span','','Party & Chat'),button('Close','',()=>setSocial(false)));party.prepend(head);
+ function setTools(open){menu.classList.toggle('np-tools-open',mobile&&open);toolButton.setAttribute('aria-expanded',String(mobile&&open));}
+ function setSocial(open){
+  if(!mobile)return;setTools(false);menu.classList.toggle('np-social-open',open);social.setAttribute('aria-expanded',String(open));
+  if(open){returnFocus=document.activeElement;party.setAttribute('role','dialog');party.setAttribute('aria-modal','true');party.querySelector('button')?.focus({preventScroll:true});}
+  else{party.removeAttribute('role');party.removeAttribute('aria-modal');if(returnFocus?.isConnected&&screen==='home')returnFocus.focus({preventScroll:true});returnFocus=null;}
+ }
+ $('friendsBtn').addEventListener('click',()=>{if(mobile)setSocial(true);});
+ tools.addEventListener('click',e=>{if(e.target.closest('button'))setTools(false);});
+ document.addEventListener('pointerdown',e=>{if(!top.contains(e.target))setTools(false);});
+ document.addEventListener('keydown',e=>{
+  if(!mobile||!menu.classList.contains('np-social-open')||e.key!=='Tab')return;
+  const nodes=[...party.querySelectorAll('button,input,select,a,[tabindex="0"]')].filter(n=>!n.disabled&&n.getClientRects().length),first=nodes[0],last=nodes.at(-1);
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
+ });
+ function layout(){
+  const w=innerWidth,h=innerHeight;mobile=w<=760||(w<=1100&&h<=600);const key=mobile+':'+(w>h);root.classList.toggle('np-phone',mobile);root.classList.toggle('np-landscape',mobile&&w>h);
+  root.style.setProperty('--np-visible-height',Math.round(window.visualViewport?.height||h)+'px');
+  if(key!==lastLayout){setTools(false);if(menu.classList.contains('np-social-open')){if(mobile)setSocial(false);else{menu.classList.remove('np-social-open');party.removeAttribute('role');party.removeAttribute('aria-modal');social.setAttribute('aria-expanded','false');}}lastLayout=key;NPTouch.reset();}
+ }
+ addEventListener('resize',layout);window.visualViewport?.addEventListener('resize',layout);layout();
+ const show=showScreen;showScreen=function(s){setTools(false);setSocial(false);NPTouch.reset();show(s);};
+ const back=goBack;goBack=function(){if(mobile&&menu.classList.contains('np-tools-open')){setTools(false);toolButton.focus();return true;}if(mobile&&menu.classList.contains('np-social-open')&&$('onlinePop').hidden){setSocial(false);return true;}return back();};
+ const chatPanel=make('div',''),chatButton=button('CHAT','tb',()=>setChat(chatPanel.hidden));chatPanel.id='npTouchChat';chatPanel.hidden=true;chatPanel.setAttribute('role','group');chatPanel.setAttribute('aria-label','Quick chat');chatButton.id='tChat';chatButton.setAttribute('aria-controls',chatPanel.id);chatButton.setAttribute('aria-expanded','false');chatButton.setAttribute('aria-label','Quick chat');chatButton.hidden=true;
+ function setChat(open){open=!!open&&!chatButton.hidden&&!paused&&inMatchView();chatPanel.hidden=!open;chatButton.setAttribute('aria-expanded',String(open));if(open)NPTouch.reset();}
+ chatPanel.append(button('Close chat','sbtn np-chat-close',()=>setChat(false)));CHATS.forEach((message,i)=>chatPanel.append(button(message,'sbtn',()=>{if(!paused&&inMatchView())quickChat(i);setChat(false);})));
+ $('touch').append(chatButton,chatPanel);
+ let inactive=false;const hud=updateHud;updateHud=function(dt,now){hud(dt,now);const off=paused||$('touch').hidden;if(off&&!inactive)NPTouch.reset();inactive=off;chatButton.hidden=off||mode!=='online'||!!training||freePlay;if(chatButton.hidden&&!chatPanel.hidden)setChat(false);};
+ const guide=make('div','np-touch-guide','Use the left stick to drive, reverse and steer. Tap JUMP twice for a flip. Hold BOOST for speed and SLIDE / ROLL to drift or air roll. Use BALL CAM to switch cameras and hold LOOK BACK to check behind you. Tap the score to open the scoreboard.');$('tab-controls').prepend(guide);
+ const boardClose=button('Close scoreboard','np-board-close sbtn',()=>{boardToggle=false;boardHeld=false;$('board').hidden=true;});$('board').querySelector('.sb').prepend(boardClose);
+ const practice=make('div','np-practice-buttons'),retry=button('Retry step / shot','sbtn',()=>{if(training)trainKey('KeyR');else if(freePlay)freePlayBall();if(paused)togglePause();}),next=button('Next shot','sbtn',()=>{if(training&&training.tut==null){trainKey('KeyN');if(paused)togglePause();}});practice.append(retry,next);$('pSettings').before(practice);
+ const pauseButtons=updatePauseButtons;updatePauseButtons=function(){pauseButtons();practice.hidden=!(isTouch&&(training||freePlay));next.hidden=!training||training.tut!=null;if(isTouch&&freePlay&&!training){practice.hidden=true;setTxt('pauseInfo','No opponents, unlimited boost and time. Tap Reset Ball to toss the ball to you.');}};
+ const descriptions=['Push the left stick up to drive. Pull it down to reverse.','Move the left stick up and left or right to drive in a full circle.','Tap JUMP to leave the ground.','Hold BOOST to speed up. Boost is unlimited here.','Tap JUMP, then tap it again while pushing the stick up to flip forward.','Tap BALL CAM to switch tracking on or off. Now drive into the ball!'];
+ TUT.forEach((step,i)=>{if(!descriptions[i])return;const original=step.d;step.d=()=>isTouch?descriptions[i]:original();});
+ const trainHud=renderTrainHud;renderTrainHud=function(){trainHud();if(isTouch&&training)setTxt('thKeys','Tap pause for retry'+(training.tut==null?' / next shot':'')+' and menu');};
+ paintIcons(social);
+ return {layout,setSocial,setTools,isMobile:()=>mobile};
+})();

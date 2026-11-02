@@ -74,3 +74,9 @@ input.t,select.t{background:#07111f;border:1px solid #526b8e;border-radius:5px;m
  #boost{width:80px;height:80px;bottom:calc(12px + env(safe-area-inset-bottom,0px))}
  #boost .num{font-size:24px}#boost .lbl{bottom:12px;font-size:9px}
 }
+
+/* Clan emblems use the clan's existing banner design, separate from player rank. */
+.np-clan-logo{display:inline-grid;place-items:center;flex:0 0 40px;width:40px;height:44px;box-sizing:border-box;position:relative;isolation:isolate;background:var(--cl-fg,#ffd451);clip-path:polygon(7% 0,93% 0,100% 63%,50% 100%,0 63%);padding:4px;color:var(--cl-fg,#ffd451)}
+.np-clan-logo::before{content:"";position:absolute;inset:2px;z-index:-1;clip-path:inherit;background:linear-gradient(145deg,#ffffff18,#0006),var(--cl-bg,#182943)}
+.lbl .np-clan-logo img{width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 2px 2px #0006);margin-top:-3px}.np-clan-logo b{font:700 10px var(--ui);max-width:100%;letter-spacing:0;text-align:center;margin-top:-4px}
+.lbl .n{flex-shrink:0}.lbl>li>.np-clan-logo{margin-right:2px}.lbl>li>.nm{min-width:0}
