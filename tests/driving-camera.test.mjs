@@ -128,3 +128,16 @@ test('phone chase camera uses adapted framing and keeps saved shake preference',
  vm.runInContext('shakeT=0.8;',f.ctx);for(let i=0;i<90;i++)f.ctx.updateCamera(1/60,i/60);
  assert(f.camera.fov<=88);assert(finite(f.camera.position));assert.equal(f.ctx.settings.shake,true);assert(f.camera.position.distanceTo(f.car.rp)>6);
 });
+
+test('aerial ball tracking moves the rig below an airborne car and keeps both subjects visible',()=>{
+ const f=fixture();f.car.rp.set(0,22,0);f.ctx.ball.rp.set(0,40,8);
+ for(let i=0;i<180;i++)f.ctx.updateCamera(1/60,i/60);
+ assert(f.camera.position.y<f.car.rp.y-1);f.camera.updateMatrixWorld();
+ for(const point of [f.car.rp,f.ctx.ball.rp]){const p=point.clone().project(f.camera);assert(Math.abs(p.x)<.95&&Math.abs(p.y)<.95);assert(p.z>-1&&p.z<1);}
+});
+test('ball camera angle changes framing and wall contact does not roll the horizon',()=>{
+ const f=fixture();sideCar(f);f.ctx.ball.rp.set(f.W-15,12,30);f.ctx.settings.angle=0;
+ for(let i=0;i<120;i++)f.ctx.updateCamera(1/60,i/60);const first=projectedBall(f).y;
+ f.ctx.settings.angle=-10;for(let i=0;i<120;i++)f.ctx.updateCamera(1/60,2+i/60);
+ assert(Math.abs(projectedBall(f).y-first)>.1);const direction=f.camera.getWorldDirection(new THREE.Vector3()),right=new THREE.Vector3().crossVectors(direction,f.camera.up).normalize();assert(Math.abs(right.y)<.02);
+});
