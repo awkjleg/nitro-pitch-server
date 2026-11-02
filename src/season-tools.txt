@@ -290,7 +290,7 @@ const gBoom = { on: false, key: "", t: 0, ball: null, fired: false };
     const frame = document.createElement("iframe"); frame.title = "Upcoming items"; frame.loading = "lazy";
     card.append(head, frame); pop.append(card); document.body.append(pop);
     const shut = () => { pop.hidden = true; };
-    t.onclick = () => { if (Date.now() >= RELEASE) { passTab = "snow"; showScreen("pass"); renderPass(); return; } if (!frame.src) frame.src = "/coming-soon.html?embed=1"; pop.hidden = false; close.focus(); };
+    t.onclick = () => { if (Date.now() >= RELEASE) { passTab = "snow"; showScreen("pass"); renderPass(); return; } if (!frame.src) frame.src = "coming-soon.html?embed=1"; pop.hidden = false; close.focus(); };
     close.onclick = shut; pop.addEventListener("click", e => { if (e.target === pop) shut(); });
     const back = goBack;
     goBack = function () { if (!pop.hidden) { shut(); return true; } return back.apply(this, arguments); };

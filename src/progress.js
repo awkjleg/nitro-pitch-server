@@ -127,7 +127,8 @@ export class Progress extends DurableObject{
    }
    // A room/match may be claimed only once, even with a fresh HTTP action ID.
    const key='match:'+uid+':'+(b.room||'practice')+':'+e.mid;if(await this.ctx.storage.get(key))throw new ApiError('This match has already been saved',409);
-   const averages=[500,500];if(!e.roster&&e.ranked){const own=p.rk[e.playlist-1]?.[0]??500;averages[0]=averages[1]=own;}if(e.roster){for(const t of [0,1]){const players=e.roster.filter(x=>x.team===t&&x.uid),values=[];for(const m of players){const other=m.uid===uid?p:await this.ctx.storage.get('p:'+m.uid);values.push(e.ranked?other?.rk?.[e.playlist-1]?.[0]??500:other?.cm??500);}if(values.length)averages[t]=values.reduce((a,b)=>a+b,0)/values.length;}}
+   const averages=[500,500];if(!e.roster&&e.ranked){const own=p.rk[e.playlist-1]?.[0]??500;averages[0]=averages[1]=own;}if(e.roster){for(const t of [0,1]){const players=e.roster.filter(x=>x.team===t&&x.uid),values=[];for(const m of players){const other=m.uid===uid?p:await this.ctx.storage.get('p:'+m.uid);values.push(e.ranked?other?.rk?.[e.playlist-1]?.[0]??500:other?.cm??500);}if(values.length)averages[t]=values.reduce((a,b)=>a+b,0)/values.length;}}if(e.roster){const hasAccount=[0,1].map(t=>e.roster.some(x=>x.team===t&&x.uid));for(const t of [0,1])if(!hasAccount[t]&&hasAccount[1-t])averages[t]=averages[1-t];}// a guest-only team is rated at the other team's MMR
+   
    const avgKey='averages:'+(b.room||uid)+':'+e.mid;const savedAverages=await this.ctx.storage.get(avgKey);extraWrites[avgKey]=savedAverages||averages;
    result={result:awardMatch(p,e,now,savedAverages||averages)};extraWrites[key]={at:now};
   }else if(b.action==='drop'||b.action==='trade-in'){

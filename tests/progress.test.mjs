@@ -109,3 +109,10 @@ test('advent calendar: one door a day from 1 December, missed days can be opened
  assert.equal(ADVENT.length,25);
  for(const rewards of ADVENT)for(const [t,k,n] of rewards)if(t==='item')assert(catalog[k].findIndex(x=>x.name===n&&x.ev)>=0,n);
 });
+test('mixed ranked matches: a guest team confirms by place in the match, and is rated at the other team',()=>{
+ const g={s:[3,1],st:{pa:[300,3,0,0,4,0],pg:[100,1,0,0,2,0]},mut:[0,0,0,0,0,0,0],rk:1,mm:1,pl:1,tl:0,ot:false};
+ const r={room:'np-m-x',mid:'m1',final:g,started:0,ended:300000,roster:[{id:'pa',uid:'ua',team:0},{id:'pg',uid:null,team:1}],acks:['ua']};
+ assert.throws(()=>resultEvidence(r,'ua',301000),/Waiting/);
+ r.acks.push('g:pg');assert.equal(resultEvidence(r,'ua',301000).ranked,true);
+ r.acks=['ua'];const late=resultEvidence(r,'ua',400000);assert.equal(late.ranked,false);assert.equal(late.won,true);
+});

@@ -57,8 +57,6 @@ for a, b in [("Rocket League's", "classic car soccer's"), ("Rocket League", "cla
 html = re.sub(r" Sign in when you(’|')re ready for online matches\.", "", html)
 html = html.replace('ns.textContent = "Controls, camera, account";', 'ns.textContent = "Controls, camera";')
 sub('const OK = typeof Notification === "function" && window.isSecureContext;', 'const OK = false;', count=1)
-sub('function snowLive() { return Date.now() >= snowData().at; }', 'function snowLive() { return false; }', count=1)
-sub('  const tiles = document.querySelector("#more .tiles");\n  if (tiles) {', '  const tiles = null;\n  if (tiles) {', count=1)
 sub('if (location.hostname === "localhost" || location.hostname === "127.0.0.1") window.npDev = code => eval(code);', '', count=1)
 
 CG = r'''
@@ -71,7 +69,7 @@ CG = r'''
   const sel = renderGarageSel;
   renderGarageSel = function () { sel.apply(this, arguments); if (gTab === "body") { const it = gList(gTab)[gSel] || gList(gTab)[0]; const t = $("gInfo"); if (t && HB[it.hb]) t.textContent = t.textContent.replace(it.hb + " hitbox", HB[it.hb] + " hitbox"); } };
   const style = document.createElement("style");
-  style.textContent = "body{-webkit-user-select:none;-moz-user-select:none;user-select:none}input,textarea{-webkit-user-select:text;user-select:text}#setAcct,#fbBtn,#linksBtn,#np-about,#np-soon,#acctBtn,#navAccount,#notifPop,[data-rp=\"share\"]{display:none!important}";
+  style.textContent = "body{-webkit-user-select:none;-moz-user-select:none;user-select:none}input,textarea{-webkit-user-select:text;user-select:text}#setAcct,#fbBtn,#linksBtn,#np-about,#acctBtn,#navAccount,#notifPop,[data-rp=\"share\"],.ctab[data-ct=\"clan\"],.ctab[data-ct=\"lb\"],.lc-tab[data-lt=\"clan\"],.lc-rep{display:none!important}";
   document.head.append(style);
   const SDK = () => window.CrazyGames && window.CrazyGames.SDK;
   let ready = false, playing = false;
@@ -97,6 +95,19 @@ CG = r'''
     await cgAccount();
     try { SDK().user.addAuthListener(() => cgAccount()); } catch {}
   })();
+  // ranked: confirm the result to the server like account players do, so mixed matches count for everyone
+  {
+    const over = onMatchOver;
+    onMatchOver = function () {
+      try {
+        if (mode === "online" && game && match.mid && (me.team === 0 || me.team === 1)) {
+          const mid = match.mid, score = match.s.slice(), room = game;
+          for (const ms of [0, 1500, 4000, 9000, 20000]) setTimeout(() => { try { room.send && room.send({ t: "result-ack", mid, score }); } catch {} }, ms);
+        }
+      } catch {}
+      return over.apply(this, arguments);
+    };
+  }
   setInterval(() => {
     if (!ready) return;
     const now = mode !== "menu" && !paused && ["countdown", "play", "goal", "replay"].includes(match.ph);
@@ -124,6 +135,10 @@ shutil.rmtree(build, ignore_errors=True); os.makedirs(build)
 open(os.path.join(build, 'index.html'), 'w').write(html)
 open(os.path.join(build, 'account-config.js'), 'w').write(config)
 shutil.copy(os.path.join(ROOT, 'node_modules', 'three', 'build', 'three.min.js'), os.path.join(build, 'three.min.js'))
+# the Coming soon picture (the countdown to the Christmas event)
+cs = open(os.path.join(PUB, 'coming-soon.html')).read()
+cs = re.sub(r'<link rel="icon"[^>]*>', '', cs).replace('href="/"', 'href="#"')
+open(os.path.join(build, 'coming-soon.html'), 'w').write(cs)
 missing = []
 for ref in sorted(set(re.findall(r'(?:src|href)="\./([^"#?]+)"', html))):
     if ref in ('account-config.js', 'three.min.js'): continue

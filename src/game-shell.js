@@ -22,7 +22,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111028;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111029;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -74,7 +74,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.30\",\n  \"title\": \"Update 5.30: Nitro Pitch on more sites\",\n  \"notes\": [\n    \"The online lobby is ready for Nitro Pitch on other game sites. Players there can join the same lobby and matches as you.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.31\",\n  \"title\": \"Update 5.31: Ranked with everyone\",\n  \"notes\": [\n    \"Ranked matches against players from other game sites now count for your rank. Their team is rated at your team's MMR.\",\n    \"If the other team never confirms the result, you still get the match rewards after a short wait, but not rank.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -415,6 +415,10 @@ const patches = [
   {
     "before": "  return { TOPPERS: TOPPERS.map(d => (d.admin ? { name: d.name, admin: true } : { name: d.name })), ANTENNAS: ANTENNAS.map(d => (d.admin ? { name: d.name, admin: true } : { name: d.name })),",
     "after": "  return { TOPPERS: TOPPERS.map(d => (d.admin ? { name: d.name, admin: true } : d.ev ? { name: d.name, ev: 1 } : { name: d.name })), ANTENNAS: ANTENNAS.map(d => (d.admin ? { name: d.name, admin: true } : d.ev ? { name: d.name, ev: 1 } : { name: d.name })),"
+  },
+  {
+    "before": "  if (typeof s.name === \"string\") o.name = cleanName(s.name).slice(0, 14);\n",
+    "after": "  if (typeof s.name === \"string\") o.name = cleanName(s.name).slice(0, 14);\n  if (s.ev && typeof s.ev === \"object\") o.ev = { hd: int(s.ev.hd | 0, 0, 1e6), got: int(s.ev.got | 0, 0, 1e6), adv: (s.ev.adv | 0) & 0x1ffffff };\n"
   }
 ];
 

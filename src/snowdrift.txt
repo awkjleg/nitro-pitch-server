@@ -67,10 +67,48 @@ window.NPProgressAPI?.listen(data => {
   if (screen === "pass" && passTab === "snow") setTimeout(() => renderPass(), 30);
 });
 let snowBusy = false;
+// without accounts (the CrazyGames version) the event runs in this player's own save, by the same rules as the server
+const snowLocal = () => !window.npAccounts;
+const snowEvLocal = () => profile.ev || (profile.ev = { hd: 0, got: 0, adv: 0 });
+function snowLocalCall(action, data) {
+  const ev = snowEvLocal(), D = snowData(), give = (kind, i) => { profile.own = profile.own || {}; const o = profile.own[kind] || (profile.own[kind] = []); if (o.includes(i)) return false; o.push(i); return true; };
+  if (action === "holiday-drop") {
+    if (!(ev.hd > 0)) throw new Error("You have no Christmas Drops to open");
+    ev.hd--;
+    const W = [30, 30, 24, 14, 8, 4, 1.5], pool = snowItems().filter(x => !(x.kind === "title" && x.it.name === "Holiday Hero") && !owns(x.kind, x.i)).map(x => ({ ...x, w: W[x.it.rar] ?? 10 }));
+    let got;
+    if (!pool.length) { profile.xp += 2000; got = { xp: 2000 }; }
+    else { let r = Math.random() * pool.reduce((s, x) => s + x.w, 0), pick = pool[pool.length - 1]; for (const x of pool) if ((r -= x.w) <= 0) { pick = x; break; } give(pick.kind, pick.i); got = { kind: pick.kind, i: pick.i, name: pick.it.name }; }
+    saveProfile(); applyProfileToMe(); renderMenuChrome();
+    return { result: { got } };
+  }
+  const day = data.day, bit = 1 << (day - 1);
+  if (!(day >= 1 && day <= 25 && day <= snowToday()) || ev.adv & bit) throw new Error("That door can\u2019t be opened");
+  ev.adv |= bit;
+  const got = [];
+  for (const [type, a, b] of D.advent[day - 1]) {
+    if (type === "xp") { profile.xp += a; got.push({ xp: a }); }
+    else if (type === "drop") { ev.hd += a; got.push({ drops: a }); }
+    else { const i = snowIdx(a, b); if (i >= 0 && give(a, i)) got.push({ kind: a, i, name: b }); else { ev.hd++; got.push({ drops: 1, had: b }); } }
+  }
+  saveProfile(); applyProfileToMe(); renderMenuChrome();
+  return { result: { day, got } };
+}
 async function snowCall(action, data) {
+  if (snowLocal()) { const r = snowLocalCall(action, data || {}); snowEv = snowEvLocal(); return r; }
   snowBusy = true;
   try { const r = await window.NPProgressAPI.call(action, { id: crypto.randomUUID(), ...data }); if (r.profile && r.profile.ev) snowEv = r.profile.ev; return r; }
   finally { snowBusy = false; }
+}
+// local mode: each quest finished during the event gives a Christmas Drop
+{
+  const advance = advanceQuests;
+  advanceQuests = function () {
+    const count = () => { const q = profile.qs; return q ? q.dq.concat(q.wq).filter(x => x.d).length : 0; };
+    const before = count(), out = advance.apply(this, arguments), n = count() - before;
+    if (snowLocal() && snowLive() && n > 0) { const ev = snowEvLocal(); ev.hd += n; ev.got += n; snowEv = ev; saveProfile(); toast("Christmas Drop earned! Open it in Nitro Pass › Snowdrift"); }
+    return out;
+  };
 }
 // the reveal uses the drop pop-up
 let snowReveal = false;
@@ -97,7 +135,7 @@ function snowShowGot(title, g) {
   else if (g && g.drops) snowShow(title, snowGiftThumb(), "#ff4d57", g.drops + " Christmas Drop" + (g.drops > 1 ? "s" : ""), g.had ? "You already had " + g.had + ", so here's a drop instead" : "Open them in Nitro Pass › Snowdrift");
 }
 async function openChristmasDrop() {
-  const A = window.npAccounts; if (!A || !A.user()) { toast("Log in to open Christmas Drops"); return; }
+  const A = window.npAccounts; if (!snowLocal() && (!A || !A.user())) { toast("Log in to open Christmas Drops"); return; }
   try { const r = await snowCall("holiday-drop"); snowShowGot("Christmas Drop", r.result.got); }
   catch (e) { toast((e && e.message) || "Couldn't open the drop"); }
 }
@@ -119,6 +157,7 @@ async function openChristmasDrop() {
     pass.apply(this, arguments);
     tb.hidden = !snowLive();
     if (tb.hidden && passTab === "snow") { passTab = "rewards"; pass.apply(this, arguments); }
+    if (snowLocal()) snowEv = snowEvLocal();
     const n = (snowEv ? snowEv.hd | 0 : 0) + snowDoorsOpen(); badge.hidden = !n || tb.hidden; badge.textContent = String(n);
     box.hidden = passTab !== "snow" || tb.hidden;
     if (!box.hidden) renderSnow();
@@ -131,7 +170,8 @@ const snowToday = () => Math.floor((Date.now() - snowData().at) / 864e5) + 1;
 function snowDoorsOpen() { if (!snowLive() || !snowEv) return 0; let n = 0; for (let d = 1; d <= Math.min(25, snowToday()); d++) if (!(snowEv.adv & (1 << (d - 1)))) n++; return n; }
 function snowRewardText(rw) { return rw.map(([t, a, b]) => t === "xp" ? "+" + a.toLocaleString() + " XP" : t === "drop" ? a + " Christmas Drop" + (a > 1 ? "s" : "") : b).join(" + "); }
 function renderSnow() {
-  const box = $("npSnow"), D = snowData(), A = window.npAccounts, signed = !!(A && A.user && A.user());
+  const box = $("npSnow"), D = snowData(), A = window.npAccounts, signed = snowLocal() || !!(A && A.user && A.user());
+  if (snowLocal()) snowEv = snowEvLocal();
   if (signed && !snowEv && !snowAsked && window.NPProgressAPI) { snowAsked = true; window.NPProgressAPI.call("load").then(r => { if (r && r.profile && r.profile.ev) { snowEv = r.profile.ev; renderPass(); } }).catch(() => {}); }
   const ev = snowEv || { hd: 0, adv: 0 }, today = snowToday(), over = Date.now() >= D.end;
   box.innerHTML = "";

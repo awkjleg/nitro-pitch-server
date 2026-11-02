@@ -95,8 +95,8 @@ export class Room extends DurableObject {
   async markDeparture(id){
     for(const r of this.matchRecords.values()){
       const member=r.roster.find(x=>x.id===id);if(!member||r.final||!r.lastGame)continue;
-      r.departed=r.departed||[];if(r.departed.includes(member.uid))continue;r.departed.push(member.uid);await this.ctx.storage.put('match:'+r.mid,r);
-      if(member.uid&&rankedRules(r.lastGame,this.name)&&[0,1].every(t=>r.roster.some(x=>x.team===t&&x.uid))&&this.env.PROGRESS)await this.env.PROGRESS.get(this.env.PROGRESS.idFromName('accounts-v1')).fetch(new Request('https://progress/forfeit',{method:'POST',body:JSON.stringify({uid:member.uid,room:this.name,mid:r.mid,playlist:r.lastGame.pl})}));
+      const key=member.uid||'g:'+member.id;r.departed=r.departed||[];if(r.departed.includes(key))continue;r.departed.push(key);await this.ctx.storage.put('match:'+r.mid,r);
+      if(member.uid&&rankedRules(r.lastGame,this.name)&&[0,1].every(t=>r.roster.some(x=>x.team===t))&&this.env.PROGRESS)await this.env.PROGRESS.get(this.env.PROGRESS.idFromName('accounts-v1')).fetch(new Request('https://progress/forfeit',{method:'POST',body:JSON.stringify({uid:member.uid,room:this.name,mid:r.mid,playlist:r.lastGame.pl})}));
     }
   }
   async fetch(request){
@@ -123,9 +123,10 @@ export class Room extends DurableObject {
       catch{const cur=this.info(ws);ws.serializeAttachment({...cur,uid:null});this.send(ws,{t:'auth-error'});}return;
     }
     if(message.t==='result-ack'){
-      const r=this.matchRecords.get(message.mid),uid=info.uid;
-      if(r?.final&&uid&&r.roster.some(x=>x.uid===uid)&&JSON.stringify(r.final.s)===JSON.stringify(message.score)){
-        if(!r.acks.includes(uid)){r.acks.push(uid);await this.ctx.storage.put('match:'+r.mid,r);}this.bcast({t:'result-ready',mid:r.mid});
+      // account players confirm by account; guests (the CrazyGames version) by their place in the match
+      const r=this.matchRecords.get(message.mid),uid=info.uid,key=uid||'g:'+id;
+      if(r?.final&&r.roster.some(x=>uid?x.uid===uid:x.id===id&&!x.uid)&&JSON.stringify(r.final.s)===JSON.stringify(message.score)){
+        if(!r.acks.includes(key)){r.acks.push(key);await this.ctx.storage.put('match:'+r.mid,r);}this.bcast({t:'result-ready',mid:r.mid});
       }return;
     }
     // Untrusted presence can never supply a verified account ID or authoritative host field.
