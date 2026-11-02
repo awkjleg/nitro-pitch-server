@@ -37,6 +37,12 @@ test('practice rewards require a registered timed session and never grant compet
  const r=await f.call('match',result);assert.equal(r.status,200);assert(r.result.xpGain>0);assert.equal(r.result.rank,null);assert.equal(r.profile.rk[0].p,0);
  const duplicate=await f.call('match',result);assert.equal(duplicate.profile.games,1);assert.deepEqual(duplicate.result,r.result);
 });
+test('a ranked match filled with bots counts for rank at your own MMR',async()=>{
+ const f=await fixture({dlv:1});await f.call('load');const result={id:'pay-rk',mid:'botranked',score:[3,1],st:[300,3,0,0,4,0],mvp:true};
+ await f.call('session-start',{id:'s-rk',mid:'botranked',mut:[1,0,0,0,0,0,0],rk:1,pl:2});
+ for(let i=0;i<18;i++){f.advance(10000);assert.equal((await f.call('session-tick',{id:'tk'+i,mid:'botranked'})).status,200);}
+ const r=await f.call('match',result);assert.equal(r.status,200);assert(r.result.rank);assert.equal(r.result.rank.pl,2);assert(r.result.rank.d>0);assert.equal(r.profile.rk[1].p,1);
+});
 test('online receipts give rank only once and use server-owned opponent ratings',async()=>{
  const f=await fixture({dlv:1});await f.call('load');await f.call('load',{},'b');const args={id:'result1',mid:'online1',room:'np-m-test',xp:999999,rank:4000};
  const r=await f.call('match',args);assert.equal(r.status,200);assert.equal(r.profile.rk[0].m,520);assert.equal(r.result.rank.d,20);

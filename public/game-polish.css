@@ -201,3 +201,13 @@ body.np-pop-busy .np-quick-start{visibility:hidden}
 /* Update 5.23: the account is opened from Settings */
 #navAccount,#acctBtn{display:none!important}
 #setAcct{margin-left:auto}#setAcct .ic{width:16px;height:16px;vertical-align:-3px}
+/* Update 5.24: More › Coming soon */
+#more .tiles.on{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:1100px){#more .tiles.on{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){#more .tiles.on{grid-template-columns:1fr}}
+#soonPop{position:fixed;inset:0;z-index:62;display:grid;place-items:center;padding:16px;background:rgba(2,5,12,.7);backdrop-filter:blur(4px)}
+#soonPop[hidden]{display:none}
+.soon-card{width:min(1180px,100%);height:min(86vh,900px);display:flex;flex-direction:column;background:#0b1426;border:1px solid rgba(150,180,255,.25);border-top:3px solid transparent;border-image:linear-gradient(90deg,#2e8bff,#ffd451,#ff8a1e) 1;box-shadow:0 30px 90px rgba(0,0,0,.6)}
+.soon-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(150,180,255,.15)}
+.soon-head b{font:20px var(--display);text-transform:uppercase;letter-spacing:.04em}
+.soon-card iframe{flex:1;width:100%;border:0;background:#0b1426}

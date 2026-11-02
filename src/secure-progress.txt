@@ -13,7 +13,7 @@ const NPSecure = (() => {
  api?.listen((data,rev,owner)=>{if(owner===uid()&&dbOk&&appliedUid===owner)apply(data);});
  const adopt=adoptStore;adoptStore=async function(st,merge){appliedUid='';await adopt(st,merge);appliedUid=uid()||'';if(active())recover();};
  const leave=leaveToMenu;leaveToMenu=function(...args){const wasRanked=active()&&mode==='online'&&match.rk&&match.ph!=='over';leave(...args);if(wasRanked)setTimeout(()=>api.call('load').then(r=>apply(r.profile)).catch(()=>{}),800);};
- const begin=beginMatch;beginMatch=function(){begin();if(active()&&mode==='offline'){const mid=match.mid;practiceMid=mid;api.call('session-start',{id:'start-'+mid,mid,mut:match.mut}).catch(()=>{if(practiceMid===mid)practiceMid='';});}};
+ const begin=beginMatch;beginMatch=function(){begin();if(active()&&mode==='offline'){const mid=match.mid;practiceMid=mid;api.call('session-start',{id:'start-'+mid,mid,mut:match.mut,rk:match.rk&&match.mm?1:0,pl:match.pl|0}).catch(()=>{if(practiceMid===mid)practiceMid='';});}};
  setInterval(()=>{if(!active()||!dbOk||mode!=='offline'||paused||freePlay||training||viewer||!['play','countdown','goal','replay'].includes(match.ph)||practiceMid!==match.mid||tickBusy)return;tickBusy=true;api.call('session-tick',{id:crypto.randomUUID(),mid:match.mid}).catch(()=>{}).finally(()=>{tickBusy=false;});},10000);
  const oldOver=onMatchOver;
  async function claim(row){const result=await api.call('match',row);apply(result.profile);pendingWrite(pendingRead().filter(x=>x.id!==row.id));return result;}

@@ -270,3 +270,24 @@ const gBoom = { on: false, key: "", t: 0, ball: null, fired: false };
   const sync = () => { const A = window.npAccounts, u = A && A.user && A.user(); b.title = u ? "Account: " + u.username : "Log in / Sign up"; };
   setInterval(sync, 2000); sync();
 }
+// ---- More › Coming soon: a preview of upcoming items (public/coming-soon.html) in a pop-up over the menu
+{
+  const tiles = document.querySelector("#more .tiles");
+  if (tiles) {
+    const t = document.createElement("button"); t.type = "button"; t.className = "tile c-gold"; t.id = "np-soon";
+    const tin = h("span", "tin"); const ic = icon("star"); ic.classList.add("big"); const wm = icon("star"); wm.classList.add("wm");
+    tin.append(ic, wm, h("b", "", "Coming soon"), h("small", "", "Snowdrift Season: a sneak peek at the Christmas items on the way."));
+    t.append(tin); tiles.prepend(t);
+    const pop = h("div", ""); pop.id = "soonPop"; pop.hidden = true; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-modal", "true"); pop.setAttribute("aria-label", "Coming soon");
+    const card = h("div", "soon-card"), head = h("div", "soon-head");
+    const close = h("button", "sbtn xs", ""); close.type = "button"; close.append(h("span", "", "Close"));
+    head.append(h("b", "", "Coming soon"), close);
+    const frame = document.createElement("iframe"); frame.title = "Upcoming items"; frame.loading = "lazy";
+    card.append(head, frame); pop.append(card); document.body.append(pop);
+    const shut = () => { pop.hidden = true; };
+    t.onclick = () => { if (!frame.src) frame.src = "/coming-soon.html?embed=1"; pop.hidden = false; close.focus(); };
+    close.onclick = shut; pop.addEventListener("click", e => { if (e.target === pop) shut(); });
+    const back = goBack;
+    goBack = function () { if (!pop.hidden) { shut(); return true; } return back.apply(this, arguments); };
+  }
+}

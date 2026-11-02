@@ -105,7 +105,7 @@ export class Progress extends DurableObject{
   if(b.action==='session-start'){
    if(!midOK.test(b.mid||''))throw new ApiError('Invalid match');
    if(p.session&&p.session.mid!==b.mid&&now-p.session.started<20000)throw new ApiError('A match is already starting',429);
-   p.session={mid:b.mid,started:now,last:now,active:0,mut:Array.isArray(b.mut)?b.mut.slice(0,7):[0,0,0,0,0,0,0]};
+   p.session={mid:b.mid,started:now,last:now,active:0,mut:Array.isArray(b.mut)?b.mut.slice(0,7):[0,0,0,0,0,0,0],rk:b.rk===1&&[1,2,3].includes(b.pl)?b.pl:0};
   }else if(b.action==='session-tick'){
    if(!p.session||p.session.mid!==b.mid||now-p.session.started>7200000)throw new ApiError('This practice session expired',409);
    p.session.active+=Math.min(20000,Math.max(0,now-p.session.last));p.session.last=now;
@@ -119,11 +119,12 @@ export class Progress extends DurableObject{
     const elapsed=(s.active+Math.min(20000,now-s.last))/1000,score=b.score,st=b.st;
     if(elapsed<20||!Array.isArray(score)||score.length!==2||!score.every(x=>Number.isInteger(x)&&x>=0&&x<=99)||!Array.isArray(st)||st.length!==6||!st.every(x=>Number.isInteger(x)&&x>=0)||st[0]>elapsed*25+500||st[1]>Math.max(...score)||st.slice(1).some(x=>x>elapsed/2+10))throw new ApiError('Practice result failed validation',422);
     const length=[300,180,600][s.mut[0]];if(!length||elapsed+20<length)throw new ApiError('Finish the practice match to earn rewards',422);
-    e={mid:b.mid,st,score,won:score[0]>score[1],mvp:!!b.mvp,online:false,extra:!!s.mut[6],kind:'exhibition',ranked:false,team:0,elapsed};p.session=null;
+    // a ranked match filled with bots (not enough players online) still counts for rank, against bots at your own MMR
+    e={mid:b.mid,st,score,won:score[0]>score[1],mvp:!!b.mvp,online:false,extra:!!s.mut[6],kind:s.rk?'ranked':'exhibition',ranked:!!s.rk,playlist:s.rk||0,team:0,elapsed};p.session=null;
    }
    // A room/match may be claimed only once, even with a fresh HTTP action ID.
    const key='match:'+uid+':'+(b.room||'practice')+':'+e.mid;if(await this.ctx.storage.get(key))throw new ApiError('This match has already been saved',409);
-   const averages=[500,500];if(e.roster){for(const t of [0,1]){const players=e.roster.filter(x=>x.team===t&&x.uid),values=[];for(const m of players){const other=m.uid===uid?p:await this.ctx.storage.get('p:'+m.uid);values.push(e.ranked?other?.rk?.[e.playlist-1]?.[0]??500:other?.cm??500);}if(values.length)averages[t]=values.reduce((a,b)=>a+b,0)/values.length;}}
+   const averages=[500,500];if(!e.roster&&e.ranked){const own=p.rk[e.playlist-1]?.[0]??500;averages[0]=averages[1]=own;}if(e.roster){for(const t of [0,1]){const players=e.roster.filter(x=>x.team===t&&x.uid),values=[];for(const m of players){const other=m.uid===uid?p:await this.ctx.storage.get('p:'+m.uid);values.push(e.ranked?other?.rk?.[e.playlist-1]?.[0]??500:other?.cm??500);}if(values.length)averages[t]=values.reduce((a,b)=>a+b,0)/values.length;}}
    const avgKey='averages:'+(b.room||uid)+':'+e.mid;const savedAverages=await this.ctx.storage.get(avgKey);extraWrites[avgKey]=savedAverages||averages;
    result={result:awardMatch(p,e,now,savedAverages||averages)};extraWrites[key]={at:now};
   }else if(b.action==='drop'||b.action==='trade-in'){
