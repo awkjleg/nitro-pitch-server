@@ -57,6 +57,8 @@ for a, b in [("Rocket League's", "classic car soccer's"), ("Rocket League", "cla
 html = re.sub(r" Sign in when you(’|')re ready for online matches\.", "", html)
 html = html.replace('ns.textContent = "Controls, camera, account";', 'ns.textContent = "Controls, camera";')
 sub('const OK = typeof Notification === "function" && window.isSecureContext;', 'const OK = false;', count=1)
+# CrazyGames hosts its own copy and updates it from the portal: no version.txt checks
+sub('  if (!/^https?:$/.test(location.protocol) || document.hidden || updateReady) return;\n  try { const r = await fetch("version.txt?t="', '  return;\n  try { const r = await fetch("version.txt?t="', count=1)
 sub('if (location.hostname === "localhost" || location.hostname === "127.0.0.1") window.npDev = code => eval(code);', '', count=1)
 
 CG = r'''
@@ -177,10 +179,7 @@ build = os.path.join('/tmp', 'np-crazygames-build')
 shutil.rmtree(build, ignore_errors=True); os.makedirs(build)
 open(os.path.join(build, 'index.html'), 'w').write(html)
 open(os.path.join(build, 'account-config.js'), 'w').write(config)
-# the update check reads version.txt: the same build number as the page, so a new upload shows the refresh pop-up
-bm = re.search(r'const BUILD = (\d+);', html)
-if not bm: raise SystemExit('BUILD not found')
-open(os.path.join(build, 'version.txt'), 'w').write(bm.group(1) + '\n')
+
 shutil.copy(os.path.join(ROOT, 'node_modules', 'three', 'build', 'three.min.js'), os.path.join(build, 'three.min.js'))
 # the Coming soon picture (the countdown to the Christmas event)
 cs = open(os.path.join(PUB, 'coming-soon.html')).read()
