@@ -66,7 +66,9 @@ const NPDrive = (() => {
       let error=Math.atan2(axis.dot(direction),clamp(nextUp.dot(upTarget),-1,1));
       if(Math.abs(error)>Math.PI-0.01)error=rollSign*Math.abs(error);
       if(Math.abs(error)>1e-5)rollSign=Math.sign(error);
-      const turn=clamp(error*(1-Math.exp(-6*dt))*clamp((strength-0.18)/0.55,0,1),-1.8*dt,1.8*dt);
+      // Level the horizon at once unless the view is nearly straight up or down (where up is undefined),
+      // so high wall driving and aerials never leave the camera tilted.
+      const turn=error*clamp((strength-0.18)/0.17,0,1);
       nextUp.applyAxisAngle(direction,turn).normalize();
     }
     camUp.copy(nextUp);oldView.copy(direction);camera.up.copy(camUp);

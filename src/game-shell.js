@@ -18,7 +18,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111016;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111017;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -70,7 +70,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.18\",\n  \"title\": \"Update 5.18: Invite alerts\",\n  \"notes\": [\n    \"Invite alerts: turn them on and your computer or Chromebook shows a notification when someone invites you to a party or clan while Nitro Pitch is in another tab.\",\n    \"The advertising cookies, terms and player pop-ups now match the rest of the game.\",\n    \"The Privacy Policy page has the same menu as the other pages, with links back to the game.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.19\",\n  \"title\": \"Update 5.19: Tougher climb, tougher bots\",\n  \"notes\": [\n    \"Wall driving and high aerials no longer tilt the camera. The horizon stays level.\",\n    \"Ranked: the higher your rank, the less MMR a win gives. Full gains up to Gold, under half at Supersonic Legend. Losses are unchanged, so climbing high takes real wins.\",\n    \"Bots are better at every rank: faster reactions, cleaner touches and more aerials, with the biggest step up at the top ranks. Exhibition Rookie, Pro and All-Star bots are tougher too.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -307,6 +307,18 @@ const patches = [
   {
     "before": "    && !(r.wins > 20000 || r.goals > 100000 || r.mmr > 3000 || (r.wins > 0 && r.goals > r.wins * 60))).slice(0, 25);",
     "after": "    && (k !== \"level\" || Number.isInteger(r.level) && r.level >= 1 && r.level <= MAXLV)\n    && !(r.wins > 20000 || r.goals > 100000 || r.mmr > 3000 || (r.wins > 0 && r.goals > r.wins * 60))).slice(0, 25);"
+  },
+  {
+    "before": "    const E = 1 / (1 + Math.pow(10, clamp(opp - team, -4000, 4000) / 400));\n    return won ? Math.max(1, Math.round(K * (1 - E))) : -Math.max(1, Math.round(K * E));\n  }\n",
+    "after": "    const E = 1 / (1 + Math.pow(10, clamp(opp - team, -4000, 4000) / 400));\n    // the higher your rank, the less a win gives (full gains up to Gold, under half at Supersonic Legend); losses don't shrink\n    const climb = clamp(1 - Math.max(0, team - 500) / 2600, 0.45, 1);\n    return won ? Math.max(1, Math.round(K * (1 - E) * climb)) : -Math.max(1, Math.round(K * E));\n  }\n"
+  },
+  {
+    "before": "  const SK = [[0, 0.40], [150, 0.45], [385, 0.55], [565, 0.65], [745, 0.75], [955, 0.85],\n    [1255, 0.95], [1650, 1.05], [1861, 1.12]];",
+    "after": "  const SK = [[0, 0.46], [150, 0.53], [385, 0.64], [565, 0.75], [745, 0.85], [955, 0.95],\n    [1255, 1.04], [1650, 1.12], [1861, 1.18]];"
+  },
+  {
+    "before": "const BOT_DF = [0.55, 0.8, 1];",
+    "after": "const BOT_DF = [0.6, 0.88, 1.08];"
   }
 ];
 

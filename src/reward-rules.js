@@ -62,7 +62,9 @@ export const Ranked = (() => {
     const team = num(teamAvg, START), opp = num(oppAvg, START);
     const K = num(placementsPlayed, PLACEMENTS) < PLACEMENTS ? 40 : 20;
     const E = 1 / (1 + Math.pow(10, clamp(opp - team, -4000, 4000) / 400));
-    return won ? Math.max(1, Math.round(K * (1 - E))) : -Math.max(1, Math.round(K * E));
+    // the higher your rank, the less a win gives (matches the game's Ranked.delta)
+    const climb = clamp(1 - Math.max(0, team - 500) / 2600, 0.45, 1);
+    return won ? Math.max(1, Math.round(K * (1 - E) * climb)) : -Math.max(1, Math.round(K * E));
   }
 
   // XP multiplier from the best tier reached in any playlist (-1 = unranked).
