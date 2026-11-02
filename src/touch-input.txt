@@ -1,0 +1,18 @@
+const NPTouch = (() => {
+ const stick=$('stick'),knob=$('knob'),owners=new Map();let sid=null,cx=0,cy=0,radius=48,travel=30;
+ function reset(){sid=null;touch.x=touch.y=0;for(const key of ['jump','boost','drift','rollL','rollR','item','rear'])touch[key]=false;owners.clear();knob.style.transform='';for(const e of document.querySelectorAll('#touch .on:not(#tCam)'))e.classList.remove('on');}
+ function active(){return !$('touch').hidden&&!paused;}
+ function move(e){let x=(e.clientX-cx)/radius,y=(e.clientY-cy)/radius,m=Math.hypot(x,y);if(m>1){x/=m;y/=m;m=1;}const amount=m>.12?(m-.12)/.88:0;touch.x=m?x/m*amount:0;touch.y=m?y/m*amount:0;knob.style.transform=`translate(${x*travel}px,${y*travel}px)`;}
+ stick.addEventListener('pointerdown',e=>{if(sid!==null||!active())return;e.preventDefault();sid=e.pointerId;const r=stick.getBoundingClientRect();cx=r.left+r.width/2;cy=r.top+r.height/2;radius=Math.max(24,r.width*.42);travel=Math.max(12,r.width/2-30);try{stick.setPointerCapture(sid);}catch{}move(e);});
+ stick.addEventListener('pointermove',e=>{if(e.pointerId===sid){e.preventDefault();move(e);}});
+ const end=e=>{if(e.pointerId!==sid)return;sid=null;touch.x=touch.y=0;knob.style.transform='';};
+ for(const type of ['pointerup','pointercancel','lostpointercapture'])stick.addEventListener(type,end);
+ for(const [id,key]of [['tJump','jump'],['tBoost','boost'],['tDrift','drift'],['tRollL','rollL'],['tRollR','rollR'],['tItem','item']]){
+  const el=$(id);el.addEventListener('pointerdown',e=>{if(owners.has(key)||!active())return;e.preventDefault();owners.set(key,e.pointerId);touch[key]=true;el.classList.add('on');try{el.setPointerCapture(e.pointerId);}catch{}});
+  const up=e=>{if(owners.get(key)!==e.pointerId)return;owners.delete(key);touch[key]=false;el.classList.remove('on');};
+  for(const type of ['pointerup','pointercancel','lostpointercapture'])el.addEventListener(type,up);
+ }
+ $('tCam').addEventListener('click',()=>toggleBallCam());$('tMenu').addEventListener('click',()=>{if(inMatchView())togglePause();});
+ $('touch').addEventListener('contextmenu',e=>e.preventDefault());addEventListener('blur',reset);addEventListener('resize',reset);document.addEventListener('visibilitychange',()=>{if(document.hidden)reset();});
+ return {reset};
+})();

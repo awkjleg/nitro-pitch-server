@@ -70,3 +70,13 @@ test('ranked results need independent team acknowledgements, sane clock and stat
  assert.throws(()=>resultEvidence(r,'ua',302000),/Waiting/);r.acks.push('ub');assert(resultEvidence(r,'ua',302000).ranked);assert.throws(()=>resultEvidence(r,'outside',302000),/not in/);
  r.final.st.a[1]=20;assert.throws(()=>resultEvidence(r,'ua',302000),/statistics/);r.final.st.a[1]=1;r.ended=21000;assert.throws(()=>resultEvidence(r,'ua',22000),/clock/);
 });
+
+test('levels leaderboard merges saved levels with older accounts, rejects invalid levels and ignores forged client XP',async()=>{
+ const f=await fixture({xp:8000,name:'Racer'});const p=await f.call('load');
+ f.data.set('legacy-level-leaderboard',[{uid:'old',name:'Veteran',level:100},{uid:'a',name:'Outdated',level:100},{uid:'z',name:'Maxed',level:100},{uid:'bad',name:'Invalid',level:999}]);
+ f.data.set('legacy-leaderboard',[{uid:'oldRank',name:'Old ranking',mmr:700}]);
+ await f.call('save',{profile:{xp:1e9,level:100}});
+ const r=await f.call('leaderboard',{field:'level',limit:25});assert.equal(r.status,200);assert.deepEqual(r.rows.map(x=>x.uid),['old','z','a']);assert.equal(r.rows.at(-1).level,p.profile.level);assert.equal(r.rows.at(-1).name,'Racer');assert.equal((await f.call('leaderboard',{field:'level',limit:1})).rows.length,1);
+ assert.equal((await f.call('leaderboard',{field:'password',limit:25})).status,400);assert(f.data.has('legacy-leaderboard'));
+ f.docs.set('gifts/levelGift',{to:'a',xp:500000,claimed:false});const gift=await f.call('gift',{id:'level-gift',gift:'levelGift'});const after=await f.call('leaderboard',{field:'level',limit:25});assert.equal(after.rows.find(x=>x.uid==='a').level,gift.profile.level);assert(gift.profile.level>p.profile.level);
+});

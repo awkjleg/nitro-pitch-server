@@ -81,17 +81,18 @@ export class Progress extends DurableObject{
    await this.save(uid,p);return response();
   }
   if(b.action==='leaderboard'){
-   if(!['mmr','wins','goals'].includes(b.field))throw new ApiError('Unknown leaderboard');
+   if(!['mmr','wins','goals','level'].includes(b.field))throw new ApiError('Unknown leaderboard');
    // Existing rankings remain visible as a frozen baseline. Once migrated, an account's server row always wins.
-   let legacy=await this.ctx.storage.get('legacy-leaderboard');
-   if(!legacy){legacy=[];for(const field of ['mmr','wins','goals']){
+   const legacyKey=b.field==='level'?'legacy-level-leaderboard':'legacy-leaderboard';
+   let legacy=await this.ctx.storage.get(legacyKey);
+   if(!legacy){legacy=[];for(const field of b.field==='level'?['level']:['mmr','wins','goals']){
     const r=await fetch('https://firestore.googleapis.com/v1/projects/nitro-pitch/databases/(default)/documents:runQuery',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({structuredQuery:{from:[{collectionId:'leaderboard'}],orderBy:[{field:{fieldPath:field},direction:'DESCENDING'}],limit:100}}),signal:AbortSignal.timeout(12000)});
     if(!r.ok)throw new ApiError('Could not load rankings. Please retry.',503);
     for(const row of await r.json()){if(!row.document)continue;const f=row.document.fields||{},get=k=>f[k]?.stringValue??Number(f[k]?.integerValue??f[k]?.doubleValue??0);legacy.push({uid:row.document.name.split('/').at(-1),name:get('name'),mmr:get('mmr'),rank:get('rank'),wins:get('wins'),goals:get('goals'),level:get('level'),ti:get('ti'),bn:get('bn'),clanId:get('clanId')||''});}
-   }await this.ctx.storage.put('legacy-leaderboard',legacy);}
+   }await this.ctx.storage.put(legacyKey,legacy);}
    const field=b.field;const rows=new Map(legacy.map(x=>[x.uid,x]));let after;
    do{const page=await this.ctx.storage.list({prefix:'lb:',limit:1000,...(after?{startAfter:after}:{})});for(const[key,row]of page){rows.set(row.uid,row);after=key;}if(page.size<1000)break;}while(true);
-   return reply({rows:[...rows.values()].sort((a,b)=>b[field]-a[field]||a.uid.localeCompare(b.uid)).slice(0,clamp(n(b.limit,100),1,100))});
+   return reply({rows:[...rows.values()].filter(row=>field!=='level'||Number.isInteger(row.level)&&row.level>=1&&row.level<=100).sort((a,b)=>b[field]-a[field]||a.uid.localeCompare(b.uid)).slice(0,clamp(n(b.limit,100),1,100))});
   }
   if(b.action==='leaderboard-get'){if(!ID.test(b.uid||''))throw new ApiError('Invalid player');return reply({row:await this.ctx.storage.get('lb:'+b.uid)||null});}
   // Idempotency keys survive refreshes and retrying a lost response.

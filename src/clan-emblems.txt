@@ -1,0 +1,10 @@
+// Reuse each clan's chosen banner emblem and colors for its leaderboard badge.
+// The built-in banner parser supplies a stable design when a clan has no saved banner.
+function clanLogo(c) {
+ const tag=String(c.tag||'').replace(/[^a-z0-9]/gi,'').toUpperCase().slice(0,4),b=banParse(c.banner,tag);
+ const badge=document.createElement('span');badge.className='np-clan-logo';badge.title='['+tag+'] '+String(c.name||'Clan');badge.setAttribute('role','img');badge.setAttribute('aria-label',tag+' clan emblem');badge.style.setProperty('--cl-bg','#'+b.bg);badge.style.setProperty('--cl-fg','#'+b.fg);
+ const src=banEmbURL(c.banner,tag);
+ if(src){const img=document.createElement('img');img.src=src;img.alt='';img.width=40;img.height=40;badge.append(img);}
+ else{const letters=document.createElement('b');letters.textContent=tag||'NP';badge.append(letters);}
+ return badge;
+}
