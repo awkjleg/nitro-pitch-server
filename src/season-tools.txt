@@ -255,3 +255,18 @@ const gBoom = { on: false, key: "", t: 0, ball: null, fired: false };
     camPos.copy(camera.position);
   };
 }
+// ---- Account lives in Settings now (no Account button on the main menu or the top bar)
+{
+  const tabs = $("setTabs"), b = document.createElement("button");
+  b.type = "button"; b.id = "setAcct"; b.setAttribute("aria-pressed", "false");
+  const sp = h("span", ""); sp.append(icon("user"), " Account"); b.append(sp);
+  b.onclick = () => { setAcctMsg(""); showScreen("account"); };
+  // Account opens from Settings, so Back returns there
+  const back = goBack;
+  goBack = function () { if (screen === "account" && !topPopup() && !$("menu").hidden) { showScreen("settings"); return true; } return back.apply(this, arguments); };
+  const sm = document.querySelector("#account .stitle small"); if (sm) sm.textContent = "Settings";
+  const ns = document.querySelector("#navSettings small"); if (ns) ns.textContent = "Controls, camera, account";
+  tabs.append(b);
+  const sync = () => { const A = window.npAccounts, u = A && A.user && A.user(); b.title = u ? "Account: " + u.username : "Log in / Sign up"; };
+  setInterval(sync, 2000); sync();
+}

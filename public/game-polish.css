@@ -198,3 +198,6 @@ body.np-pop-busy .np-quick-start{visibility:hidden}
 #clanCardPop .ad-card{max-height:min(88vh,calc(100dvh - 32px));overflow:hidden}
 #clanCardPop #ccBody{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding-right:4px}
 #clanCardPop .up-row{flex:0 0 auto}
+/* Update 5.23: the account is opened from Settings */
+#navAccount,#acctBtn{display:none!important}
+#setAcct{margin-left:auto}#setAcct .ic{width:16px;height:16px;vertical-align:-3px}
