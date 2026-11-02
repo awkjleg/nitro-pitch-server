@@ -46,7 +46,7 @@
       container.appendChild(button);
     }
   }
-  function showSettings() {
+  function showSettings(banner) {
     let dialog = document.getElementById('np-cookie-dialog');
     if (!dialog) {
       dialog = document.createElement('dialog'); dialog.id = 'np-cookie-dialog';
@@ -56,22 +56,29 @@
       dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
       document.body.appendChild(dialog);
     }
-    if (!dialog.open) dialog.showModal();
+    dialog.classList.toggle('np-cookie-banner', banner === true);
+    if (dialog.open && banner !== true && !dialog.matches(':modal')) dialog.close();
+    if (!dialog.open) { if (banner === true) dialog.show(); else dialog.showModal(); }
   }
   function init() {
     const style = document.createElement('style');
     style.textContent = '#np-cookie-dialog{box-sizing:border-box;margin:auto;max-width:620px;width:calc(100% - 32px);max-height:85vh;overflow:auto;background:linear-gradient(180deg,rgba(10,18,34,.98),rgba(8,12,22,.98));color:#edf4ff;border:1px solid rgba(150,180,255,.24);border-radius:18px;padding:26px 24px 20px;font:16px/1.6 "Chakra Petch","Segoe UI",sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.52)}#np-cookie-dialog::backdrop{background:rgba(3,8,14,.76)}#np-cookie-dialog .np-eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#ffd451;font-weight:700;margin-bottom:10px}#np-cookie-dialog h2{margin:0 0 12px;color:#fff;font:400 clamp(1.8rem,3vw,2.6rem)/1.1 "Russo One","Arial Black",Impact,sans-serif;letter-spacing:.05em;text-transform:uppercase}#np-cookie-dialog p{margin:0 0 12px}#np-cookie-dialog a{color:#91c5ff}#np-cookie-dialog button{font:700 14px/1.2 "Chakra Petch","Segoe UI",sans-serif;letter-spacing:.1em;text-transform:uppercase;background:rgba(255,255,255,.04);color:#edf4ff;border:1px solid rgba(150,180,255,.3);border-radius:12px;padding:14px 18px;cursor:pointer;min-height:48px;transition:filter .15s,background .15s}#np-cookie-dialog button:hover{background:rgba(255,255,255,.1)}#np-cookie-dialog button[data-allow]{background:linear-gradient(180deg,#ffd451,#ff9a1e);color:#111;border-color:transparent}#np-cookie-dialog button[data-allow]:hover{filter:brightness(1.08)}#np-cookie-dialog button[data-close]{background:none;border-color:transparent;color:#b0bdd6;padding:10px 4px;min-height:0;font-size:12px}#np-cookie-dialog button:focus-visible{outline:3px solid #ffd451;outline-offset:3px}.np-cookie-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;margin:18px 0 6px}';
     document.head.appendChild(style);
-    document.querySelectorAll('[data-cookie-settings]').forEach(el => el.addEventListener('click', showSettings));
+    document.querySelectorAll('[data-cookie-settings]').forEach(el => el.addEventListener('click', () => showSettings()));
     updateStatus();
     if (!choice && client) {
+      // Not on top of other pop-ups: wait until the terms notice and the patch notes are closed, then a few seconds more,
+      // and show it as a small banner in the corner (the game stays playable).
+      let quiet = 0;
       const prompt = () => {
         if (choice) return;
-        // Present one centered dialog at a time, after the terms notice is closed.
-        if (document.querySelector('dialog[open]')) { setTimeout(prompt,250); return; }
-        showSettings();
+        const pn = document.getElementById('pnPop');
+        const busy = document.querySelector('dialog[open]') || document.getElementById('nitropitch-terms-modal') || (pn && !pn.hidden);
+        quiet = busy ? 0 : quiet + 1;
+        if (quiet < 12) { setTimeout(prompt,250); return; }
+        showSettings(true);
       };
-      setTimeout(prompt,600);
+      setTimeout(prompt,1500);
     }
     // Recheck when a suspended/backgrounded tab becomes visible.
     document.addEventListener('visibilitychange', () => {

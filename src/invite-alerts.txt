@@ -29,8 +29,8 @@
   };
   // ask once (and again after a week if they said "Not now"), on the main menu, never over another pop-up
   const pop = document.createElement("div");
-  pop.id = "notifPop"; pop.className = "cf-pop"; pop.hidden = true;
-  pop.setAttribute("role", "dialog"); pop.setAttribute("aria-modal", "true"); pop.setAttribute("aria-labelledby", "notifTitle");
+  pop.id = "notifPop"; pop.className = "np-corner"; pop.hidden = true;
+  pop.setAttribute("role", "dialog"); pop.setAttribute("aria-labelledby", "notifTitle");
   pop.innerHTML = '<div class="cf-box"><h2 id="notifTitle">Turn on invite alerts?</h2><p>Get a notification on your computer when a friend invites you to a party or clan, even while Nitro Pitch is in another tab.</p><div class="cf-btns"><button class="sbtn pri" id="notifYes" type="button"><span>Turn on</span></button><button class="sbtn" id="notifNo" type="button"><span>Not now</span></button></div></div>';
   document.body.append(pop);
   const later = () => { try { localStorage.setItem(ASKED, String(Date.now())); } catch {} };
@@ -41,10 +41,13 @@
   $("notifNo").onclick = () => { pop.hidden = true; later(); };
   const busy = () => mode !== "menu" || [...document.querySelectorAll('[role="dialog"]')].some(d => d !== pop && !d.hidden && d.offsetParent !== null) || document.getElementById("nitropitch-terms-modal") || document.getElementById("np-cookie-dialog")?.open;
   if (OK && Notification.permission === "default") {
+    let quiet = 0;
     const t = setInterval(() => {
       let last = 0; try { last = +localStorage.getItem(ASKED) || 0; } catch {}
       if (Notification.permission !== "default" || Date.now() - last < 7 * 864e5) { clearInterval(t); return; }
-      if (!busy() && !document.hidden) { clearInterval(t); pop.hidden = false; }
+      // not on a first visit: only after your first match, with nothing else open for half a minute
+      quiet = busy() || document.hidden || (profile.games | 0) < 1 || document.querySelector(".np-cookie-banner[open]") || !$("pnPop").hidden ? 0 : quiet + 1;
+      if (quiet >= 8) { clearInterval(t); pop.hidden = false; }
     }, 4000);
   }
 })();

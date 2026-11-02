@@ -182,3 +182,19 @@ input.t,select.t{background:#07111f;border:1px solid #526b8e;border-radius:5px;m
 .err-row .who b{color:#ff8a8a}
 body.np-viewing #boost,body.np-viewing #help{display:none!important}
 #gGrid .gi[hidden]{display:none!important}
+/* Update 5.22: join pop-ups in their own spots */
+#np-cookie-dialog.np-cookie-banner{position:fixed;inset:auto auto 16px 16px;margin:0;max-width:420px;width:calc(100% - 32px);padding:16px 18px 12px;z-index:70}
+#np-cookie-dialog.np-cookie-banner h2{font-size:20px!important;margin-bottom:6px}
+#np-cookie-dialog.np-cookie-banner p{font-size:13px;margin-bottom:8px}
+#np-cookie-dialog.np-cookie-banner .np-eyebrow{display:none}
+#np-cookie-dialog.np-cookie-banner .np-cookie-actions{margin:10px 0 2px;justify-content:flex-start}
+#np-cookie-dialog.np-cookie-banner button:not([data-close]){min-height:38px;padding:0 18px!important;font-size:12px!important}
+.np-corner{position:fixed;z-index:61;right:16px;top:calc(76px + env(safe-area-inset-top,0px));width:min(340px,calc(100% - 32px))}
+.np-corner[hidden]{display:none}
+.np-corner .cf-box{padding:16px 18px;border-top:3px solid #2e8bff;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.np-corner h2{font-size:18px}.np-corner p{font-size:13px}
+body.np-pop-busy .np-quick-start{visibility:hidden}
+/* clan card (Players Online › a player's clan): the members list scrolls inside the card */
+#clanCardPop .ad-card{max-height:min(88vh,calc(100dvh - 32px));overflow:hidden}
+#clanCardPop #ccBody{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding-right:4px}
+#clanCardPop .up-row{flex:0 0 auto}

@@ -216,3 +216,42 @@ function npReportChat(r, host) {
     [...$("gGrid").children].forEach((b, i) => { b.hidden = !!gLock(gTab, i) && i !== eq && i !== gSel; });
   };
 }
+// ---- join pop-ups take turns: a first visit gets no patch notes, and the "first kickoff" card waits for the terms notice
+try { if (!localStorage.getItem("np-patch-seen")) { localStorage.setItem("np-patch-seen", PATCH_NOTES.v); pnState = 1; } } catch {}
+setInterval(() => {
+  const busy = !!document.getElementById("nitropitch-terms-modal") || !$("pnPop").hidden;
+  document.body.classList.toggle("np-pop-busy", busy);
+}, 300);
+// ---- garage: on Goal Explosion, the camera goes to the goal, a ball flies into the net and the selected explosion plays
+const gBoom = { on: false, key: "", t: 0, ball: null, fired: false };
+{
+  const step = stepGaragePreview;
+  stepGaragePreview = function (dt) {
+    step.apply(this, arguments);
+    const on = screen === "garage" && gTab === "boom";
+    if (!gBoom.ball) { gBoom.ball = ballMesh.clone(); gBoom.ball.visible = false; scene.add(gBoom.ball); }
+    if (!on) { gBoom.on = false; gBoom.ball.visible = false; return; }
+    const key = gSel + ":" + gPrev.team;
+    if (!gBoom.on || gBoom.key !== key) { gBoom.on = true; gBoom.key = key; gBoom.t = 0; gBoom.fired = false; }
+    gBoom.t += dt;
+    const FLY = 0.85, LOOP = 4.2, t = gBoom.t, b = gBoom.ball;
+    if (t < FLY) {
+      const k = t / FLY, x0 = GW * 0.55, z0 = L - GW * 2.3, x1 = -GW * 0.25, z1 = L + GD * 0.55;
+      b.visible = true; b.scale.setScalar(BALL_R / 2);
+      b.position.set(x0 + (x1 - x0) * k, BALL_R + Math.sin(k * Math.PI) * GH * 0.55 + (GH * 0.35 - BALL_R) * k, z0 + (z1 - z0) * k);
+      b.rotation.x += dt * 9; b.rotation.y += dt * 4;
+    } else if (!gBoom.fired) {
+      gBoom.fired = true; b.visible = false;
+      fx.goal(gSel, new V3(clamp(b.position.x, -GW, GW), Math.min(b.position.y, GH), L + 2), TEAM_COL[gPrev.team === 1 ? 1 : 0] || 0xffffff);
+      try { sfx.goal(); } catch {}
+    } else if (t > LOOP) { gBoom.t = 0; gBoom.fired = false; }
+  };
+  const cam = showroomCamera;
+  showroomCamera = function (now) {
+    cam.apply(this, arguments);
+    if (screen !== "garage" || gTab !== "boom") return;
+    camera.position.set(GW * 1.35, GH * 1.25, L - GW * 3.1);
+    camera.lookAt(0, GH * 0.45, L + GD * 0.25);
+    camPos.copy(camera.position);
+  };
+}
