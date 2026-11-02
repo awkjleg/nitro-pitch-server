@@ -17,7 +17,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111014;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111015;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -69,7 +69,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.16\",\n  \"title\": \"Update 5.16: Built for your phone\",\n  \"notes\": [\n    \"Phone menus now use compact cards, readable controls and a proper landscape lobby with your car beside the menu.\",\n    \"Party and chat open in their own panel. Quick actions live under More, keeping the player card clear.\",\n    \"Garage, playlists, Nitro Pass, career, settings, results and pop-ups now fit phone screens with scrollable lists and larger buttons.\",\n    \"Driving controls have a new layout for both orientations, improved joystick precision and reliable release when pausing or rotating.\",\n    \"Tutorial instructions now use touch controls. Retry and next-shot buttons are available from the practice pause menu.\",\n    \"Auto graphics on touch devices caps render resolution to reduce unnecessary GPU load. Refresh from the menu when prompted.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.17\",\n  \"title\": \"Update 5.17: Reworked ball camera\",\n  \"notes\": [\n    \"Ball cam now moves vertically around the car to frame aerial and overhead plays.\",\n    \"Wall driving keeps a level camera horizon, and ball cam respects your saved camera angle.\",\n    \"Faster tracking and reduced double smoothing help follow balls passing across the car.\",\n    \"Phone framing, look-back and saved camera preferences are preserved.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
