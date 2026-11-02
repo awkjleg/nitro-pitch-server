@@ -207,3 +207,12 @@ function npReportChat(r, host) {
     } catch (e) { adMsg((e && e.message) || "Couldn't load errors"); }
   };
 }
+// ---- garage: like Rocket League, only items you own are shown (locked ones stay hidden until you unlock them)
+{
+  const garage = renderGarage;
+  renderGarage = function () {
+    garage.apply(this, arguments);
+    const eq = profile[gField(gTab)] | 0;
+    [...$("gGrid").children].forEach((b, i) => { b.hidden = !!gLock(gTab, i) && i !== eq && i !== gSel; });
+  };
+}

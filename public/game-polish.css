@@ -181,3 +181,4 @@ input.t,select.t{background:#07111f;border:1px solid #526b8e;border-radius:5px;m
 .err-row pre{white-space:pre-wrap;word-break:break-word;font-size:11px;max-height:220px;overflow:auto;background:rgba(0,0,0,.35);padding:8px}
 .err-row .who b{color:#ff8a8a}
 body.np-viewing #boost,body.np-viewing #help{display:none!important}
+#gGrid .gi[hidden]{display:none!important}
