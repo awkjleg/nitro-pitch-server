@@ -1,6 +1,7 @@
 import {DurableObject} from 'cloudflare:workers';
 import {ApiError,reply,identify,readJson,firebaseDoc,ADMIN_UID} from './firebase-auth.js';
 import {catalog,Ranked,economy,levelInfo} from './reward-rules.js';
+import {cleanEv,snowMatch,openHolidayDrop} from './snowdrift.js';
 const ID=/^[A-Za-z0-9_-]{1,128}$/, midOK=/^[A-Za-z0-9_-]{1,80}$/;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const n=(v,max=1e9)=>Number.isFinite(v)?clamp(Math.trunc(v),0,max):0;
@@ -17,11 +18,12 @@ export function cleanProfile(raw={}){
  for(const[field,kind]of Object.entries(cosmetics))p[field]=catalog[kind][raw[field]]?raw[field]:0;
  if(Number.isInteger(raw.paint))p.paint=clamp(raw.paint,-1,0xffffff);
  p.fr=Array.isArray(raw.fr)?raw.fr.filter(x=>typeof x==='string').slice(0,50):[];
+ p.ev=cleanEv(raw.ev);
  return p;
 }
 function cloud(p){return {...p,rk:p.rk.map(([m,p,w,l,pk])=>({m,p,w,l,pk})),level:levelInfo(p.xp).lv};}
 function publicRow(p,uid){const best=p.rk.filter(r=>r[1]>=5).sort((a,b)=>b[0]-a[0])[0];return {uid,name:p.name||p.username||'Player',mmr:best?.[0]??0,rank:best?Ranked.info(best[0]).idx:-1,wins:p.wins,goals:p.goals,level:levelInfo(p.xp).lv,ti:p.title,bn:p.banner,clanId:p.clanId||''};}
-function permission(p,k,i,uid){const it=catalog[k]?.[i];if(!it)return false;if(it.admin)return uid===ADMIN_UID||(p.adminItems||[]).includes(k+':'+i);if(p.own[k]?.includes(i))return true;if(it.lead)return !!p.clanId&&p.clanRole==='owner';if(it.clan)return !!p.clanId; // Clan level visuals are additionally vetted by the Firebase clan client.
+function permission(p,k,i,uid){const it=catalog[k]?.[i];if(!it)return false;if(it.admin)return uid===ADMIN_UID||(p.adminItems||[]).includes(k+':'+i);if(p.own[k]?.includes(i))return true;if(it.ev)return false;if(it.lead)return !!p.clanId&&p.clanRole==='owner';if(it.clan)return !!p.clanId; // Clan level visuals are additionally vetted by the Firebase clan client.
  if(it.tier>=0)return p.rt>=it.tier;if(it.qn)return p.qn>=it.qn;if(it.pass)return economy(p).passTier()>=it.pass;if(it.drop)return false;return levelInfo(p.xp).lv>=(it.lv||1);}
 export function awardMatch(p,e,now=Date.now(),averages=[500,500]){
  const E=economy(p,now);E.ensureQuests();const before=levelInfo(p.xp),passFrom=E.passTier(),st=e.st;
@@ -31,6 +33,7 @@ export function awardMatch(p,e,now=Date.now(),averages=[500,500]){
  p.xp+=base+bonus;p.games++;if(e.won)p.wins++;p.goals+=st[1];p.saves+=st[3];if(mv)p.mvps++;
  const quests=E.advanceQuests({...e,mvp:!!mv});for(const q of quests){p.xp+=q.xp;lines.push([q.text,q.xp,true]);}
  const xp0=p.xp,px=base+bonus+quests.reduce((s,q)=>s+q.px,0),tiers=E.addPassXp(px);if(p.xp>xp0)lines.push(['Nitro Pass rewards',p.xp-xp0,true]);
+ const snow=snowMatch(p,catalog,now,st,e.won);
  let rank=null;
  if(e.ranked&&[1,2,3].includes(e.playlist)){
   const r=p.rk[e.playlist-1],b={mmr:r[0],played:r[1],info:Ranked.info(r[0])},rt0=p.rt,d=Ranked.delta(averages[e.team],averages[1-e.team],e.won,r[1]);
@@ -41,7 +44,7 @@ export function awardMatch(p,e,now=Date.now(),averages=[500,500]){
   for(const t of rank.newTiers)E.addDrop([2,2,3,3,4,4,5,6][t]??2);
  }else if(e.online&&e.kind==='casual')p.cm=clamp(p.cm+Math.round(15*((e.won?1:0)-1/(1+10**((averages[1-e.team]-averages[e.team])/400)))),0,4000);
  p.ab=null;const drops=E.grantLevelDrops();
- return {before,after:levelInfo(p.xp),xpGain:lines.reduce((s,l)=>s+l[1],0),lines,kind:e.kind,rank,mid:e.mid,pass:{from:passFrom,tiers,px},quests,drops,clanContribution:{xp:(e.won?100:0)+20*st[1],wins:e.won?1:0,goals:st[1],cvw:0,cvl:0}};
+ return {snow,before,after:levelInfo(p.xp),xpGain:lines.reduce((s,l)=>s+l[1],0),lines,kind:e.kind,rank,mid:e.mid,pass:{from:passFrom,tiers,px},quests,drops,clanContribution:{xp:(e.won?100:0)+20*st[1],wins:e.won?1:0,goals:st[1],cvw:0,cvl:0}};
 }
 export async function progressFetch(req,env){
  const url=new URL(req.url);if(!url.pathname.startsWith('/api/progress'))return null;
@@ -138,6 +141,7 @@ export class Progress extends DurableObject{
     for(const x of picked.filter(x=>!x.drop))p.own[x.kind]=p.own[x.kind].filter(i=>i!==x.i);
     const pool=E.dropPool(r+1);let got;if(pool.length){got={...pool[crypto.getRandomValues(new Uint32Array(1))[0]%pool.length],rar:r+1};p.own[got.kind].push(got.i);}else{E.addDrop(r+1);got={drop:r+1};}result={got,picked};
    }
+  }else if(b.action==='holiday-drop'){const got=openHolidayDrop(p,catalog,()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296);if(!got)throw new ApiError('You have no Holiday Drops to open',409);result={got};
   }else if(b.action==='reroll'){if(!economy(p,now).rerollQuest(b.index))throw new ApiError('You have used today’s reroll',409);
   }else if(b.action==='gift'){
    if(!midOK.test(b.gift||''))throw new ApiError('Invalid gift');const key='gift:'+b.gift;

@@ -211,3 +211,26 @@ body.np-pop-busy .np-quick-start{visibility:hidden}
 .soon-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(150,180,255,.15)}
 .soon-head b{font:20px var(--display);text-transform:uppercase;letter-spacing:.04em}
 .soon-card iframe{flex:1;width:100%;border:0;background:#0b1426}
+/* Snowdrift Season (Christmas event) */
+.snow-tab{color:#bfe8ff}
+.np-snow{display:flex;flex-direction:column;gap:12px;padding-bottom:20px}
+.np-snow[hidden]{display:none}
+.snow-head{display:flex;align-items:center;gap:24px;padding:18px 22px;border-radius:12px;background:radial-gradient(ellipse at 100% 0%,rgba(77,255,176,.18),transparent 55%),linear-gradient(110deg,rgba(46,139,255,.28),rgba(12,20,42,.92) 70%)!important;box-shadow:inset 0 0 0 1px rgba(191,232,255,.3)}
+.snow-ht{flex:1;min-width:0}.snow-ht small{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#bfe8ff;font-weight:700}
+.snow-ht h2{margin:4px 0 6px;font:28px/1.1 var(--display);text-transform:uppercase}.snow-ht p{margin:0;color:#c3cde6;font-size:14px;max-width:720px}
+.snow-stats{display:grid;grid-template-columns:repeat(4,minmax(64px,1fr));gap:8px}
+.snow-stats div{text-align:center;padding:8px 10px;background:rgba(0,0,0,.35);border-radius:8px}.snow-stats b{display:block;font:24px var(--display);color:#fff}.snow-stats small{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9fb0d4}
+.snow-drops{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:16px 18px;border-radius:12px;box-shadow:inset 0 0 0 1px rgba(255,212,81,.35)}
+.snow-dl{flex:1 1 220px;display:flex;flex-direction:column;gap:4px}.snow-dl b{font:20px var(--display);text-transform:uppercase;color:#ffd451}.snow-dl span{font-weight:700}.snow-dl small{color:#9fb0d4}
+.snow-rare{display:flex;gap:10px;flex-wrap:wrap}
+.snow-ri{width:130px;display:flex;flex-direction:column;gap:2px;padding:6px;border-radius:8px;background:rgba(0,0,0,.3);box-shadow:inset 0 -3px 0 var(--rar)}
+.snow-ri b{font-size:13px}.snow-ri small{font-size:11px;color:#9fb0d4}.snow-ri.got small{color:#3fe08f}
+.snow-th{height:72px;display:grid;place-items:center;border-radius:6px;background:rgba(0,0,0,.3);overflow:hidden;margin-bottom:4px}
+.snow-th canvas,.snow-th img,.snow-th .bthumb{width:100%;height:100%;object-fit:contain}
+.snow-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.snow-c{display:flex;flex-direction:column;gap:3px;padding:10px;border-radius:10px;background:linear-gradient(170deg,color-mix(in srgb,var(--rar) 18%,rgba(22,34,66,.96)),rgba(9,14,30,.97));box-shadow:inset 0 0 0 1px rgba(150,180,255,.16);opacity:.85}
+.snow-c.got{opacity:1;box-shadow:inset 0 0 0 1px #3fe08f}.snow-c.click{cursor:pointer}.snow-c.click:hover{transform:translateY(-2px)}
+.snow-c b{font-size:14px}.snow-c small{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9fb0d4}
+.snow-need{font-size:12px;color:#cfd7ee}.snow-c .bar{height:6px}.snow-c .bar i{background:linear-gradient(90deg,#9fdcff,#ffffff)}
+.snow-st{font:700 12px var(--ui);color:#9fb0d4}.snow-c.got .snow-st{color:#3fe08f}
+@media (max-width:760px){.snow-head{flex-direction:column;align-items:stretch}}

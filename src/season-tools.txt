@@ -280,7 +280,7 @@ const gBoom = { on: false, key: "", t: 0, ball: null, fired: false };
     tin.append(ic, wm, h("b", "", "Coming soon"), sub);
     // Snowdrift Season comes out on 1 December, midnight US Eastern time
     const RELEASE = Date.UTC(2026, 11, 1, 5, 0, 0);
-    const left = () => { const ms = RELEASE - Date.now(); if (ms <= 0) { sub.textContent = "Snowdrift Season is out now!"; return; } const m = Math.floor(ms / 60000), d = Math.floor(m / 1440), hh = Math.floor(m % 1440 / 60); sub.textContent = "Snowdrift Season, the Christmas event: out in " + (d ? d + "d " + hh + "h" : hh + "h " + m % 60 + "m") + "."; };
+    const left = () => { const ms = RELEASE - Date.now(); if (ms <= 0) { tin.querySelector("b").textContent = "Snowdrift Season"; sub.textContent = "Out now: holiday challenges and Holiday Drops."; return; } const m = Math.floor(ms / 60000), d = Math.floor(m / 1440), hh = Math.floor(m % 1440 / 60); sub.textContent = "Snowdrift Season, the Christmas event: out in " + (d ? d + "d " + hh + "h" : hh + "h " + m % 60 + "m") + "."; };
     left(); setInterval(left, 30000);
     t.append(tin); tiles.prepend(t);
     const pop = h("div", ""); pop.id = "soonPop"; pop.hidden = true; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-modal", "true"); pop.setAttribute("aria-label", "Coming soon");
@@ -290,7 +290,7 @@ const gBoom = { on: false, key: "", t: 0, ball: null, fired: false };
     const frame = document.createElement("iframe"); frame.title = "Upcoming items"; frame.loading = "lazy";
     card.append(head, frame); pop.append(card); document.body.append(pop);
     const shut = () => { pop.hidden = true; };
-    t.onclick = () => { if (!frame.src) frame.src = "/coming-soon.html?embed=1"; pop.hidden = false; close.focus(); };
+    t.onclick = () => { if (Date.now() >= RELEASE) { passTab = "snow"; showScreen("pass"); renderPass(); return; } if (!frame.src) frame.src = "/coming-soon.html?embed=1"; pop.hidden = false; close.focus(); };
     close.onclick = shut; pop.addEventListener("click", e => { if (e.target === pop) shut(); });
     const back = goBack;
     goBack = function () { if (!pop.hidden) { shut(); return true; } return back.apply(this, arguments); };

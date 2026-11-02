@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {catalog,Ranked,economy,levelInfo} from '../src/reward-rules.js';
+import {cleanEv,snowMatch,openHolidayDrop,SNOW_START,SNOW_CH} from '../src/snowdrift.js';
 import {ApiError,reply} from '../src/firebase-auth.js';
 import {validCar,validGame,validHit,resultEvidence} from '../src/room-guard.js';
 const source=(await readFile(new URL('../src/progress.js',import.meta.url),'utf8')).replace(/^import .*;$/gm,'').replaceAll('export ','');
@@ -11,7 +12,7 @@ async function fixture(raw={}){
  const clone=v=>v===undefined?undefined:structuredClone(v);
  const storage={get:async k=>clone(data.get(k)),put:async(k,v)=>data.set(k,clone(v)),list:async({prefix})=>new Map([...data].filter(([k])=>k.startsWith(prefix))),transaction:async fn=>{const snapshot=clone(data);try{return await fn(storage);}catch(e){data.clear();for(const[k,v]of snapshot)data.set(k,v);throw e;}}};
  const ctx={storage},env={ROOMS:{idFromName:x=>x,get:()=>({fetch:async()=>Response.json({mid:'online1',st:[200,1,0,0,1,0],score:[1,0],won:true,mvp:true,online:true,ranked:true,playlist:1,team:0,kind:'ranked',roster:[{uid:'a',team:0},{uid:'b',team:1}],elapsed:300})})}};
- const c=vm.createContext({catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
+ const c=vm.createContext({cleanEv,snowMatch,openHolidayDrop,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
  vm.runInContext(source+'\nglobalThis.Progress=Progress;globalThis.cleanProfile=cleanProfile;',c);const ledger=new c.Progress(ctx,env);
  return {data,docs,env,ledger,advance:ms=>now+=ms,clean:c.cleanProfile,async call(action,b={},uid='a'){const response=await ledger.fetch(new Request('https://progress/action',{method:'POST',body:JSON.stringify({body:{action,...b},user:{uid,username:uid},token:'test'})}));return {status:response.status,...await response.json()};}};
 }
@@ -85,4 +86,18 @@ test('levels leaderboard merges saved levels with older accounts, rejects invali
  const r=await f.call('leaderboard',{field:'level',limit:25});assert.equal(r.status,200);assert.deepEqual(r.rows.map(x=>x.uid),['old','z','a']);assert.equal(r.rows.at(-1).level,p.profile.level);assert.equal(r.rows.at(-1).name,'Racer');assert.equal((await f.call('leaderboard',{field:'level',limit:1})).rows.length,1);
  assert.equal((await f.call('leaderboard',{field:'password',limit:25})).status,400);assert(f.data.has('legacy-leaderboard'));
  f.docs.set('gifts/levelGift',{to:'a',xp:500000,claimed:false});const gift=await f.call('gift',{id:'level-gift',gift:'levelGift'});const after=await f.call('leaderboard',{field:'level',limit:25});assert.equal(after.rows.find(x=>x.uid==='a').level,gift.profile.level);assert(gift.profile.level>p.profile.level);
+});
+test('Snowdrift challenges unlock items only during the event, and Holiday Drops give the rare three then XP',()=>{
+ const p={own:{},xp:0,ev:null};const st=[300,2,0,1,3,0];
+ assert.equal(snowMatch(p,catalog,SNOW_START-1000,st,true),null);assert.equal(p.ev,null);
+ const first=snowMatch(p,catalog,SNOW_START+1000,st,true);assert.deepEqual(first.unlocked.map(x=>x.name),['Holly Sprig']);assert.equal(first.drops,0);
+ for(let i=0;i<4;i++)snowMatch(p,catalog,SNOW_START+2000+i,st,true);
+ assert.equal(p.ev.m,5);assert.equal(p.ev.hd,1);assert(p.own.title.includes(catalog.title.findIndex(x=>x.name==='Snow Driver'&&x.ev)));
+ for(let i=0;i<200;i++)snowMatch(p,catalog,SNOW_START+5000+i,[300,1,0,1,1,0],true);
+ assert(p.own.title.includes(catalog.title.findIndex(x=>x.name==='Holiday Hero')));
+ const names=new Set();for(let i=0;i<3;i++)names.add(openHolidayDrop(p,catalog,()=>0.5).name);
+ assert.deepEqual([...names].sort(),['Blizzard','Northern Lights','Snow Globe']);
+ const xp=p.xp;assert.equal(openHolidayDrop(p,catalog,()=>0.5).xp,2000);assert.equal(p.xp,xp+2000);
+ p.ev.hd=0;assert.equal(openHolidayDrop(p,catalog,()=>0.5),null);
+ for(const [, , kind, name] of SNOW_CH)assert(catalog[kind].findIndex(x=>x.name===name&&x.ev)>=0,name);
 });
