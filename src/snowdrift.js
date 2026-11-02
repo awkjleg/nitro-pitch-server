@@ -1,7 +1,10 @@
 // Snowdrift Season (Christmas event): challenges unlock 27 items, Holiday Drops hold the 3 rarest.
 // The game has the same list in src/snowdrift.txt; items are found by kind and name in the catalog.
 export const SNOW_START = Date.UTC(2026, 11, 1, 5), SNOW_END = Date.UTC(2027, 0, 6, 5);   // US Eastern midnight
-export const SNOW_DROP_EVERY = 5;                                                              // a Holiday Drop every 5 event matches
+export const SNOW_DROP_EVERY = 5;
+// the event is switched off: nothing can be unlocked until the owner turns it on (set to true, with the same switch in
+// src/snowdrift.txt)
+export const SNOW_ON = false;                                                              // a Holiday Drop every 5 event matches
 // [stat, count, kind, name]: stat m = matches, g = goals, s = saves, w = wins, all = every other challenge done
 export const SNOW_CH = [
  ['m', 1, 'antenna', 'Holly Sprig'], ['m', 5, 'title', 'Snow Driver'], ['g', 5, 'antenna', 'Candy Cane'], ['m', 10, 'banner', 'Snowy Night'],
@@ -26,8 +29,8 @@ function grant(p, catalog, kind, name, out) {
  if (!own.includes(i)) { own.push(i); out.push({ kind, i, name }); }
 }
 // after a match in the event: count it, hand out finished challenges and earned Holiday Drops
-export function snowMatch(p, catalog, now, st, won) {
- if (now < SNOW_START || now >= SNOW_END) return null;
+export function snowMatch(p, catalog, now, st, won, on = SNOW_ON) {
+ if (!on || now < SNOW_START || now >= SNOW_END) return null;
  const ev = p.ev = cleanEv(p.ev);
  ev.m++; ev.g += st[1] | 0; ev.s += st[3] | 0; if (won) ev.w++;
  const unlocked = [];
@@ -39,7 +42,8 @@ export function snowMatch(p, catalog, now, st, won) {
  return { unlocked, drops };
 }
 // open one Holiday Drop: one of the drop-only items you don't have yet (by weight), else 2,000 XP
-export function openHolidayDrop(p, catalog, random) {
+export function openHolidayDrop(p, catalog, random, on = SNOW_ON) {
+ if (!on) return null;
  const ev = p.ev = cleanEv(p.ev);
  if (ev.hd < 1) return null;
  ev.hd--;

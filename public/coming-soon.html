@@ -114,7 +114,7 @@ if(/[?&]embed=1/.test(location.search))document.body.classList.add('embed');
   var RELEASE=Date.UTC(2026,11,1,5,0,0),pad=function(n){return n<10?'0'+n:String(n);};
   function tick(){
     var ms=RELEASE-Date.now();
-    if(ms<=0){document.getElementById('cdTag').textContent='OUT NOW · PLAY IT';document.getElementById('cdBox').style.display='none';return;}
+    if(ms<=0){document.getElementById('cdTag').textContent='ARRIVING SOON';document.getElementById('cdBox').style.display='none';return;}
     var s=Math.floor(ms/1000),v=[Math.floor(s/86400),Math.floor(s%86400/3600),Math.floor(s%3600/60),s%60];
     for(var i=0;i<4;i++)document.getElementById('cd'+i).textContent=i?pad(v[i]):String(v[i]);
     setTimeout(tick,1000-Date.now()%1000);

@@ -14,10 +14,11 @@ function snowData() {
     drop: [["topper", "Snow Globe"], ["boom", "Blizzard"], ["boom", "Northern Lights"]]
   });
 }
-function snowLive() { return Date.now() >= snowData().at; }
+// switched off: the items stay hidden and locked, only the countdown shows (src/snowdrift.js has the same switch)
+function snowLive() { return false; }
 function snowNeed(c) { const [stat, n] = c; return stat === "all" ? "Finish every other challenge" : (stat === "m" ? "Play " : stat === "g" ? "Score " : stat === "s" ? "Make " : "Win ") + n + (stat === "m" || stat === "w" ? " matches" : stat === "g" ? " goals" : " saves"); }
 function snowLock(kind, it) {
-  if (!snowLive()) return "Snowdrift Season · Dec 1";
+  if (!snowLive()) return "Snowdrift Season · coming soon";
   const D = snowData();
   if (D.drop.some(([k, n]) => k === kind && n === it.name)) return "From Holiday Drops";
   const c = D.ch.find(([, , k, n]) => k === kind && n === it.name);
@@ -51,7 +52,7 @@ window.NPProgressAPI?.listen(data => {
   const pass = renderPass;
   renderPass = function () {
     pass.apply(this, arguments);
-    tb.hidden = !(snowLive() || isAdminNow());
+    tb.hidden = !snowLive();
     if (tb.hidden && passTab === "snow") { passTab = "rewards"; pass.apply(this, arguments); }
     const hd = snowEv ? snowEv.hd | 0 : 0; badge.hidden = !hd; badge.textContent = String(hd);
     box.hidden = passTab !== "snow";

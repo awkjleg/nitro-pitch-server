@@ -87,17 +87,20 @@ test('levels leaderboard merges saved levels with older accounts, rejects invali
  assert.equal((await f.call('leaderboard',{field:'password',limit:25})).status,400);assert(f.data.has('legacy-leaderboard'));
  f.docs.set('gifts/levelGift',{to:'a',xp:500000,claimed:false});const gift=await f.call('gift',{id:'level-gift',gift:'levelGift'});const after=await f.call('leaderboard',{field:'level',limit:25});assert.equal(after.rows.find(x=>x.uid==='a').level,gift.profile.level);assert(gift.profile.level>p.profile.level);
 });
-test('Snowdrift challenges unlock items only during the event, and Holiday Drops give the rare three then XP',()=>{
- const p={own:{},xp:0,ev:null};const st=[300,2,0,1,3,0];
- assert.equal(snowMatch(p,catalog,SNOW_START-1000,st,true),null);assert.equal(p.ev,null);
- const first=snowMatch(p,catalog,SNOW_START+1000,st,true);assert.deepEqual(first.unlocked.map(x=>x.name),['Holly Sprig']);assert.equal(first.drops,0);
- for(let i=0;i<4;i++)snowMatch(p,catalog,SNOW_START+2000+i,st,true);
+test('Snowdrift is switched off: nothing unlocks and no Holiday Drop opens',()=>{
+ const p={own:{},xp:0,ev:{hd:3}};assert.equal(snowMatch(p,catalog,SNOW_START+1000,[300,2,0,1,3,0],true),null);assert.equal(openHolidayDrop(p,catalog,()=>0.5),null);assert.deepEqual(p.own,{});
+});
+test('Snowdrift rules (when switched on) unlock items only during the event, and Holiday Drops give the rare three then XP',()=>{
+ const p={own:{},xp:0,ev:null};const st=[300,2,0,1,3,0];const snowMatchOn=(a,b,c,d,e)=>snowMatch(a,b,c,d,e,true),openOn=(a,b,c)=>openHolidayDrop(a,b,c,true);
+ assert.equal(snowMatchOn(p,catalog,SNOW_START-1000,st,true),null);assert.equal(p.ev,null);
+ const first=snowMatchOn(p,catalog,SNOW_START+1000,st,true);assert.deepEqual(first.unlocked.map(x=>x.name),['Holly Sprig']);assert.equal(first.drops,0);
+ for(let i=0;i<4;i++)snowMatchOn(p,catalog,SNOW_START+2000+i,st,true);
  assert.equal(p.ev.m,5);assert.equal(p.ev.hd,1);assert(p.own.title.includes(catalog.title.findIndex(x=>x.name==='Snow Driver'&&x.ev)));
- for(let i=0;i<200;i++)snowMatch(p,catalog,SNOW_START+5000+i,[300,1,0,1,1,0],true);
+ for(let i=0;i<200;i++)snowMatchOn(p,catalog,SNOW_START+5000+i,[300,1,0,1,1,0],true);
  assert(p.own.title.includes(catalog.title.findIndex(x=>x.name==='Holiday Hero')));
- const names=new Set();for(let i=0;i<3;i++)names.add(openHolidayDrop(p,catalog,()=>0.5).name);
+ const names=new Set();for(let i=0;i<3;i++)names.add(openOn(p,catalog,()=>0.5).name);
  assert.deepEqual([...names].sort(),['Blizzard','Northern Lights','Snow Globe']);
- const xp=p.xp;assert.equal(openHolidayDrop(p,catalog,()=>0.5).xp,2000);assert.equal(p.xp,xp+2000);
- p.ev.hd=0;assert.equal(openHolidayDrop(p,catalog,()=>0.5),null);
+ const xp=p.xp;assert.equal(openOn(p,catalog,()=>0.5).xp,2000);assert.equal(p.xp,xp+2000);
+ p.ev.hd=0;assert.equal(openOn(p,catalog,()=>0.5),null);
  for(const [, , kind, name] of SNOW_CH)assert(catalog[kind].findIndex(x=>x.name===name&&x.ev)>=0,name);
 });
