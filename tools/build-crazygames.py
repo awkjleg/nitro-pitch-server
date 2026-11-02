@@ -94,7 +94,33 @@ CG = r'''
     try { SDK().game.loadingStop(); } catch {}
     await cgAccount();
     try { SDK().user.addAuthListener(() => cgAccount()); } catch {}
+    // audio follows CrazyGames' mute setting
+    const cgMute = () => { try { const m = !!(SDK().game.settings && SDK().game.settings.muteAudio); if (m !== sfx.muted) { sfx.toggle(); renderSoundBtn(); } } catch {} };
+    cgMute(); try { SDK().game.addSettingsChangeListener(() => cgMute()); } catch {}
+    // opened from a friend's invite link: join their party as soon as the online lobby is up
+    let invite = ""; try { invite = normPartyCode(SDK().game.getInviteParam("roomId") || ""); } catch {}
+    if (invite) { const t0 = Date.now(), t = setInterval(() => { if (Date.now() - t0 > 45000) { clearInterval(t); return; } if (roomApi && onlineOk && partyCodeShown()) { clearInterval(t); setTimeout(() => { if (partyJoinCode(invite)) toast("Joining your friend's party…"); }, 800); } }, 700); }
+    // Instant Multiplayer (a party leader starting from CrazyGames): straight to the party, ready to invite friends
+    try { if (SDK().game.isInstantMultiplayer && !invite) { showScreen("home"); toast("Invite friends with the Invite button, then search together or start a private match"); } } catch {}
   })();
+  // the CrazyGames invite button and links carry your party code
+  let cgRoom = "";
+  setInterval(() => {
+    if (!ready) return;
+    const c = roomApi && onlineOk ? partyCodeShown() : "";
+    if (!c || c === cgRoom) return;
+    cgRoom = c;
+    try { SDK().game.showInviteButton({ roomId: c }); } catch {}
+  }, 2000);
+  {
+    const copy = $("partyCodeCopy").onclick;
+    $("partyCodeCopy").onclick = async function () {
+      const c = partyCodeShown();
+      let link = ""; try { link = ready && c ? SDK().game.inviteLink({ roomId: c }) : ""; } catch {}
+      if (!link) return copy && copy.apply(this, arguments);
+      try { await navigator.clipboard.writeText(link); toast("Invite link copied: send it to a friend"); } catch { prompt("Copy this invite link:", link); }
+    };
+  }
   // ranked: confirm the result to the server like account players do, so mixed matches count for everyone
   {
     const over = onMatchOver;
