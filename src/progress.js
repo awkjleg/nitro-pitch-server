@@ -37,6 +37,8 @@ export function awardMatch(p,e,now=Date.now(),averages=[500,500]){
   r[0]=clamp(r[0]+d,0,4000);r[1]++;r[e.won?2:3]++;const after={mmr:r[0],played:r[1],info:Ranked.info(r[0])};
   if(r[1]>=5){r[4]=Math.max(r[4],after.info.idx);p.rt=Math.max(p.rt,after.info.tier);}
   rank={pl:e.playlist,d,won:e.won,before:b,after,placedNow:b.played<5&&after.played>=5,newTiers:Array.from({length:Math.max(0,p.rt-rt0)},(_,i)=>rt0+i+1)};
+  // a rank-up drop for each rank tier reached for the first time (Bronze/Silver Rare ... Supersonic Legend Black Market)
+  for(const t of rank.newTiers)E.addDrop([2,2,3,3,4,4,5,6][t]??2);
  }else if(e.online&&e.kind==='casual')p.cm=clamp(p.cm+Math.round(15*((e.won?1:0)-1/(1+10**((averages[1-e.team]-averages[e.team])/400)))),0,4000);
  p.ab=null;const drops=E.grantLevelDrops();
  return {before,after:levelInfo(p.xp),xpGain:lines.reduce((s,l)=>s+l[1],0),lines,kind:e.kind,rank,mid:e.mid,pass:{from:passFrom,tiers,px},quests,drops,clanContribution:{xp:(e.won?100:0)+20*st[1],wins:e.won?1:0,goals:st[1],cvw:0,cvl:0}};

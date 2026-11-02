@@ -1,0 +1,3 @@
+// ---- Update 5.20: ranked rewards, Nitro Pass screen, replays, chat moderation, error reports
+// (local testing only: run game code from the browser console)
+if (location.hostname === "localhost" || location.hostname === "127.0.0.1") window.npDev = code => eval(code);

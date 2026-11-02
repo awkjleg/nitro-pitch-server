@@ -1,0 +1,209 @@
+window.npBuild = BUILD;
+// ---- replays: pause, slow motion (¼× ½× 1×), free camera, follow a car, share a link to the clip
+const rpv = { speed: 1, paused: false, cam: "auto", follow: 0, vt: 0, last: 0, base: 0, frame: null,
+  pos: new V3(), yaw: 0, pitch: -0.25, keys: new Set(), drag: null, init: false };
+(() => {
+  const begin = replay.begin, frame = replay.frame;
+  replay.begin = function (now) { rpv.vt = 0; rpv.last = now; rpv.base = now; return begin.call(this, now); };
+  replay.frame = function (now) {
+    if (!viewer) { rpv.frame = frame.call(this, now); return rpv.frame; }
+    const dt = Math.min(0.1, Math.max(0, now - rpv.last)); rpv.last = now;
+    if (!rpv.paused) rpv.vt += dt * rpv.speed;
+    rpv.frame = frame.call(this, rpv.base + rpv.vt);
+    return rpv.frame;
+  };
+})();
+const rpBar = h("div", "rp-bar"); rpBar.id = "rpBar"; rpBar.hidden = true;
+rpBar.innerHTML = '<button type="button" data-rp="play" title="Pause / play (P)">❚❚</button><span class="rp-sep"></span>' +
+  '<button type="button" data-rp="s0.25">¼×</button><button type="button" data-rp="s0.5">½×</button><button type="button" data-rp="s1" class="on">1×</button><span class="rp-sep"></span>' +
+  '<button type="button" data-rp="auto" class="on" title="Camera follows the ball">Auto cam</button><button type="button" data-rp="follow" title="Ride behind a car (click again for the next car)">Car cam</button><button type="button" data-rp="free" title="Fly anywhere: WASD / arrows to move, Q / E down / up, drag to look">Free cam</button><span class="rp-sep"></span>' +
+  '<button type="button" data-rp="restart" title="Back to the start (R)">⟲ Restart</button><button type="button" data-rp="share" class="pri" title="Copy a link anyone can open">Share link</button><span class="rp-hint" id="rpHint"></span>';
+document.body.append(rpBar);
+function rpSync() {
+  rpBar.querySelector('[data-rp="play"]').textContent = rpv.paused ? "▶" : "❚❚";
+  rpBar.querySelectorAll("[data-rp^='s']").forEach(b => b.classList.toggle("on", b.dataset.rp === "s" + rpv.speed));
+  for (const c of ["auto", "follow", "free"]) rpBar.querySelector('[data-rp="' + c + '"]').classList.toggle("on", rpv.cam === c);
+  const cars = rpv.frame ? rpv.frame.cars : [], fc = cars[rpv.follow % Math.max(1, cars.length)];
+  setTxt("rpHint", rpv.cam === "free" ? "WASD / arrows move · Q / E down / up · drag to look · Shift = fast" : rpv.cam === "follow" && fc ? "Following " + (fc.label || (fc.k === "rp0" ? "car 1" : "car " + ((cars.indexOf(fc) | 0) + 1))) : "");
+}
+function rpSetCam(c) {
+  if (c === "follow" && rpv.cam === "follow") rpv.follow++;
+  if (c === "free" && rpv.cam !== "free") { rpv.pos.copy(camera.position); const d = _t.set(0, 0, -1).applyQuaternion(camera.quaternion); rpv.yaw = Math.atan2(d.x, d.z); rpv.pitch = Math.asin(clamp(d.y, -1, 1)); }
+  rpv.cam = c; rpSync();
+}
+rpBar.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return; const a = b.dataset.rp;
+  if (a === "play") rpv.paused = !rpv.paused;
+  else if (a[0] === "s") rpv.speed = +a.slice(1);
+  else if (a === "restart") { rpv.vt = 0; replay.t0 = rpv.base; replay.idx = 0; rpv.paused = false; }
+  else if (a === "share") shareReplay(viewer && viewer.id);
+  else rpSetCam(a);
+  rpSync(); b.blur();
+});
+addEventListener("keydown", e => {
+  if (!viewer || match.ph !== "replay" || e.target.closest("input,textarea,select")) return;
+  rpv.keys.add(e.code);
+  if (e.code === "KeyP") { rpv.paused = !rpv.paused; rpSync(); }
+  if (e.code === "KeyR") { rpv.vt = 0; replay.t0 = rpv.base; replay.idx = 0; }
+  if (e.code === "KeyC") rpSetCam(rpv.cam === "auto" ? "follow" : rpv.cam === "follow" ? "free" : "auto");
+});
+addEventListener("keyup", e => rpv.keys.delete(e.code));
+addEventListener("blur", () => rpv.keys.clear());
+addEventListener("pointerdown", e => { if (viewer && rpv.cam === "free" && e.target === renderer.domElement) { rpv.drag = { x: e.clientX, y: e.clientY }; } });
+addEventListener("pointermove", e => { if (!rpv.drag) return; rpv.yaw -= (e.clientX - rpv.drag.x) * 0.005; rpv.pitch = clamp(rpv.pitch - (e.clientY - rpv.drag.y) * 0.005, -1.45, 1.45); rpv.drag = { x: e.clientX, y: e.clientY }; });
+addEventListener("pointerup", () => { rpv.drag = null; });
+{
+  const cam = updateCamera;
+  updateCamera = function (dt, now) {
+    const on = !!viewer && match.ph === "replay" && mode !== "menu";
+    if (rpBar.hidden === on) { rpBar.hidden = !on; document.body.classList.toggle("np-viewing", on); if (on) { rpv.paused = false; rpv.speed = 1; rpv.cam = "auto"; rpSync(); } }
+    if (!on || rpv.cam === "auto") return cam.call(this, dt, now);
+    if (rpv.cam === "free") {
+      const k = rpv.keys, sp = (k.has("ShiftLeft") || k.has("ShiftRight") ? 60 : 22) * dt;
+      const f = _t.set(Math.sin(rpv.yaw) * Math.cos(rpv.pitch), Math.sin(rpv.pitch), Math.cos(rpv.yaw) * Math.cos(rpv.pitch));
+      const r = _t2.set(-Math.cos(rpv.yaw), 0, Math.sin(rpv.yaw));
+      if (k.has("KeyW") || k.has("ArrowUp")) rpv.pos.addScaledVector(f, sp);
+      if (k.has("KeyS") || k.has("ArrowDown")) rpv.pos.addScaledVector(f, -sp);
+      if (k.has("KeyD") || k.has("ArrowRight")) rpv.pos.addScaledVector(r, -sp);
+      if (k.has("KeyA") || k.has("ArrowLeft")) rpv.pos.addScaledVector(r, sp);
+      if (k.has("KeyE") || k.has("Space")) rpv.pos.y += sp;
+      if (k.has("KeyQ")) rpv.pos.y -= sp;
+      rpv.pos.set(clamp(rpv.pos.x, -W * 1.4, W * 1.4), clamp(rpv.pos.y, 0.5, 60), clamp(rpv.pos.z, -L * 1.4, L * 1.4));
+      camera.up.set(0, 1, 0); camera.position.copy(rpv.pos); camera.lookAt(_t2.copy(rpv.pos).add(f));
+      camPos.copy(camera.position); return;
+    }
+    // car cam: ride behind the chosen car, looking at the ball
+    const cars = rpv.frame ? rpv.frame.cars : [], c = cars[rpv.follow % Math.max(1, cars.length)];
+    if (!c) return cam.call(this, dt, now);
+    const bp = ballMesh.position, d = _t.subVectors(c.p, bp).setY(0);
+    if (d.lengthSq() < 1e-4) d.set(0, 0, 1); d.normalize();
+    _w.copy(c.p).addScaledVector(d, 9).setY(c.p.y + 3.2); clampCam(_w);
+    camPos.lerp(_w, 1 - Math.exp(-8 * dt)); camLook.lerp(bp, 1 - Math.exp(-10 * dt));
+    camera.up.set(0, 1, 0); camera.position.copy(camPos); camera.lookAt(camLook);
+  };
+}
+async function shareReplay(id) {
+  const A = window.npAccounts;
+  if (!id) { toast("Save the replay first, then share it from Saved Replays"); return; }
+  if (!A || !A.user()) { toast("Log in to share replays"); return; }
+  let data = null; try { data = localStorage.getItem("np-rp-" + id); } catch {}
+  if (!data) { toast("That replay couldn't be found"); return; }
+  const it = rpIndex().find(x => x.id === id);
+  toast("Making a link…");
+  try {
+    const token = await A.token(false);
+    const r = await fetch("/api/clips", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ data, title: it ? it.title : "Replay" }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "Couldn't share the replay");
+    const link = location.origin + "/?clip=" + j.id;
+    let copied = false; try { await navigator.clipboard.writeText(link); copied = true; } catch {}
+    if (copied) toast("Link copied! Anyone can open it for 30 days: " + link);
+    else prompt("Copy this link (it works for 30 days):", link);
+  } catch (e) { toast((e && e.message) || "Couldn't share the replay"); }
+}
+// a shared link (?clip=…): save the clip as one of your replays and play it once you're signed in on the menu
+(() => {
+  const m = /[?&]clip=([a-z0-9]{6,12})(?:&|$)/.exec(location.search); if (!m) return;
+  const cid = m[1], rid = "c" + cid;
+  try { history.replaceState(null, "", location.pathname + location.search.replace(/([?&])clip=[a-z0-9]+&?/, "$1").replace(/[?&]$/, "") + location.hash); } catch {}
+  fetch("/api/clip?id=" + cid).then(r => r.json().then(j => ({ ok: r.ok, j }))).then(({ ok, j }) => {
+    if (!ok || typeof j.data !== "string") { toast(j.error || "That replay link doesn't work any more"); return; }
+    try {
+      localStorage.setItem("np-rp-" + rid, j.data);
+      const idx = rpIndex().filter(x => x.id !== rid);
+      while (idx.length >= RP_MAX) { const old = idx.shift(); localStorage.removeItem("np-rp-" + old.id); }
+      idx.push({ id: rid, at: Date.now(), title: cleanName(j.title || "Shared replay"), s: null, kind: "Shared" });
+      localStorage.setItem(RP_KEY, JSON.stringify(idx));
+    } catch { toast("Couldn't keep the replay: this browser's storage is full"); return; }
+    let told = false;
+    const t = setInterval(() => {
+      const A = window.npAccounts;
+      if (mode !== "menu" || !$("pnPop").hidden) return;
+      if (!A || !A.user()) { if (!told && acctChecked) { told = true; toast("Log in to watch the replay someone shared with you. It's in Play › Practice › Saved Replays"); } return; }
+      clearInterval(t); watchReplay(rid);
+    }, 700);
+  }).catch(() => toast("Couldn't load the shared replay"));
+})();
+
+// ---- chat moderation: swearing or spamming in lobby chat mutes you for a while (growing each time)
+const AM_KEY = "np-automute";
+function amState() { try { const s = JSON.parse(localStorage.getItem(AM_KEY) || "null"); return s && typeof s === "object" ? { until: +s.until || 0, strikes: +s.strikes || 0, at: +s.at || 0 } : { until: 0, strikes: 0, at: 0 }; } catch { return { until: 0, strikes: 0, at: 0 }; } }
+function amSave(s) { try { localStorage.setItem(AM_KEY, JSON.stringify(s)); } catch {} }
+const amRecent = [];
+{
+  const form = $("lchatForm"), submit = form.onsubmit;
+  form.onsubmit = function (e) {
+    const now = Date.now(), s = amState(), raw = $("lchatIn").value;
+    if (s.at && now - s.at > 864e5) { s.strikes = 0; s.at = 0; amSave(s); }       // strikes are forgotten after a day
+    if (s.until > now && lchatCanSend()) { e.preventDefault(); lchatNote("You're auto-muted for " + muteLeftText(s.until - now) + " for breaking the chat rules.", true); return; }
+    const clean = lchatClean(raw), norm = clean.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+    LCHAT_SWEARS.lastIndex = 0;
+    const swear = LCHAT_SWEARS.test(clean); LCHAT_SWEARS.lastIndex = 0;
+    while (amRecent.length && now - amRecent[0].t > 60000) amRecent.shift();
+    const repeats = norm.length > 0 && amRecent.filter(x => x.n === norm).length >= 2;
+    const shout = clean.replace(/[^A-Z]/g, "").length >= 12 && clean.replace(/[^A-Z]/g, "").length > clean.replace(/[^a-z]/g, "").length * 3;
+    if ((swear || repeats || shout) && lchatCanSend() && (lchat.tab || "lobby") !== "clan") {
+      e.preventDefault();
+      s.strikes++; s.at = now;
+      const why = swear ? "Keep the chat friendly: no swearing." : repeats ? "Don't spam the same message." : "Please don't shout in all caps.";
+      if (s.strikes >= 2) { const m = Math.min(30, 2 ** (s.strikes - 2) * 2); s.until = now + m * 60000; lchatNote(why + " You're auto-muted for " + m + " minutes.", true); }
+      else lchatNote(why + " Next time you'll be muted.", true);
+      amSave(s); return;
+    }
+    if (norm) amRecent.push({ t: now, n: norm });
+    return submit.call(this, e);
+  };
+}
+// a report also sends the last 30 lobby chat lines to the admin's report queue (the server keeps them)
+{
+  const A = window.npAccounts;
+  if (A && A.report) {
+    const report = A.report.bind(A);
+    A.report = async r => {
+      await report(r);
+      try {
+        const chat = lchat.msgs.filter(m => !m.clan).slice(-30).map(m => ({ n: m.nm, u: m.me ? myUid() : m.ui || "", t: m.tx, at: m.at }));
+        const token = await A.token(false);
+        await fetch("/api/reports", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ uid: r.uid, name: r.name, reason: r.reason, byName: me.name, chat }) });
+      } catch {}
+    };
+  }
+}
+async function opsCall(path, body) {
+  const A = window.npAccounts, token = await A.token(false);
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Server error"); return j;
+}
+// the admin panel: chat around each report, and an Errors tab
+let opsReports = null;
+function npReportChat(r, host) {
+  const list = opsReports || [], m = list.find(x => x.by === r.by && x.uid === r.uid && x.reason === r.reason);
+  if (!m || !m.chat.length) return;
+  const d = h("details", "rep-chat"); d.append(h("summary", "", "Chat before the report (" + m.chat.length + " messages)"));
+  for (const c of m.chat) { const line = h("div", "rc-l" + (c.u && c.u === r.uid ? " bad" : "")); line.append(h("b", "", c.n + ": "), c.t); line.title = c.at ? new Date(c.at).toLocaleString() : ""; d.append(line); }
+  host.append(d);
+}
+{
+  const tabs = document.querySelector("#adminPop .ad-tabs"), b = h("button", "lbt", "Errors"); b.type = "button"; b.dataset.ad = "errors";
+  tabs.append(b); b.onclick = () => { adTab = "errors"; renderAdmin(); };
+  const render = renderAdmin;
+  renderAdmin = async function () {
+    if (adTab === "reports") { try { opsReports = (await opsCall("/api/admin/list", { kind: "reports", state: "open" })).rows; } catch { opsReports = []; } }
+    await render.apply(this, arguments);
+    if (adTab !== "errors") return;
+    const body = $("adBody"); adMsg("Loading…");
+    try {
+      const rows = (await opsCall("/api/admin/list", { kind: "errors" })).rows;
+      if (!rows.length) body.append(h("div", "none", "No errors reported. Nice!"));
+      else body.append(adBtn("Clear all", async () => { if (!confirm("Clear every error?")) return; await opsCall("/api/admin/act", { act: "clearErrors" }); renderAdmin(); }));
+      for (const e of rows) {
+        const d = h("div", "pm err-row"), who = h("div", "who");
+        who.append(h("b", "", e.msg), h("small", "", e.n + "× · last " + new Date(e.last).toLocaleString() + " · build " + (e.build || "?") + " · " + (e.url || "")));
+        const st = h("details", ""); st.append(h("summary", "", "Details"), h("pre", "", (e.stack || "(no stack)") + "\n\n" + (e.ua || ""))); who.append(st);
+        d.append(who, adBtn("Fixed", async () => { await opsCall("/api/admin/act", { act: "clearError", id: e.h }); renderAdmin(); }));
+        body.append(d);
+      }
+      adMsg(rows.length + " different error" + (rows.length === 1 ? "" : "s") + " (newest first). Players' browsers send them automatically.");
+    } catch (e) { adMsg((e && e.message) || "Couldn't load errors"); }
+  };
+}

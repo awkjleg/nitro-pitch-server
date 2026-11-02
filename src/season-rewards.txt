@@ -1,0 +1,100 @@
+// ---- Ranked rewards: a Career tab with every rank's rewards, best rank at the top
+const RR_DROP = [2, 2, 3, 3, 4, 4, 5, 6];      // the rank-up drop's rarity for each tier (the server grants it)
+(() => {
+  const tabs = document.querySelector("#career .ctabs");
+  const tb = h("button", "ctab", "Ranked rewards"); tb.type = "button"; tb.dataset.ct = "rr"; tb.setAttribute("role", "tab");
+  tabs.insertBefore(tb, tabs.querySelector('[data-ct="lb"]'));
+  const panel = h("div", "rr-wrap"); panel.id = "cRR"; panel.hidden = true; $("cClan").after(panel);
+  document.querySelectorAll(".ctab[data-ct]").forEach(b => { if (b === tb) return; const o = b.onclick; b.onclick = () => { panel.hidden = true; o && o.call(b); }; });
+  tb.onclick = () => {
+    document.querySelectorAll(".ctab[data-ct]").forEach(x => x.classList.toggle("on", x === tb));
+    document.querySelector("#career .cgrid").hidden = true; $("cLb").hidden = true; $("cClan").hidden = true;
+    panel.hidden = false; renderRankedRewards();
+  };
+  const career = renderCareer;
+  renderCareer = function () { career.apply(this, arguments); if (!panel.hidden) renderRankedRewards(); };
+})();
+const topRankOf = t => { let k = -1; Ranked.RANKS.forEach((r, i) => { if (r.tier === t) k = i; }); return k; };
+function rrItem(thumb, name, kind, open) {
+  const d = h("div", "rr-it" + (open ? " click" : ""));
+  const th = h("div", "rr-th"); th.append(thumb);
+  d.append(th, h("b", "", name), h("small", "", kind));
+  if (open) { d.tabIndex = 0; d.title = "Open in the garage"; d.onclick = open; }
+  return d;
+}
+function renderRankedRewards() {
+  const box = $("cRR"); if (!box) return;
+  box.innerHTML = "";
+  const rt = fin(profile.rt) ? profile.rt : -1, cur = bestPlacedTier();
+  const head = h("div", "panel rr-head");
+  const hi = h("div", "rr-hi");
+  const em = new Image(); em.alt = ""; em.src = Ranked.emblemURL(rt >= 0 ? topRankOf(rt) : -1, 160); em.className = "rr-hemb";
+  const txt = h("div", "");
+  txt.append(h("small", "", "Season 1 · ranked rewards"), h("h2", "", rt >= 0 ? "Best rank: " + Ranked.TIERS[rt].name : "Not ranked yet"),
+    h("p", "", "Reach a rank in any playlist (Duel, Doubles or Standard) to unlock its rewards for good: a decal, a title or banner, a rank-up drop and a bigger XP bonus on every match."));
+  hi.append(em, txt);
+  const bonus = h("div", "rr-bonus");
+  bonus.append(h("b", "", cur >= 0 ? "+" + Math.round((Ranked.xpMult(cur) - 1) * 100) + "%" : "+0%"), h("small", "", "XP bonus now"));
+  head.append(hi, bonus); box.append(head);
+  const open = (kind, i) => () => { gTab = kind; gSel = i; showScreen("garage"); };
+  for (let t = 7; t >= 0; t--) {
+    const T = Ranked.TIERS[t], got = rt >= t;
+    const row = h("div", "rr-row" + (got ? " got" : "") + (t === rt ? " cur" : "") + (t === rt + 1 ? " next" : ""));
+    row.style.setProperty("--tc", T.color); row.style.setProperty("--td", T.dark);
+    const side = h("div", "rr-side");
+    const im = new Image(); im.alt = ""; im.src = Ranked.emblemURL(topRankOf(t), 128);
+    side.append(im, h("div", "rr-name", T.name), h("div", "rr-st", got ? "✓ Unlocked" : t === rt + 1 ? "Next rank" : "🔒 Locked"));
+    const items = h("div", "rr-items");
+    const di = DECALS.findIndex(d => d.tier === t);
+    if (di >= 0) { const cv = document.createElement("canvas"); cv.width = 160; cv.height = 100; drawDecal(cv.getContext("2d"), 160, 100, di, 0); items.append(rrItem(cv, DECALS[di].name, "Decal", got && open("decal", di))); }
+    TITLES.forEach((x, i) => { if (x.tier === t) { const w = h("div", "rr-tt"), s = h("span", "ptitle" + (x.g ? " glow" : ""), x.name); s.style.setProperty("--tc", x.col); w.append(s); items.append(rrItem(w, x.name, "Title", got && open("title", i))); } });
+    BANNERS.forEach((x, i) => { if (x.tier === t) { const w = h("div", "rr-bn"); w.style.background = x.bg; items.append(rrItem(w, x.name, "Player banner", got && open("banner", i))); } });
+    items.append(rrItem(dropThumb(RR_DROP[t]), RARITIES[RR_DROP[t]][0] + " drop", "Rank-up drop"));
+    const m = Math.round((Ranked.xpMult(t) - 1) * 100);
+    if (m > 0) items.append(rrItem(h("div", "rr-xp", "+" + m + "%"), "XP bonus", "Every match"));
+    row.append(side, items); box.append(row);
+  }
+  box.append(h("div", "note", "Rank-up drops are given the first time you reach each rank (from this update on). Open them in Nitro Pass › Drops."));
+}
+
+// ---- Nitro Pass: a bigger header with the next reward, a progress rail under the track, arrows and milestones
+(() => {
+  const top = document.querySelector("#pass .np-top");
+  const prev = h("div", "np-nextbox"); prev.id = "npNextBox"; top.append(prev);
+  const bar = h("div", "np-trackbar");
+  const left = h("button", "np-arrow", "‹"), right = h("button", "np-arrow", "›"), jump = h("button", "sbtn xs", "");
+  left.type = right.type = jump.type = "button"; left.setAttribute("aria-label", "Earlier tiers"); right.setAttribute("aria-label", "Later tiers");
+  jump.append(h("span", "", "Current tier"));
+  const tr = $("npRewards");
+  left.onclick = () => tr.scrollBy({ left: -tr.clientWidth * 0.8, behavior: "smooth" });
+  right.onclick = () => tr.scrollBy({ left: tr.clientWidth * 0.8, behavior: "smooth" });
+  jump.onclick = () => { const c = tr.querySelector(".np-card.cur"); if (c) tr.scrollTo({ left: c.offsetLeft - tr.offsetLeft - 40, behavior: "smooth" }); };
+  const lab = h("span", "np-tbl", "");
+  bar.append(lab, h("span", "np-sp", ""), jump, left, right);
+  tr.before(bar);
+  tr.addEventListener("wheel", e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tr.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+  const pass = renderPass;
+  renderPass = function () {
+    pass.apply(this, arguments);
+    const t = passTier(), max = t >= PASS_TIERS;
+    bar.hidden = passTab !== "rewards";
+    let got = 0; for (let k = 1; k <= t; k++) if (passReward(k)[0].kind !== "xp") got++;
+    let all = 0; for (let k = 1; k <= PASS_TIERS; k++) if (passReward(k)[0].kind !== "xp") all++;
+    lab.textContent = got + " / " + all + " items unlocked";
+    prev.innerHTML = "";
+    if (max) { prev.append(h("small", "", "Season complete"), h("b", "", "Every reward unlocked")); return; }
+    const rw = passReward(t + 1)[0], th = h("div", "np-nth");
+    if (rw.kind === "xp") th.append(h("b", "np-xp", "+" + rw.xp));
+    else if (rw.kind === "drop") th.append(dropThumb(rw.rar));
+    else th.append(itemThumb(rw.kind, rw.i));
+    if (rw.kind !== "xp") prev.style.setProperty("--rar", RARITIES[rw.kind === "drop" ? rw.rar : (listOf(rw.kind)[rw.i] || {}).rar || 0][1]);
+    const tx = h("div", "np-ntx");
+    tx.append(h("small", "", "Next · tier " + (t + 1)), h("b", "", rw.name), h("span", "", kindName(rw.kind)));
+    prev.append(th, tx);
+  };
+  const track = renderPassTrack;
+  renderPassTrack = function (t) {
+    track.apply(this, arguments);
+    [...$("npRewards").children].forEach((c, i) => { const k = i + 1; if (k % 10 === 0) c.classList.add("ms"); if (k === t + 1) c.classList.add("nx"); });
+  };
+})();

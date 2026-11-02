@@ -4,6 +4,8 @@
 // waking, it restores socket identity records and asks clients to refresh any large presence payloads.
 export { Room } from "./room.js";
 import {progressFetch} from './progress.js';
+import {opsFetch} from './ops.js';
+export {Ops} from './ops.js';
 export {Progress} from './progress.js';
 import { applyGameFixes } from "./game-shell.js";
 import { migrationFetch } from "./domain-migration.js";
@@ -16,6 +18,7 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     const progress=await progressFetch(req,env);if(progress)return progress;
+    const ops=await opsFetch(req,env);if(ops)return ops;
     const migration = await migrationFetch(req, env);
     if (migration) return migration;
     if (url.pathname === "/ws") {
@@ -40,7 +43,7 @@ export default {
         })
         .on("head", {
           element(element) {
-            element.prepend('<script src="/cookie-consent.js" data-ad-client="ca-pub-3345250551146308"></script>', { html: true });
+            element.prepend('<script src="/error-report.js"></script><script src="/cookie-consent.js" data-ad-client="ca-pub-3345250551146308"></script>', { html: true });
           }
         }).transform(gameAsset);
       const response = new Response(transformed.body, transformed);
@@ -48,7 +51,7 @@ export default {
       response.headers.delete("Content-Length");
       response.headers.set("Cache-Control", "no-store");
       response.headers.set("X-Nitropitch-Consent", "v1");
-      response.headers.set("X-Nitropitch-Build", "2026111017");
+      response.headers.set("X-Nitropitch-Build", "2026111018");
       return response;
     }
     return env.ASSETS.fetch(req);

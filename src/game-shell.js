@@ -8,6 +8,9 @@ import gamePolish from "./game-polish.txt";
 import drivingUpdates from "./driving-updates.txt";
 import playerFeatures from "./player-features.txt";
 import inviteAlerts from "./invite-alerts.txt";
+import seasonUpdate from "./season-update.txt";
+import seasonRewards from "./season-rewards.txt";
+import seasonTools from "./season-tools.txt";
 // The original game is a single prebuilt HTML asset. Keep the small, reviewed
 // compatibility changes here while the asset stays unchanged. Test these anchors
 // whenever replacing public/index.html with a new game build.
@@ -18,7 +21,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111017;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111018;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -70,7 +73,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.19\",\n  \"title\": \"Update 5.19: Tougher climb, tougher bots\",\n  \"notes\": [\n    \"Wall driving and high aerials no longer tilt the camera. The horizon stays level.\",\n    \"Ranked: the higher your rank, the less MMR a win gives. Full gains up to Gold, under half at Supersonic Legend. Losses are unchanged, so climbing high takes real wins.\",\n    \"Bots are better at every rank: faster reactions, cleaner touches and more aerials, with the biggest step up at the top ranks. Exhibition Rookie, Pro and All-Star bots are tougher too.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.20\",\n  \"title\": \"Update 5.20: Ranked rewards, new Nitro Pass and replay tools\",\n  \"notes\": [\n    \"Ranked rewards: a new Career \u203a Ranked rewards tab shows every rank's rewards from Bronze to Supersonic Legend.\",\n    \"New rank titles (Bronze Grinder, Silver Striker, Golden Touch, Platinum Pilot, Diamond Driver) and new rank banners from Bronze Plate up to Supersonic Legend.\",\n    \"Rank-up drops: the first time you reach each rank you get a drop. Higher ranks give rarer drops, up to Black Market at Supersonic Legend.\",\n    \"Nitro Pass has a new look: a bigger header with your next reward, a progress rail under the tiers, a star on every 10th tier, arrows and a Current tier button.\",\n    \"Saved replays: pause, \u00bc\u00d7 and \u00bd\u00d7 slow motion, restart, and three cameras: Auto, Car cam and Free cam (WASD / arrows to fly, Q / E down / up, drag to look).\",\n    \"Share link: copy a link to any saved replay. Anyone can watch it for 30 days.\",\n    \"Chat: swearing, spamming the same message or shouting in all caps gets a warning, then an automatic mute that grows each time.\",\n    \"Reports now include the chat before them, so the admin can see what happened.\",\n    \"Game errors are sent to the admin automatically so bugs get fixed faster.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -94,7 +97,7 @@ const patches = [
   },
   {
     "before": "requestAnimationFrame(frame);\n})();\n</script>",
-    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n/* NP_MATCH_EXPERIENCE */\n/* NP_PHONE_CONTROLS */\n/* NP_CLAN_EMBLEMS */\n/* NP_MOBILE_MENUS */\n/* NP_INVITE_ALERTS */\n})();\n</script>"
+    "after": "requestAnimationFrame(frame);\n/* NP_DRIVING_UPDATES */\n/* NP_SECURE_PROGRESS */\n/* NP_PLAYER_FEATURES */\n/* NP_GAME_POLISH */\n/* NP_MATCH_EXPERIENCE */\n/* NP_PHONE_CONTROLS */\n/* NP_CLAN_EMBLEMS */\n/* NP_MOBILE_MENUS */\n/* NP_INVITE_ALERTS */\n/* NP_SEASON_UPDATE */\n})();\n</script>"
   },
   {
     "before": "<button class=\"nb\" id=\"navSettings\" type=\"button\">",
@@ -319,6 +322,18 @@ const patches = [
   {
     "before": "const BOT_DF = [0.55, 0.8, 1];",
     "after": "const BOT_DF = [0.6, 0.88, 1.08];"
+  },
+  {
+    "before": "  { name: \"ADMIN\", col: \"#ff2a2a\", admin: true, g: 2 }\n",
+    "after": "  { name: \"ADMIN\", col: \"#ff2a2a\", admin: true, g: 2 },\n  { name: \"Bronze Grinder\", col: \"#d9925a\", u: \"t0\", g: 1 },\n  { name: \"Silver Striker\", col: \"#c9d2df\", u: \"t1\", g: 1 },\n  { name: \"Golden Touch\", col: \"#ffcf4a\", u: \"t2\", g: 1 },\n  { name: \"Platinum Pilot\", col: \"#5fe3d8\", u: \"t3\", g: 1 },\n  { name: \"Diamond Driver\", col: \"#5cb8ff\", u: \"t4\", g: 1 }\n"
+  },
+  {
+    "before": "  { name: \"ADMIN\", bg: \"repeating-linear-gradient(135deg,#1a0000 0 10px,#2b0000 10px 20px),linear-gradient(90deg,#000,#5a0000)\", admin: true, glow: 1 }\n",
+    "after": "  { name: \"ADMIN\", bg: \"repeating-linear-gradient(135deg,#1a0000 0 10px,#2b0000 10px 20px),linear-gradient(90deg,#000,#5a0000)\", admin: true, glow: 1 },\n  { name: \"Bronze Plate\", bg: \"linear-gradient(100deg,#2a1206,#8a4a22 40%,#e3a06a 50%,#8a4a22 60%,#2a1206)\", u: \"t0\" },\n  { name: \"Silver Shine\", bg: \"linear-gradient(100deg,#1b2029,#6d7888 40%,#eef3fa 50%,#6d7888 60%,#1b2029)\", u: \"t1\" },\n  { name: \"Gold Medal\", bg: \"radial-gradient(circle at 12% 50%,#fff3b0 0,#ffcf4a 10%,transparent 28%),linear-gradient(100deg,#3a2600,#b88a12 45%,#ffe27a 52%,#3a2600)\", u: \"t2\" },\n  { name: \"Platinum Edge\", bg: \"linear-gradient(120deg,transparent 0 46%,rgba(255,255,255,.55) 48%,transparent 52%),linear-gradient(100deg,#062a2e,#1d8f8a 45%,#9ff5ec 52%,#062a2e)\", u: \"t3\" },\n  { name: \"Diamond Cut\", bg: \"conic-gradient(from 45deg at 20% 50%,#0d2a66,#5cb8ff,#d6efff,#5cb8ff,#0d2a66) 0 0/48px 100%,linear-gradient(90deg,#071a3f,#123a8a)\", u: \"t4\" },\n  { name: \"Supersonic Legend\", bg: \"radial-gradient(circle at 30% 40%,rgba(255,255,255,.9) 0 1px,transparent 2px) 0 0/19px 13px,linear-gradient(100deg,#1a1f33,#8d98b8 40%,#ffffff 50%,#8d98b8 60%,#1a1f33)\", u: \"t7\", glow: 1 }\n"
+  },
+  {
+    "before": "        if (r.text) who.append(h(\"div\", \"\", \"Message: \\u201c\" + r.text + \"\\u201d\"));\n",
+    "after": "        if (r.text) who.append(h(\"div\", \"\", \"Message: \\u201c\" + r.text + \"\\u201d\"));\n        if (typeof npReportChat === \"function\") npReportChat(r, who);\n"
   }
 ];
 
@@ -330,5 +345,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts);
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools].join("\n"));
 }
