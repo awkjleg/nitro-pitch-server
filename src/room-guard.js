@@ -1,5 +1,7 @@
 // Bounds are deliberately wider than normal physics to allow latency, rumble and goal blasts.
 // This rejects malformed/impossible reports; simulation still runs on the elected player's client.
+// match lengths by match.mut[0], in seconds: the same table as the game's LENGTHS (index 0, the default, is 3 minutes)
+export const MATCH_SECONDS=[180,300,600,Infinity];
 const finite=(v,limit)=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=limit;
 export function validCar(c){return c==null||(Array.isArray(c)&&c.length>=12&&c.length<=40&&c.every(x=>typeof x==='number'&&Number.isFinite(x))&&c.slice(0,3).every(x=>finite(x,350))&&c.slice(3,7).every(x=>finite(x,1.01))&&Math.hypot(...c.slice(3,7))>.8&&Math.hypot(...c.slice(3,7))<1.2&&c.slice(7,10).every(x=>finite(x,180)));}
 export function validGame(g){
@@ -19,7 +21,7 @@ export function resultEvidence(record,uid,now=Date.now()){
  const member=record.roster.find(x=>x.uid===uid);if(!member)throw new Error('You were not in this match');
  if(record.ended-record.started<20000)throw new Error('Match was too short for rewards');
  const g=record.final,elapsed=(record.ended-record.started)/1000;
- const limit=[300,180,600,Infinity][g.mut[0]]??300;
+ const limit=MATCH_SECONDS[g.mut[0]]??180;
  if(!g.ot&&g.tl>1&&!(g.rk&&Math.abs(g.s[0]-g.s[1])>=5)&&!record.forfeit)throw new Error('Match did not finish normally');
  if(!g.ot&&g.tl<=1&&elapsed+20<limit)throw new Error('Match clock did not match the server');
  const winner=g.s[0]===g.s[1]?-1:g.s[0]>g.s[1]?0:1;

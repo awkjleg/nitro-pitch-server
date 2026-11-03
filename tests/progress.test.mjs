@@ -5,14 +5,15 @@ import {readFile} from 'node:fs/promises';
 import {catalog,Ranked,economy,levelInfo} from '../src/reward-rules.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent,SNOW_START,ADVENT} from '../src/snowdrift.js';
 import {ApiError,reply} from '../src/firebase-auth.js';
-import {validCar,validGame,validHit,resultEvidence} from '../src/room-guard.js';
+import {validCar,validGame,validHit,resultEvidence,MATCH_SECONDS} from '../src/room-guard.js';
+import {readFileSync} from 'node:fs';
 const source=(await readFile(new URL('../src/progress.js',import.meta.url),'utf8')).replace(/^import .*;$/gm,'').replaceAll('export ','');
 async function fixture(raw={}){
  let now=1800000000000;const data=new Map(),docs=new Map([['players/a',raw],['players/b',raw]]);
  const clone=v=>v===undefined?undefined:structuredClone(v);
  const storage={get:async k=>clone(data.get(k)),put:async(k,v)=>data.set(k,clone(v)),list:async({prefix})=>new Map([...data].filter(([k])=>k.startsWith(prefix))),transaction:async fn=>{const snapshot=clone(data);try{return await fn(storage);}catch(e){data.clear();for(const[k,v]of snapshot)data.set(k,v);throw e;}}};
  const ctx={storage},env={ROOMS:{idFromName:x=>x,get:()=>({fetch:async()=>Response.json({mid:'online1',st:[200,1,0,0,1,0],score:[1,0],won:true,mvp:true,online:true,ranked:true,playlist:1,team:0,kind:'ranked',roster:[{uid:'a',team:0},{uid:'b',team:1}],elapsed:300})})}};
- const c=vm.createContext({cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
+ const c=vm.createContext({MATCH_SECONDS,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
  vm.runInContext(source+'\nglobalThis.Progress=Progress;globalThis.cleanProfile=cleanProfile;',c);const ledger=new c.Progress(ctx,env);
  return {data,docs,env,ledger,advance:ms=>now+=ms,clean:c.cleanProfile,async call(action,b={},uid='a'){const response=await ledger.fetch(new Request('https://progress/action',{method:'POST',body:JSON.stringify({body:{action,...b},user:{uid,username:uid},token:'test'})}));return {status:response.status,...await response.json()};}};
 }
@@ -33,14 +34,14 @@ test('trade-ins reject repeated indices without consuming anything',async()=>{
 });
 test('practice rewards require a registered timed session and never grant competitive rank',async()=>{
  const f=await fixture({dlv:1});await f.call('load');const result={id:'pay',mid:'practice',score:[2,1],st:[200,2,0,0,2,0],mvp:true};
- assert.equal((await f.call('match',result)).status,409);await f.call('session-start',{id:'s',mid:'practice',mut:[1,0,0,0,0,0,0]});assert.equal((await f.call('match',result)).status,422);
+ assert.equal((await f.call('match',result)).status,409);await f.call('session-start',{id:'s',mid:'practice',mut:[0,0,0,0,0,0,0]});assert.equal((await f.call('match',result)).status,422);
  for(let i=0;i<18;i++){f.advance(10000);assert.equal((await f.call('session-tick',{id:'tick'+i,mid:'practice'})).status,200);}
  const r=await f.call('match',result);assert.equal(r.status,200);assert(r.result.xpGain>0);assert.equal(r.result.rank,null);assert.equal(r.profile.rk[0].p,0);
  const duplicate=await f.call('match',result);assert.equal(duplicate.profile.games,1);assert.deepEqual(duplicate.result,r.result);
 });
 test('a ranked match filled with bots counts for rank at your own MMR',async()=>{
  const f=await fixture({dlv:1});await f.call('load');const result={id:'pay-rk',mid:'botranked',score:[3,1],st:[300,3,0,0,4,0],mvp:true};
- await f.call('session-start',{id:'s-rk',mid:'botranked',mut:[1,0,0,0,0,0,0],rk:1,pl:2});
+ await f.call('session-start',{id:'s-rk',mid:'botranked',mut:[0,0,0,0,0,0,0],rk:1,pl:2});   // the default 3-minute match
  for(let i=0;i<18;i++){f.advance(10000);assert.equal((await f.call('session-tick',{id:'tk'+i,mid:'botranked'})).status,200);}
  const r=await f.call('match',result);assert.equal(r.status,200);assert(r.result.rank);assert.equal(r.result.rank.pl,2);assert(r.result.rank.d>0);assert.equal(r.profile.rk[1].p,1);
 });
@@ -115,4 +116,20 @@ test('mixed ranked matches: a guest team confirms by place in the match, and is 
  assert.throws(()=>resultEvidence(r,'ua',301000),/Waiting/);
  r.acks.push('g:pg');assert.equal(resultEvidence(r,'ua',301000).ranked,true);
  r.acks=['ua'];const late=resultEvidence(r,'ua',400000);assert.equal(late.ranked,false);assert.equal(late.won,true);
+});
+
+test('match lengths match the game: a 3-minute match counts, five ranked wins move the rank',async()=>{
+ const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8'),m=html.match(/const LENGTHS = \[([^\]]+)\]/);
+ assert.deepEqual(m[1].split(',').map(x=>x.trim()==='Infinity'?Infinity:Number(x)),MATCH_SECONDS);
+ const f=await fixture({dlv:1});await f.call('load');let mmr=null;
+ for(let g=0;g<5;g++){
+  const mid='rk5-'+g;await f.call('session-start',{id:'s'+mid,mid,mut:[0,0,0,0,0,0,0],rk:1,pl:1});
+  for(let i=0;i<17;i++){f.advance(10000);await f.call('session-tick',{id:'t'+mid+i,mid});}
+  const r=await f.call('match',{id:'p'+mid,mid,score:[3,1],st:[300,2,0,0,3,0]});assert.equal(r.status,200,JSON.stringify(r));assert(r.result.rank.d>0);mmr=r.profile.rk[0].m;f.advance(25000);
+ }
+ assert(mmr>=590,'five wins from 500 should climb about 100 MMR, got '+mmr);
+});
+test('online: a normal 3-minute match passes the clock check',()=>{
+ const r={room:'np-m-x',mid:'m',started:1000,ended:181000,roster:[{id:'a',uid:'ua',team:0},{id:'b',uid:'ub',team:1}],acks:['ua','ub'],final:{s:[2,1],st:{a:[150,1,0,0,1,0]},mut:[0,0,0,0,0,0,0],rk:1,pl:1,mm:1,tl:0,ot:false}};
+ assert(resultEvidence(r,'ua',182000).ranked);
 });
