@@ -26,6 +26,9 @@ def sub(old, new, count=None, must=True):
     html = html.replace(old, new)
 
 # ---- no ads, cookie banner, error reports or terms pop-up (CrazyGames serves its own ads through its SDK)
+# Nitro 2D is website only: drop its whole block
+html, n2d = re.subn(r'/\* NP2D-START.*?/\* NP2D-END \*/', '', html, flags=re.S)
+assert n2d == 1, 'Nitro 2D block not found'
 html = re.sub(r'<script src="/error-report\.js"></script>', '', html)
 html = re.sub(r'<script src="/cookie-consent\.js"[^>]*></script>', '', html)
 html = re.sub(r'<script[^>]*pagead2\.googlesyndication\.com[^>]*></script>', '', html)
