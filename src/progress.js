@@ -4,7 +4,7 @@ import {catalog,Ranked,economy,levelInfo} from './reward-rules.js';
 import {questDropRar,MATCH_DROP_CHANCE,matchDropRar} from './quest-drops.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent} from './snowdrift.js';
 import {paintedDrop,PAINTED_DROP_CHANCE,migratePainted} from './paints.js';
-import {badName,safeName} from './moderation.js';
+import {badName,safeName,filterText} from './moderation.js';
 import {MATCH_SECONDS} from './room-guard.js';
 const ID=/^[A-Za-z0-9_-]{1,128}$/, midOK=/^[A-Za-z0-9_-]{1,80}$/;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -114,6 +114,26 @@ export class Progress extends DurableObject{
    const field=b.field;const rows=new Map(legacy.map(x=>[x.uid,x]));let after;
    do{const page=await this.ctx.storage.list({prefix:'lb:',limit:1000,...(after?{startAfter:after}:{})});for(const[key,row]of page){rows.set(row.uid,row);after=key;}if(page.size<1000)break;}while(true);
    return reply({rows:[...rows.values()].filter(row=>field!=='level'||Number.isInteger(row.level)&&row.level>=1&&row.level<=100).sort((a,b)=>b[field]-a[field]||a.uid.localeCompare(b.uid)).slice(0,clamp(n(b.limit,100),1,100))});
+  }
+  // ---- private messages between accounts (pm-send, pm-inbox, pm-thread). Threads keep the last 100 messages per pair;
+  // the inbox keeps the last 60 conversations. Swears are filtered; 1 message a second, 20 a minute.
+  if(b.action==='pm-send'||b.action==='pm-inbox'||b.action==='pm-thread'){
+   const ibKey=u=>'pmi:'+u,tKey=(x,y)=>'pmt:'+[x,y].sort().join('|');
+   if(b.action==='pm-inbox'){const ib=await this.ctx.storage.get(ibKey(uid))||{};const peers=Object.entries(ib).map(([id,v])=>({id,...v})).sort((x,y)=>y.at-x.at);return reply({peers,unread:peers.reduce((n,x)=>n+(x.unread|0),0)});}
+   const other=String(b.to||b.with||'');if(!ID.test(other)||other===uid)throw new ApiError('Pick someone to message');
+   if(b.action==='pm-thread'){const msgs=await this.ctx.storage.get(tKey(uid,other))||[];const ib=await this.ctx.storage.get(ibKey(uid))||{};if(ib[other]?.unread){ib[other].unread=0;await this.ctx.storage.put(ibKey(uid),ib);}return reply({msgs});}
+   const raw=String(b.text||'').replace(/\s+/g,' ').trim().slice(0,300);if(!raw)throw new ApiError('Write a message first');
+   const q=await this.ctx.storage.get('p:'+other);if(!q)throw new ApiError("That player can't get messages yet",404);
+   const sent=(this.pmRate||(this.pmRate=new Map())).get(uid)||[],recent=sent.filter(t=>now-t<60000);
+   if(recent.length&&now-recent[recent.length-1]<1000||recent.length>=20)throw new ApiError('Slow down a little before sending more messages',429);
+   recent.push(now);this.pmRate.set(uid,recent);
+   const text=filterText(raw),msg=[uid,text,now],myName=String(p.name||'Player').slice(0,24),theirName=String(q.name||'Player').slice(0,24);
+   const msgs=(await this.ctx.storage.get(tKey(uid,other))||[]).concat([msg]).slice(-100);
+   const mine=await this.ctx.storage.get(ibKey(uid))||{},theirs=await this.ctx.storage.get(ibKey(other))||{};
+   const trim=ib=>Object.fromEntries(Object.entries(ib).sort((x,y)=>y[1].at-x[1].at).slice(0,60));
+   mine[other]={n:theirName,last:text,at:now,unread:0,me:true};theirs[uid]={n:myName,last:text,at:now,unread:Math.min(99,(theirs[uid]?.unread|0)+1),me:false};
+   await this.ctx.storage.transaction(async tx=>{await tx.put(tKey(uid,other),msgs);await tx.put(ibKey(uid),trim(mine));await tx.put(ibKey(other),trim(theirs));});
+   return reply({ok:true,msg});
   }
   if(b.action==='leaderboard-get'){if(!ID.test(b.uid||''))throw new ApiError('Invalid player');return reply({row:await this.ctx.storage.get('lb:'+b.uid)||null});}
   // Idempotency keys survive refreshes and retrying a lost response.

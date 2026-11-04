@@ -1,0 +1,139 @@
+// Private messages between players (the server keeps them: /api/progress pm-send, pm-inbox, pm-thread). An envelope
+// button in the top bar opens your conversations; "Message" on a player's card starts one. New messages pop up as a
+// toast wherever you are, matches included, and as a computer notification when the game is in the background.
+(() => {
+  const api = window.NPProgressAPI;
+  if (!api) return;
+  const css = document.createElement("style");
+  css.textContent = `
+#npPmBtn{position:relative}#npPmBtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linejoin:round;stroke-linecap:round}
+#npPmBtn .np-badge{position:absolute;top:2px;right:2px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#ff4d57;color:#fff;font:700 11px/18px sans-serif;text-align:center;box-sizing:border-box}
+#npPm{position:fixed;inset:0;z-index:66;display:grid;place-items:center;background:rgba(3,6,14,.65);padding:16px}#npPm[hidden]{display:none}
+#npPm .pmc{position:relative;width:min(560px,100%);height:min(620px,calc(100dvh - 32px));background:rgba(9,15,32,.98);border:1px solid rgba(150,180,255,.3);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px;color:#e8eeff;box-sizing:border-box}
+#npPm .pmh{display:flex;align-items:center;gap:10px;padding-right:44px}#npPm .pmh b{font-family:"Russo One",Impact,sans-serif;font-size:22px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#npPm .np-x{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(150,180,255,.35);background:rgba(0,0,0,.35);color:#e8eeff;font-size:20px;cursor:pointer}
+#npPm .pml{flex:1;overflow-y:auto;display:grid;align-content:start;gap:6px}
+#npPm .pmrow{display:grid;grid-template-columns:1fr auto;gap:2px 10px;text-align:left;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(150,180,255,.15);color:inherit;font:inherit;cursor:pointer}
+#npPm .pmrow:hover,#npPm .pmrow:focus{background:rgba(90,140,255,.18)}#npPm .pmrow small{grid-column:1/-1;color:#9fb0d4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#npPm .pmrow .u{background:#ff4d57;color:#fff;border-radius:9px;padding:0 7px;font-size:12px;line-height:18px;align-self:center}
+#npPm .pmt{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:4px 2px}
+#npPm .pmm{max-width:78%;padding:8px 12px;border-radius:14px;background:rgba(255,255,255,.08);align-self:flex-start;overflow-wrap:anywhere;line-height:1.35}
+#npPm .pmm.me{align-self:flex-end;background:#2a62e6}#npPm .pmm small{display:block;font-size:11px;opacity:.65;margin-top:2px}
+#npPm .pmf{display:flex;gap:8px}#npPm .pmf input{flex:1;min-width:0;font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1px solid rgba(150,180,255,.35);background:rgba(0,0,0,.35);color:#fff}
+#npPm .none{color:#9fb0d4;text-align:center;padding:30px 10px}`;
+  document.head.append(css);
+  const myUid = () => { try { const u = window.npAccounts && window.npAccounts.user(); return u && u.uid ? String(u.uid) : ""; } catch { return ""; } };
+  const blockedIds = () => { try { return new Set((JSON.parse(localStorage.getItem("np-blocked:" + myUid()) || "[]") || []).map(x => x && x.id)); } catch { return new Set(); } };
+  const isBlocked = uid => blockedIds().has("uid:" + uid);
+  const call = (action, d = {}) => api.call(action, { id: crypto.randomUUID(), ...d });
+  const when = at => { const d = new Date(at), t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); return Date.now() - at < 864e5 ? t : d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + t; };
+
+  // ---- the top-bar button with the unread count
+  const btn = document.createElement("button"); btn.type = "button"; btn.className = "ibtn"; btn.id = "npPmBtn"; btn.title = "Messages"; btn.setAttribute("aria-label", "Messages");
+  btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5 12 13l8.5-6.5"/></svg><span class="np-badge" hidden></span>';
+  const sb = $("soundBtn"); if (sb && sb.parentNode) sb.parentNode.insertBefore(btn, sb);
+  const badge = btn.querySelector(".np-badge");
+  const setBadge = n => { badge.hidden = !n; badge.textContent = n > 9 ? "9+" : String(n); btn.setAttribute("aria-label", n ? "Messages (" + n + " unread)" : "Messages"); };
+
+  // ---- the pop-up: your conversations, or one conversation
+  const pop = document.createElement("div"); pop.id = "npPm"; pop.hidden = true; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-modal", "true"); pop.setAttribute("aria-label", "Messages");
+  pop.innerHTML = '<div class="pmc"><button class="np-x" type="button" aria-label="Close">×</button><div class="pmh"></div><div class="pmbody" style="flex:1;display:flex;flex-direction:column;gap:10px;min-height:0"></div></div>';
+  document.body.append(pop);
+  const head = pop.querySelector(".pmh"), body = pop.querySelector(".pmbody");
+  let view = null, threadT = 0, inbox = { peers: [], unread: 0 }, lastAt = -1, polling = false;
+  const close = () => { pop.hidden = true; view = null; clearInterval(threadT); };
+  pop.querySelector(".np-x").onclick = close;
+  pop.addEventListener("click", e => { if (e.target === pop) close(); });
+  // keys typed here go to the message box, not the game (no driving or menu shortcuts while it's open)
+  addEventListener("keydown", e => { if (pop.hidden || e.key !== "Escape") return; e.stopImmediatePropagation(); e.preventDefault(); if (view && view.uid) showList(); else close(); }, true);
+  for (const ev of ["keydown", "keyup", "keypress"]) pop.addEventListener(ev, e => e.stopPropagation());
+  try { POPUPS.unshift("npPm"); } catch {}
+
+  let listKey = "";
+  function showList(quiet) {
+    view = { list: true }; clearInterval(threadT); listKey = inbox.peers.length + ":" + lastAt + ":" + inbox.unread;
+    head.innerHTML = ""; head.append(h("b", "", "Messages"));
+    body.innerHTML = "";
+    const list = h("div", "pml"); body.append(list);
+    const peers = inbox.peers.filter(p => !isBlocked(p.id));
+    if (!peers.length) list.append(h("div", "none", "No messages yet. Click a player's name (in Players online, the leaderboard or a match) and press Message."));
+    for (const p of peers) {
+      const r = document.createElement("button"); r.type = "button"; r.className = "pmrow";
+      r.append(h("b", "", p.n || "Player"), p.unread ? h("span", "u", String(p.unread)) : h("span", "", when(p.at)), h("small", "", (p.me ? "You: " : "") + (p.last || "")));
+      r.onclick = () => openThread(p.id, p.n);
+      list.append(r);
+    }
+    if (!quiet) refresh();
+  }
+  async function openThread(uid, name) {
+    if (!uid || uid === myUid()) return;
+    pop.hidden = false; view = { uid, name: name || "Player" }; clearInterval(threadT);
+    head.innerHTML = "";
+    const back = adBtn("‹ Back", () => showList()); head.append(back, h("b", "", view.name));
+    body.innerHTML = "";
+    const list = h("div", "pmt"), form = h("div", "pmf"), input = document.createElement("input"), send = adBtn("Send", () => doSend(), true);
+    input.maxLength = 300; input.placeholder = "Message " + view.name; input.autocomplete = "off"; input.setAttribute("aria-label", "Message " + view.name);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); doSend(); } });
+    form.append(input, send); body.append(list, form);
+    if (isBlocked(uid)) list.append(h("div", "none", "You blocked this player. Unblock them to see their messages."));
+    let shown = "";
+    const draw = msgs => {
+      const key = msgs.length + ":" + (msgs.length ? msgs[msgs.length - 1][2] : 0); if (key === shown) return; shown = key;
+      list.innerHTML = "";
+      if (!msgs.length) list.append(h("div", "none", "Say hi to " + view.name + "!"));
+      for (const [from, text, at] of msgs) { const m = h("div", "pmm" + (from === myUid() ? " me" : "")); m.append(document.createTextNode(text), h("small", "", when(at))); list.append(m); }
+      list.scrollTop = list.scrollHeight;
+    };
+    const load = async () => { if (!view || view.uid !== uid || isBlocked(uid)) return; try { draw((await call("pm-thread", { with: uid })).msgs || []); const p = inbox.peers.find(x => x.id === uid); if (p && p.unread) { inbox.unread -= p.unread; p.unread = 0; setBadge(inbox.unread); } } catch (e) { if (!shown) list.append(h("div", "none", (e && e.message) || "Couldn't load the messages")); } };
+    async function doSend() {
+      const text = input.value.trim(); if (!text) return;
+      send.disabled = true;
+      try { await call("pm-send", { to: uid, text }); input.value = ""; await load(); refresh(); }
+      catch (e) { toast((e && e.message) || "Couldn't send the message"); }
+      finally { send.disabled = false; input.focus(); }
+    }
+    await load(); threadT = setInterval(load, 4000);
+    setTimeout(() => input.focus(), 50);
+  }
+  window.npOpenMessages = openThread;
+  btn.onclick = () => { if (!myUid()) { toast("Sign in to send and get messages."); return; } pop.hidden = false; showList(); };
+
+  // ---- new messages: checked every few seconds, matches included
+  polling = false;
+  const OKN = typeof Notification === "function" && window.isSecureContext;
+  async function refresh() {
+    if (polling || !myUid()) return; polling = true;
+    try {
+      const r = await call("pm-inbox");
+      inbox = { peers: r.peers || [], unread: 0 };
+      for (const p of inbox.peers) if (isBlocked(p.id)) p.unread = 0; else inbox.unread += p.unread | 0;
+      setBadge(inbox.unread);
+      const fresh = inbox.peers.filter(p => !p.me && p.unread && p.at > lastAt && !isBlocked(p.id) && !(view && view.uid === p.id && !pop.hidden));
+      if (lastAt >= 0) for (const p of fresh.slice(0, 3)) {
+        toast("💬 " + p.n + ": " + String(p.last || "").slice(0, 80));
+        if (OKN && Notification.permission === "granted" && (document.hidden || !document.hasFocus())) {
+          try { const n = new Notification(p.n + " sent you a message", { body: String(p.last || "").slice(0, 120), tag: "np-pm-" + p.id, icon: "/nitro-pitch-icon.png" }); n.onclick = () => { window.focus(); n.close(); openThread(p.id, p.n); }; setTimeout(() => n.close(), 30000); } catch {}
+        }
+      }
+      lastAt = Math.max(lastAt, ...inbox.peers.map(p => p.at || 0), 0);
+      if (view && view.list && !pop.hidden && listKey !== inbox.peers.length + ":" + lastAt + ":" + inbox.unread) showList(true);
+    } catch {} finally { polling = false; }
+  }
+  setInterval(() => { if (myUid() && !(typeof isBanned !== "undefined" && isBanned)) refresh(); }, 8000);
+  setTimeout(refresh, 3000);
+
+  // ---- "Message" on a player's card
+  const ss = showStats;
+  showStats = function (e) {
+    const r = ss.apply(this, arguments);
+    try {
+      const old = document.getElementById("npPmCard"); if (old) old.remove();
+      const uid = e && !e.me && (e.uid || (e.pr && e.pr.ui));
+      if (uid && typeof uid === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(uid) && uid !== myUid() && myUid()) {
+        const b = adBtn("Message", () => { $("statsPop").hidden = true; openThread(uid, e.name); }); b.id = "npPmCard";
+        const ok = $("spOk"); ok.parentNode.insertBefore(b, ok); ok.parentNode.style.gap = "8px";
+      }
+    } catch {}
+    return r;
+  };
+})();

@@ -6,7 +6,7 @@ import {catalog,Ranked,economy,levelInfo} from '../src/reward-rules.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent,SNOW_START,ADVENT} from '../src/snowdrift.js';
 import {ApiError,reply} from '../src/firebase-auth.js';
 import * as Paints from '../src/paints.js';
-import {badName,safeName} from '../src/moderation.js';
+import {badName,safeName,filterText} from '../src/moderation.js';
 import * as QuestDrops from '../src/quest-drops.js';
 import {validCar,validGame,validHit,resultEvidence,MATCH_SECONDS} from '../src/room-guard.js';
 import {readFileSync} from 'node:fs';
@@ -16,7 +16,7 @@ async function fixture(raw={}){
  const clone=v=>v===undefined?undefined:structuredClone(v);
  const storage={get:async k=>clone(data.get(k)),put:async(k,v)=>data.set(k,clone(v)),list:async({prefix})=>new Map([...data].filter(([k])=>k.startsWith(prefix))),transaction:async fn=>{const snapshot=clone(data);try{return await fn(storage);}catch(e){data.clear();for(const[k,v]of snapshot)data.set(k,v);throw e;}}};
  const ctx={storage},env={ROOMS:{idFromName:x=>x,get:()=>({fetch:async()=>Response.json({mid:'online1',st:[200,1,0,0,1,0],score:[1,0],won:true,mvp:true,online:true,ranked:true,playlist:1,team:0,kind:'ranked',roster:[{uid:'a',team:0},{uid:'b',team:1}],elapsed:300})})}};
- const c=vm.createContext({MATCH_SECONDS,...Paints,...QuestDrops,badName,safeName,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
+ const c=vm.createContext({MATCH_SECONDS,...Paints,...QuestDrops,badName,safeName,filterText,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
  vm.runInContext(source+'\nglobalThis.Progress=Progress;globalThis.cleanProfile=cleanProfile;',c);const ledger=new c.Progress(ctx,env);
  return {data,docs,env,ledger,advance:ms=>now+=ms,clean:c.cleanProfile,async call(action,b={},uid='a'){const response=await ledger.fetch(new Request('https://progress/action',{method:'POST',body:JSON.stringify({body:{action,...b},user:{uid,username:uid},token:'test'})}));return {status:response.status,...await response.json()};}};
 }
@@ -196,4 +196,13 @@ test('the admin can see a player\'s items and take one away; nobody else can',as
  const t=await f.call('admin-take',{id:'t1',uid:'b',kind:'body',i:9},'admin');assert(t.taken);
  assert.deepEqual((await f.call('load',{},'b')).profile.own.body,[10]);
  assert.equal((await f.call('admin-take',{id:'t2',uid:'b',kind:'body',i:9},'admin')).status,409);
+});
+test('private messages: delivered to the other account, filtered, counted unread until read, rate limited',async()=>{
+ const f=await fixture({dlv:1});await f.call('load');await f.call('load',{},'b');
+ assert.equal((await f.call('pm-send',{to:'zz',text:'hi'})).status,404);
+ const s=await f.call('pm-send',{to:'b',text:'  good game  you shit  '});assert(s.ok);assert.equal(s.msg[1].includes('shit'),false);
+ assert.equal((await f.call('pm-send',{to:'b',text:'again'})).status,429);
+ const ib=await f.call('pm-inbox',{},'b');assert.equal(ib.unread,1);assert.equal(ib.peers[0].id,'a');
+ const t=await f.call('pm-thread',{with:'a'},'b');assert.equal(t.msgs.length,1);assert.equal(t.msgs[0][0],'a');
+ assert.equal((await f.call('pm-inbox',{},'b')).unread,0);assert.equal((await f.call('pm-inbox')).peers[0].unread,0);
 });
