@@ -1,4 +1,5 @@
-// ---- invite alerts: a computer notification for party and clan invites while the game tab is in the background
+// ---- invite alerts: a computer notification for party and clan invites while the game tab is in the background,
+// and (Web Push, /sw.js) a "Big Update!" notification when there's a big Nitro Pitch update, even with the game closed
 (() => {
   const OK = typeof Notification === "function" && window.isSecureContext;
   const ASKED = "np_notif_asked";
@@ -27,16 +28,48 @@
       alert("Clan invite", cleanName(i.fromName || "Someone") + " invited you to join " + String(i.clanName || "their clan").slice(0, 20) + ".", "np-clan-" + i.id);
     }
   };
+  // ---- Big Update notifications: a browser that allows notifications gets a push subscription. The server keeps only
+  // the browser's push address and keys (no account), and drops them when the browser's push service says they're gone.
+  const PUSH_OK = OK && "serviceWorker" in navigator && "PushManager" in window;
+  const PUSH_SAVED = "np_push_sub";
+  const keyBytes = k => Uint8Array.from(atob(k.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((k.length + 3) % 4)), c => c.charCodeAt(0));
+  const keyText = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const pushPost = (path, body) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  let pushBusy = false;
+  async function pushSync(force) {
+    if (!PUSH_OK || pushBusy) return;
+    pushBusy = true;
+    try {
+      let saved = {}; try { saved = JSON.parse(localStorage.getItem(PUSH_SAVED) || "{}") || {}; } catch {}
+      if (Notification.permission !== "granted") {
+        // notifications were turned off in the browser: forget this browser's push address on the server too
+        if (saved.ep) { await pushPost("/api/push/unsubscribe", { endpoint: saved.ep }).catch(() => {}); try { localStorage.removeItem(PUSH_SAVED); } catch {} }
+        return;
+      }
+      const { key } = await (await fetch("/api/push/key")).json();
+      if (!key) return;                                    // push isn't set up on the server yet
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      const cur = sub && sub.options && sub.options.applicationServerKey;
+      if (sub && cur && keyText(cur) !== key) { await sub.unsubscribe().catch(() => {}); sub = null; }   // the server's keys changed
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+      if (!force && saved.ep === sub.endpoint && saved.key === key && Date.now() - (+saved.at || 0) < 7 * 864e5) return;
+      const r = await pushPost("/api/push/subscribe", { ...sub.toJSON(), old: saved.ep && saved.ep !== sub.endpoint ? saved.ep : "" });
+      if (r.ok) try { localStorage.setItem(PUSH_SAVED, JSON.stringify({ ep: sub.endpoint, key, at: Date.now() })); } catch {}
+    } catch {} finally { pushBusy = false; }
+  }
+  if (PUSH_OK) setTimeout(() => pushSync(false), 6000);
   // ask once (and again after a week if they said "Not now"), on the main menu, never over another pop-up
   const pop = document.createElement("div");
   pop.id = "notifPop"; pop.className = "np-corner"; pop.hidden = true;
   pop.setAttribute("role", "dialog"); pop.setAttribute("aria-labelledby", "notifTitle");
-  pop.innerHTML = '<div class="cf-box"><h2 id="notifTitle">Turn on invite alerts?</h2><p>Get a notification on your computer when a friend invites you to a party or clan, even while Nitro Pitch is in another tab.</p><div class="cf-btns"><button class="sbtn pri" id="notifYes" type="button"><span>Turn on</span></button><button class="sbtn" id="notifNo" type="button"><span>Not now</span></button></div></div>';
+  pop.innerHTML = '<div class="cf-box"><h2 id="notifTitle">Turn on notifications?</h2><p>Get a notification on your computer when a friend invites you to a party or clan, even while Nitro Pitch is in another tab, and when there\u2019s a big Nitro Pitch update.</p><div class="cf-btns"><button class="sbtn pri" id="notifYes" type="button"><span>Turn on</span></button><button class="sbtn" id="notifNo" type="button"><span>Not now</span></button></div></div>';
   document.body.append(pop);
   const later = () => { try { localStorage.setItem(ASKED, String(Date.now())); } catch {} };
   $("notifYes").onclick = async () => {
     pop.hidden = true; later();
-    try { const p = await Notification.requestPermission(); toast(p === "granted" ? "Invite alerts are on" : "Invite alerts are off. You can allow them in your browser's site settings."); } catch {}
+    try { const p = await Notification.requestPermission(); toast(p === "granted" ? "Notifications are on" : "Notifications are off. You can allow them in your browser's site settings."); if (p === "granted") pushSync(true); } catch {}
   };
   $("notifNo").onclick = () => { pop.hidden = true; later(); };
   const busy = () => mode !== "menu" || [...document.querySelectorAll('[role="dialog"]')].some(d => d !== pop && !d.hidden && d.offsetParent !== null) || document.getElementById("nitropitch-terms-modal") || document.getElementById("np-cookie-dialog")?.open;

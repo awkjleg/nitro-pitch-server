@@ -4,10 +4,10 @@
 // waking, it restores socket identity records and asks clients to refresh any large presence payloads.
 export { Room } from "./room.js";
 import {progressFetch} from './progress.js';
-import {opsFetch} from './ops.js';
+import {opsFetch,announceBigUpdate} from './ops.js';
 export {Ops} from './ops.js';
 export {Progress} from './progress.js';
-import { applyGameFixes } from "./game-shell.js";
+import { applyGameFixes, RELEASE } from "./game-shell.js";
 import { migrationFetch } from "./domain-migration.js";
 export { DomainTransfer } from "./domain-migration.js";
 
@@ -16,10 +16,10 @@ export { DomainTransfer } from "./domain-migration.js";
 const ORIGIN_OK = /^https:\/\/([a-z0-9-]+\.)*bibleway\.workers\.dev$|^https:\/\/([a-z0-9-]+\.)*crazygames\.(com|io|dev)$|^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     const progress=await progressFetch(req,env);if(progress)return progress;
-    const ops=await opsFetch(req,env);if(ops)return ops;
+    const ops=await opsFetch(req,env,{release:RELEASE});if(ops)return ops;
     const migration = await migrationFetch(req, env);
     if (migration) return migration;
     if (url.pathname === "/ws") {
@@ -35,6 +35,7 @@ export default {
       headers.delete("If-None-Match");
       headers.delete("If-Modified-Since");
       const asset = await env.ASSETS.fetch(new Request(req, { headers }));
+      announceBigUpdate(url, env, ctx, RELEASE);   // "big": true patch notes: one Big Update push per release
       if (!asset.ok || !asset.headers.get("Content-Type")?.includes("text/html")) return asset;
       const gameHtml = applyGameFixes(await asset.text());
       const gameAsset = new Response(gameHtml, asset);
@@ -53,6 +54,12 @@ export default {
       response.headers.set("Cache-Control", "no-store");
       response.headers.set("X-Nitropitch-Consent", "v1");
       response.headers.set("X-Nitropitch-Build", "2026111030");
+      return response;
+    }
+    if (url.pathname === "/sw.js") {
+      // the push service worker: always revalidated, so a fixed version reaches browsers quickly
+      const sw = await env.ASSETS.fetch(req), response = new Response(sw.body, sw);
+      response.headers.set("Cache-Control", "no-cache");
       return response;
     }
     return env.ASSETS.fetch(req);

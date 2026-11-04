@@ -1,0 +1,72 @@
+// ---- admin: Give MMR (next to Give XP) and the Big Update notification button (Announcement tab)
+// Give MMR registers the change with the server first (/api/progress admin-grant, admin account only), then sends the
+// usual Firebase gift with the same ID; the player's game claims it once and shows "+50 MMR in Doubles from the admin".
+// Playlists come from PLAYLISTS by number (1 Duel, 2 Doubles, 3 Standard), so new ranked playlists appear by themselves.
+const npRankedPlaylists = () => PLAYLISTS.map((p, n) => p && n > 0 ? { n, name: p.name, tag: p.tag || "" } : null).filter(Boolean);
+async function npGiveMmr(uid, pl, amount, note) {
+  const A = adA(), api = window.NPProgressAPI;
+  if (!A || !A.admin || !api) throw new Error("Sign in as the admin first.");
+  await A.admin.giveXp(uid, 0, note, false, id => api.call("admin-grant", { id: "grant-" + id, gift: id, to: String(uid), pl, mmr: amount, note }));
+}
+{
+  const giver = xpGiver;
+  xpGiver = function (uid, name) {
+    const box = giver.apply(this, arguments);
+    const row = h("div", "xp-give mmr-give");
+    const pl = document.createElement("select"); pl.className = "t";
+    for (const p of npRankedPlaylists()) pl.append(new Option(p.name + (p.tag ? " " + p.tag : ""), p.n));
+    const amt = document.createElement("input"); amt.type = "number"; amt.min = "1"; amt.max = "4000"; amt.step = "1"; amt.placeholder = "MMR"; amt.className = "t";
+    const note = document.createElement("input"); note.type = "text"; note.maxLength = 120; note.placeholder = "Message (optional)"; note.className = "t note";
+    const give = async (v, sign) => {
+      const n = Math.floor(Math.abs(+v)), x = n * sign, p = npRankedPlaylists().find(q => q.n === +pl.value);
+      if (!p) { adMsg("Pick a playlist."); return; }
+      if (!(n >= 1 && n <= 4000)) { adMsg("Pick an MMR amount from 1 to 4000."); return; }
+      if (!confirm((sign > 0 ? "Give +" : "Remove ") + n + " MMR " + (sign > 0 ? "to " : "from ") + name + " in " + p.name + "?")) return;
+      try {
+        await npGiveMmr(uid, p.n, x, note.value.trim());
+        const t = (sign > 0 ? "Sent +" : "Removed ") + n + " MMR in " + p.name + (sign > 0 ? " to " : " from ") + name;
+        toast(t); adMsg(t + ". It applies the next time their game is open (MMR stays between 0 and 4000)."); amt.value = ""; note.value = "";
+      } catch (e) { adMsg((e && e.message) || "Couldn't change the MMR"); }
+    };
+    row.append(h("b", "", "MMR:"), pl, adBtn("+25", () => give(25, 1), true), adBtn("+50", () => give(50, 1), true), adBtn("+100", () => give(100, 1), true),
+      adBtn("−25", () => give(25, -1)), adBtn("−50", () => give(50, -1)), adBtn("−100", () => give(100, -1)),
+      amt, adBtn("Give MMR", () => give(amt.value, 1), true), adBtn("Remove MMR", () => give(amt.value, -1)), note);
+    box.append(row);
+    return box;
+  };
+  const render = renderAdmin;
+  renderAdmin = async function () {
+    await render.apply(this, arguments);
+    const body = $("adBody");
+    for (const b of body.querySelectorAll("button")) if (b.textContent === "Give XP") b.firstChild.textContent = "Give XP / MMR";
+    if (adTab !== "announce" || !adA() || !adA().isAdmin()) return;
+    // Big Update notifications (Web Push): sent by themselves once when a release's patch notes say "big": true
+    const box = h("div", "ad-push");
+    box.style.cssText = "display:grid;gap:8px;justify-items:start;margin-top:22px;padding-top:14px;border-top:1px solid rgba(150,180,255,.2)";
+    box.append(h("b", "", "Update notification"));
+    const info = h("div", "note", "Loading…"), line = document.createElement("input");
+    line.className = "t"; line.maxLength = 120; line.placeholder = PATCH_NOTES.title; line.style.width = "100%";
+    const send = adBtn("Send update notification", async () => {
+      const text = line.value.trim() || PATCH_NOTES.title;
+      if (!confirm("Send “Nitro Pitch — Big Update! " + text + "” to everyone who has notifications on?")) return;
+      send.disabled = true;
+      try { const r = await opsCall("/api/admin/push", { act: "send", text }); toast(r.queued ? "Queued after the current notification" : "Sending the update notification"); line.value = ""; status(); }
+      catch (e) { adMsg((e && e.message) || "Couldn't send the notification"); }
+      finally { send.disabled = false; }
+    }, true);
+    const status = async () => {
+      try {
+        const s = await opsCall("/api/admin/push", { act: "status" }), when = t => t ? new Date(t).toLocaleString() : "";
+        const parts = [s.subscribers + " browser" + (s.subscribers === 1 ? " has" : "s have") + " notifications on."];
+        if (!s.configured) parts.push("Not set up yet: add the VAPID_PUBLIC and VAPID_PRIVATE secrets (see README).");
+        if (s.job) parts.push("Sending now: " + s.job.sent + " sent, " + s.job.gone + " gone.");
+        if (s.last) parts.push("Last: “" + s.last.title + "” (" + (s.last.kind === "auto" ? "automatic" : "sent by you") + ") " + when(s.last.finished) + ": " + s.last.sent + " sent, " + s.last.gone + " removed, " + s.last.failed + " failed" + (s.last.error ? " (" + s.last.error + ")" : "") + ".");
+        if (s.release) parts.push("This release (" + s.release.v + ") " + (s.release.big ? (s.announced ? "is a big update: announced " + when(s.announced.at) + "." : "is a big update: it is announced when nitropitch.app first serves it.") : "isn't marked big, so it isn't announced by itself."));
+        info.textContent = parts.join(" ");
+      } catch (e) { info.textContent = (e && e.message) || "Couldn't load the notification status"; }
+    };
+    box.append(info, line, send);
+    body.append(box);
+    status();
+  };
+}

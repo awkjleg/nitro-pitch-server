@@ -1,0 +1,246 @@
+// ---- names (offensive names refused, admin-locked names), the jail screen for banned accounts, private messages
+// Runs inside the game closure. The server enforces all of it (src/progress.js, src/room.js, src/messages.js);
+// this is the game's side: clear messages, the lock on the rename box, the jail cell and the messages panel.
+const NPSocial = (() => {
+  const M = window.NPModeration, api = window.NPProgressAPI;
+  const signedIn = () => { try { return !!(window.npAccounts && window.npAccounts.user()); } catch { return false; } };
+  const css = document.createElement("style");
+  css.textContent = `
+#nick.np-locked{opacity:.75;cursor:not-allowed}
+.np-lockmark{display:inline-flex;align-items:center;margin-left:4px;color:#ffd451}.np-lockmark svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2}
+#npJail{position:fixed;inset:0;z-index:9000;display:grid;place-items:center;overflow:hidden;font-family:var(--display,inherit);color:#e8eeff;pointer-events:auto}
+#npJail[hidden]{display:none}
+#npJail .jw{position:absolute;inset:0;background:
+ linear-gradient(rgba(5,8,18,.15),rgba(5,8,18,.55)),
+ linear-gradient(0deg,transparent 0 46px,rgba(0,0,0,.55) 46px 50px) 0 0/100% 50px,
+ linear-gradient(90deg,transparent 0 96px,rgba(0,0,0,.55) 96px 100px) 0 0/100px 100px,
+ linear-gradient(90deg,transparent 0 46px,rgba(0,0,0,.55) 46px 50px) 50px 50px/100px 100px,
+ linear-gradient(160deg,#2a3350,#161c30 55%,#0d1222);
+ -webkit-mask:radial-gradient(ellipse 30% 34% at 50% 52%,transparent 0 92%,#000 100%);mask:radial-gradient(ellipse 30% 34% at 50% 52%,transparent 0 92%,#000 100%)}
+#npJail .jl{position:absolute;inset:0;background:radial-gradient(ellipse 55% 45% at 50% 30%,rgba(255,212,81,.14),transparent 70%);pointer-events:none}
+#npJail .jb{position:absolute;left:50%;top:50%;width:min(76vw,860px);height:min(66vh,560px);transform:translate(-50%,-48%);border:10px solid #3b4566;border-radius:10px;
+ box-shadow:inset 0 0 0 3px #59648c,0 0 0 3px #1a2033,0 30px 80px rgba(0,0,0,.6);
+ background:repeating-linear-gradient(90deg,transparent 0 calc(12.5% - 14px),#6f7aa0 calc(12.5% - 14px),#d6dcf0 calc(12.5% - 9px),#8a94b8 calc(12.5% - 5px),#2f3754 12.5%),
+ linear-gradient(transparent 0 23%,#59648c 23% 26%,transparent 26% 74%,#59648c 74% 77%,transparent 77%)}
+#npJail .jb::after{content:"";position:absolute;right:-26px;top:44%;width:34px;height:64px;border-radius:6px;background:linear-gradient(#ffd451,#c9961c);box-shadow:0 4px 12px rgba(0,0,0,.5)}
+#npJail .jsign{position:absolute;top:max(18px,4vh);left:50%;transform:translateX(-50%) rotate(-2deg);padding:10px 34px 12px;background:linear-gradient(#ffd451,#ffb21e);color:#2a1600;border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.55),inset 0 -4px 0 rgba(0,0,0,.18);text-align:center;letter-spacing:.08em}
+#npJail .jsign b{display:block;font-size:clamp(26px,5vw,52px);line-height:1.05;text-transform:uppercase}
+#npJail .jsign small{display:block;font-size:13px;letter-spacing:.2em;text-transform:uppercase;opacity:.75}
+#npJail .jcard{position:absolute;bottom:max(16px,4vh);left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 32px));background:rgba(9,15,32,.94);border:1px solid rgba(150,180,255,.3);border-radius:14px;padding:16px 18px;display:grid;gap:8px;font-family:inherit;box-shadow:0 18px 44px rgba(0,0,0,.5)}
+#npJail .jcard .why{font-size:17px;line-height:1.4;overflow-wrap:anywhere}#npJail .jcard .when{color:#9fb0d4;font-size:13px}
+#npJail .jcard .row{display:flex;gap:8px;flex-wrap:wrap}
+body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed .np-cookie-banner,body.np-jailed #annBar{visibility:hidden!important}
+#pmBtn{position:relative}#pmBtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linejoin:round}
+#pmBtn .np-badge{position:absolute;top:2px;right:2px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#ff4d57;color:#fff;font:700 11px/18px sans-serif;text-align:center}
+#pmPop{position:fixed;inset:0;z-index:62;display:grid;place-items:center;background:rgba(3,6,14,.65);padding:16px}
+#pmPop[hidden]{display:none}
+#pmPop .ad-card{width:min(560px,100%);max-height:min(640px,calc(100vh - 32px));background:rgba(9,15,32,.98);border:1px solid rgba(150,180,255,.3);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px}
+#pmPop .ad-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#pmPop .pm-list{overflow:auto;display:grid;gap:6px;min-height:80px}
+#pmPop .pm-conv{display:grid;grid-template-columns:1fr auto;gap:2px 10px;text-align:left;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid transparent;color:inherit;cursor:pointer;font:inherit}
+#pmPop .pm-conv:hover,#pmPop .pm-conv:focus-visible{border-color:rgba(150,180,255,.45);outline:none}
+#pmPop .pm-conv b{font-size:15px}#pmPop .pm-conv small{color:#9fb0d4;font-size:12px}#pmPop .pm-conv .tx{grid-column:1/3;color:#c9d4f0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pmPop .pm-conv.unread b::after{content:"";display:inline-block;width:8px;height:8px;margin-left:8px;border-radius:50%;background:#ff4d57;vertical-align:middle}
+#pmPop .pm-msgs{overflow:auto;display:flex;flex-direction:column;gap:6px;min-height:160px;max-height:46vh;padding:4px}
+#pmPop .pm-m{max-width:80%;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.08);align-self:flex-start;overflow-wrap:anywhere;white-space:pre-wrap;font-size:14px;line-height:1.35}
+#pmPop .pm-m.me{align-self:flex-end;background:rgba(46,139,255,.32)}
+#pmPop .pm-m small{display:block;margin-top:3px;color:#9fb0d4;font-size:11px}
+#pmPop form{display:flex;gap:8px}#pmPop form input{flex:1;min-width:0}
+#pmPop .note{color:#9fb0d4;font-size:13px}
+`;
+  document.head.append(css);
+
+  // ---------- names: "That name isn't allowed" and the admin's lock on the rename box ----------
+  let nameLock = null;
+  const lockSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="1.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3M12 14.5v2.5"/></svg>';
+  function renderLock() {
+    const nick = $("nick"); if (!nick) return;
+    const on = !!nameLock && signedIn();
+    nick.readOnly = on; nick.classList.toggle("np-locked", on);
+    nick.title = on ? "Your name was set by an admin and is locked" : "";
+    let mark = document.getElementById("npNameLock");
+    if (on && !mark) { mark = document.createElement("span"); mark.id = "npNameLock"; mark.className = "np-lockmark"; mark.innerHTML = lockSvg; mark.title = "Locked by an admin"; nick.after(mark); }
+    if (mark) mark.hidden = !on;
+    if (on && document.activeElement !== nick && nick.value !== nameLock) nick.value = nameLock;
+  }
+  {
+    const problem = nameProblem;
+    nameProblem = function (raw) {
+      const r = problem(raw);
+      if (r[1]) return r;
+      if (nameLock && signedIn() && r[0] !== nameLock) return [r[0], "Your name was set by an admin and is locked."];
+      if (M && M.badName(r[0])) return [r[0], "That name isn’t allowed. Pick a different one."];
+      return r;
+    };
+  }
+  if (api) api.listen(data => { nameLock = data && data.nameLock && typeof data.nameLock.name === "string" ? data.nameLock.name : null; renderLock(); });
+
+  // ---------- the jail cell: a banned account sees this instead of the game ----------
+  let jail = null, jailedBy = false, jailInfo = null;
+  function showJail(info) {
+    jailInfo = info || {};
+    if (!jail) {
+      jail = document.createElement("div"); jail.id = "npJail"; jail.setAttribute("role", "alertdialog"); jail.setAttribute("aria-modal", "true"); jail.setAttribute("aria-labelledby", "npJailTitle");
+      jail.innerHTML = '<div class="jw"></div><div class="jl"></div><div class="jb" aria-hidden="true"></div><div class="jsign"><small>Nitro Pitch</small><b id="npJailTitle">You’re banned</b></div>' +
+        '<div class="jcard"><div class="why" id="npJailWhy"></div><div class="when" id="npJailWhen"></div><div class="row" id="npJailBtns"></div></div>';
+      document.body.append(jail);
+      const out = document.createElement("button"); out.type = "button"; out.className = "sbtn"; out.append(h("span", "", "Sign out"));
+      out.onclick = async () => { try { await window.npAccounts.logOut(); } catch {} hideJail(true); };
+      jail.querySelector("#npJailBtns").append(out);
+    }
+    const why = String(jailInfo.reason || "").trim();
+    setTxt("npJailWhy", why ? "Reason: " + why : "The admin banned this account.");
+    setTxt("npJailWhen", jailInfo.at ? "Banned on " + new Date(jailInfo.at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) + ". You can’t play, chat or trade with this account." : "You can’t play, chat or trade with this account.");
+    if (!jail.hidden && document.body.classList.contains("np-jailed")) return;
+    jail.hidden = false; document.body.classList.add("np-jailed");
+    if (!isBanned) { isBanned = true; jailedBy = true; }
+    try { if (mode !== "menu") leaveToMenu(true); } catch {}
+    try { for (const id of POPUPS) { const el = $(id); if (el) el.hidden = true; } if (screen !== "home") showScreen("home"); } catch {}
+  }
+  function hideJail(force) {
+    if (!jail || jail.hidden) return;
+    jail.hidden = true; document.body.classList.remove("np-jailed");
+    if (jailedBy || force) { isBanned = false; jailedBy = false; }
+  }
+  // nothing behind the bars reacts to keys while jailed (Tab still moves between the jail's buttons)
+  addEventListener("keydown", e => { if (jail && !jail.hidden && e.key !== "Tab" && !jail.contains(e.target)) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  addEventListener("np-banned", e => showJail(e.detail));
+  let banUid = "", banAt = 0;
+  async function checkBan(force) {
+    const u = myUid();
+    if (!u || !api) { if (jail && !jail.hidden) hideJail(true); banUid = ""; return; }
+    if (!force && u === banUid && Date.now() - banAt < 180000) return;
+    banUid = u; banAt = Date.now();
+    try { const r = await api.call("ban-status"); if (myUid() !== u) return; if (r && r.banned) showJail(r.banned); else hideJail(); } catch {}
+  }
+  setInterval(() => { checkBan(false); if (isBanned && !(jail && !jail.hidden) && myUid()) showJail(jailInfo || {}); renderLock(); }, 3000);
+
+  // ---------- private messages ----------
+  const mailSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.5 7l8.5 6.2L20.5 7"/></svg>';
+  const btn = document.createElement("button");
+  btn.className = "ibtn"; btn.id = "pmBtn"; btn.type = "button"; btn.title = "Messages"; btn.setAttribute("aria-label", "Messages"); btn.hidden = true;
+  btn.innerHTML = mailSvg + '<span class="np-badge" hidden></span>';
+  { const fb = $("fbBtn"); if (fb) fb.before(btn); }
+  const pop = document.createElement("div");
+  pop.id = "pmPop"; pop.hidden = true; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-modal", "true"); pop.setAttribute("aria-labelledby", "pmTitle");
+  pop.innerHTML = '<div class="ad-card"><div class="ad-head"><b id="pmTitle">Messages</b><button class="sbtn xs" id="pmClose" type="button"><span>Close</span></button></div><div id="pmBody"></div><div class="status" id="pmMsg"></div></div>';
+  document.body.append(pop);
+  try { POPUPS.push("pmPop"); } catch {}
+  $("pmClose").onclick = () => { pop.hidden = true; view = null; };
+  btn.onclick = () => { if (!signedIn()) { toast("Log in to send and read messages"); return; } pop.hidden = false; openInbox(); };
+  let view = null, unread = 0, known = new Map(), firstInbox = true;
+  const blockedUids = () => {
+    const u = myUid(); if (!u) return [];
+    let rows = []; try { rows = window.NPPlayerCore ? NPPlayerCore.blocks(JSON.parse(localStorage.getItem("np-blocked:" + u) || "[]")) : []; } catch {}
+    return rows.filter(r => r.id.startsWith("uid:")).map(r => r.id.slice(4));
+  };
+  const when = at => { const d = new Date(at), now = new Date(); return d.toDateString() === now.toDateString() ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : d.toLocaleDateString(); };
+  const pmNote = t => setTxt("pmMsg", t || "");
+  function setBadge(n) {
+    unread = n | 0;
+    const b = btn.querySelector(".np-badge"); b.hidden = !unread; b.textContent = unread > 9 ? "9+" : String(unread);
+    btn.title = unread ? "Messages (" + unread + " unread)" : "Messages";
+  }
+  // a new message: a notification if the game is in the background and this browser has no push subscription
+  // (with one, /sw.js shows it), otherwise a toast
+  function alertNew(c) {
+    const title = cleanName(c.name || "A player") + " messaged you";
+    let pushed = false; try { pushed = !!JSON.parse(localStorage.getItem("np_push_sub") || "{}").ep; } catch {}
+    if ((document.hidden || !document.hasFocus()) && !pushed && typeof Notification === "function" && Notification.permission === "granted") {
+      try { const n = new Notification(title, { body: "Open Nitro Pitch to read and reply.", tag: "np-pm-" + c.with, icon: "/nitro-pitch-icon.png", badge: "/nitro-pitch-icon-48.png" }); n.onclick = () => { window.focus(); n.close(); openThread(c.with, c.name); }; setTimeout(() => n.close(), 30000); } catch {}
+    } else if (!(view && view.with === c.with && !pop.hidden)) toast(title);
+  }
+  let busy = false;
+  async function refresh() {
+    if (busy || !signedIn() || isBanned) return null;
+    busy = true;
+    try {
+      const r = await opsCall("/api/messages/inbox", { blocks: blockedUids() });
+      for (const c of r.convs) { const prev = known.get(c.with); if (!firstInbox && c.unread && !c.mine && (!prev || c.last > prev)) alertNew(c); known.set(c.with, c.last); }
+      firstInbox = false; setBadge(r.unread);
+      if (!pop.hidden && view && view.list) renderInbox(r.convs);
+      if (!pop.hidden && view && view.with && r.convs.some(c => c.with === view.with && c.unread)) openThread(view.with, view.name, true);
+      return r;
+    } catch { return null; } finally { busy = false; }
+  }
+  function renderInbox(convs) {
+    const body = $("pmBody"); body.innerHTML = ""; setTxt("pmTitle", "Messages");
+    const list = h("div", "pm-list");
+    if (!convs.length) list.append(h("div", "note", "No messages yet. Open a player’s stats (click their name or car) and press Message."));
+    for (const c of convs) {
+      const row = document.createElement("button"); row.type = "button"; row.className = "pm-conv" + (c.unread ? " unread" : "");
+      row.append(h("b", "", cleanName(c.name || "Player")), h("small", "", when(c.last)), h("span", "tx", (c.mine ? "You: " : "") + c.tx));
+      row.onclick = () => openThread(c.with, c.name);
+      list.append(row);
+    }
+    body.append(list);
+  }
+  async function openInbox() {
+    view = { list: true }; pmNote("Loading…");
+    const r = await refresh(); pmNote("");
+    if (r) renderInbox(r.convs); else if (view.list) pmNote("Couldn’t load your messages. Try again.");
+  }
+  async function openThread(uid, name, quiet) {
+    if (!signedIn()) { toast("Log in to send and read messages"); return; }
+    pop.hidden = false; view = { with: uid, name: name || "Player" };
+    if (!quiet) pmNote("Loading…");
+    let t;
+    try { t = await opsCall("/api/messages/thread", { with: uid }); } catch (e) { pmNote((e && e.message) || "Couldn’t load the conversation"); return; }
+    if (!view || view.with !== uid) return;
+    pmNote(""); view.name = cleanName(t.name || name || "Player");
+    const body = $("pmBody"); body.innerHTML = ""; setTxt("pmTitle", view.name);
+    const top = h("div", "row"); top.style.cssText = "display:flex;gap:8px;flex-wrap:wrap";
+    const theirs = t.msgs.filter(m => !m.me).at(-1);
+    top.append(adBtn("‹ All messages", () => openInbox()), adBtn("Player menu", () => { pop.hidden = true; statsForUid(uid, view.name); }),
+      adBtn("Report", () => { pop.hidden = true; reportPlayer(uid, view.name, theirs ? theirs.tx : "", "chat"); }));
+    const msgs = h("div", "pm-msgs");
+    if (!t.msgs.length) msgs.append(h("div", "note", "Say hi! Messages are private between you two. Be kind: the chat rules apply here too."));
+    for (const m of t.msgs) { const d = h("div", "pm-m" + (m.me ? " me" : ""), m.tx); d.append(h("small", "", when(m.at))); msgs.append(d); }
+    const blocked = window.NPPlayerFeatures && NPPlayerFeatures.isBlocked({ ui: uid });
+    const form = document.createElement("form"), input = document.createElement("input"), send = document.createElement("button");
+    input.className = "t"; input.maxLength = 300; input.placeholder = blocked ? "You blocked this player" : "Message " + view.name; input.disabled = !!blocked; input.autocomplete = "off";
+    send.type = "submit"; send.className = "sbtn pri"; send.append(h("span", "", "Send")); send.disabled = !!blocked;
+    form.append(input, send);
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const text = lchatClean(input.value);
+      if (!text) return;
+      if (muteLeft(myUid()) > 0) { pmNote("You’re muted, so you can’t send messages right now."); return; }
+      send.disabled = true;
+      try { const r = await opsCall("/api/messages/send", { to: uid, text }); input.value = ""; const d = h("div", "pm-m me", r.sent.tx); d.append(h("small", "", when(r.sent.at))); msgs.querySelector(".note")?.remove(); msgs.append(d); msgs.scrollTop = msgs.scrollHeight; pmNote(""); known.set(uid, r.sent.at); }
+      catch (err) { pmNote((err && err.message) || "Couldn’t send that message"); }
+      finally { send.disabled = !!blocked; input.focus(); }
+    };
+    body.append(top, msgs, form, h("div", "note", blocked ? "Unblock them in their player menu to message them." : "Up to 300 characters. Blocked players can’t message you."));
+    msgs.scrollTop = msgs.scrollHeight;
+    if (!quiet) input.focus();
+    refresh();
+  }
+  // "Message" in a player's stats
+  {
+    const stats = showStats;
+    showStats = function (e) {
+      stats.apply(this, arguments);
+      const uid = e && (e.uid || (e.pr && e.pr.ui)), me = myUid();
+      if (!e || e.me || !uid || !me || uid === me || !UID_RE.test(uid)) return;
+      const sec = $("spAdmin"); sec.hidden = false;
+      const row = h("div", "row");
+      row.append(adBtn("Message", () => { $("statsPop").hidden = true; openThread(uid, e.name); }, true));
+      sec.append(h("small", "", "Private message"), row);
+    };
+  }
+  // the service worker reports pushes while a game tab is visible, and notification clicks
+  if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", e => {
+    const d = e.data || {};
+    if (d.np === "pm") refresh();
+    if (d.np === "open-pm" && typeof d.from === "string") { refresh(); openThread(d.from, ""); }
+  });
+  if (location.hash === "#messages") { const t = setInterval(() => { if (signedIn()) { clearInterval(t); history.replaceState(null, "", location.pathname + location.search); pop.hidden = false; openInbox(); } }, 1000); setTimeout(() => clearInterval(t), 30000); }
+  setInterval(() => {
+    const on = signedIn() && !isBanned; btn.hidden = !on;
+    if (!on) { setBadge(0); known.clear(); firstInbox = true; if (!pop.hidden) pop.hidden = true; }
+  }, 1000);
+  setInterval(refresh, 45000);
+  setTimeout(refresh, 5000);
+  return { refresh, openThread, openInbox, showJail, hideJail, checkBan };
+})();

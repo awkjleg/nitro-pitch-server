@@ -5,3 +5,6 @@ dist/
 # videos and other large files copied here to share (not part of the site)
 /*.mp4
 /tiktok/
+
+# local Worker secrets for `wrangler dev` (e.g. test VAPID keys); never commit
+.dev.vars

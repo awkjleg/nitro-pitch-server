@@ -7,13 +7,14 @@ import {cleanEv,snowQuests,openChristmasDrop,claimAdvent,SNOW_START,ADVENT} from
 import {ApiError,reply} from '../src/firebase-auth.js';
 import {validCar,validGame,validHit,resultEvidence,MATCH_SECONDS} from '../src/room-guard.js';
 import {readFileSync} from 'node:fs';
+import {badName,safeName} from '../src/moderation.js';
 const source=(await readFile(new URL('../src/progress.js',import.meta.url),'utf8')).replace(/^import .*;$/gm,'').replaceAll('export ','');
 async function fixture(raw={}){
  let now=1800000000000;const data=new Map(),docs=new Map([['players/a',raw],['players/b',raw]]);
  const clone=v=>v===undefined?undefined:structuredClone(v);
  const storage={get:async k=>clone(data.get(k)),put:async(k,v)=>data.set(k,clone(v)),list:async({prefix})=>new Map([...data].filter(([k])=>k.startsWith(prefix))),transaction:async fn=>{const snapshot=clone(data);try{return await fn(storage);}catch(e){data.clear();for(const[k,v]of snapshot)data.set(k,v);throw e;}}};
  const ctx={storage},env={ROOMS:{idFromName:x=>x,get:()=>({fetch:async()=>Response.json({mid:'online1',st:[200,1,0,0,1,0],score:[1,0],won:true,mvp:true,online:true,ranked:true,playlist:1,team:0,kind:'ranked',roster:[{uid:'a',team:0},{uid:'b',team:1}],elapsed:300})})}};
- const c=vm.createContext({MATCH_SECONDS,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
+ const c=vm.createContext({badName,safeName,MATCH_SECONDS,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
  vm.runInContext(source+'\nglobalThis.Progress=Progress;globalThis.cleanProfile=cleanProfile;',c);const ledger=new c.Progress(ctx,env);
  return {data,docs,env,ledger,advance:ms=>now+=ms,clean:c.cleanProfile,async call(action,b={},uid='a'){const response=await ledger.fetch(new Request('https://progress/action',{method:'POST',body:JSON.stringify({body:{action,...b},user:{uid,username:uid},token:'test'})}));return {status:response.status,...await response.json()};}};
 }
@@ -132,4 +133,43 @@ test('match lengths match the game: a 3-minute match counts, five ranked wins mo
 test('online: a normal 3-minute match passes the clock check',()=>{
  const r={room:'np-m-x',mid:'m',started:1000,ended:181000,roster:[{id:'a',uid:'ua',team:0},{id:'b',uid:'ub',team:1}],acks:['ua','ub'],final:{s:[2,1],st:{a:[150,1,0,0,1,0]},mut:[0,0,0,0,0,0,0],rk:1,pl:1,mm:1,tl:0,ot:false}};
  assert(resultEvidence(r,'ua',182000).ranked);
+});
+
+// ---- admin "Give MMR": the admin registers the change (admin-grant), the Firebase gift with the same ID delivers it
+async function mmrGift(f,gift,to,pl,mmr,id='grant-'+gift){f.docs.set('gifts/'+gift,{to,xp:0,note:'Sorry about the bug',claimed:false});return f.call('admin-grant',{id,gift,to,pl,mmr,note:'Sorry about the bug'},'admin');}
+test('admin MMR gift applies once to that playlist, clamps to 0-4000 and recomputes the peak rank and best tier',async()=>{
+ const f=await fixture({dlv:1,rk:[{m:840,p:8,w:6,l:2,pk:10},{m:500,p:2,w:1,l:1,pk:-1}]});await f.call('load');
+ assert.equal((await mmrGift(f,'m1','a',2,50)).status,200);
+ const a=await f.call('gift',{id:'gift-m1',gift:'m1'});assert.equal(a.status,200);assert.equal(a.profile.rk[1].m,550);assert.equal(a.profile.rk[0].m,840);
+ assert.deepEqual([a.mmr.pl,a.mmr.d,a.mmr.after],[2,50,550]);assert.equal(a.note,'Sorry about the bug');
+ assert.equal(a.profile.rk[1].pk,-1,'an unplaced playlist gets no peak rank');
+ // the same gift again (a retry, another tab, a fresh action ID): nothing more
+ assert.equal((await f.call('gift',{id:'gift-m1',gift:'m1'})).profile.rk[1].m,550);
+ const again=await f.call('gift',{id:'other-id',gift:'m1'});assert.equal(again.claimed,false);assert.equal(again.profile.rk[1].m,550);
+ // a placed playlist: up to the cap, the peak and best tier rise (with rank-up drops); down to 0, peaks stay
+ const drops=a.profile.drops.length;
+ await mmrGift(f,'m2','a',1,4000);const up=await f.call('gift',{id:'gift-m2',gift:'m2'});
+ assert.equal(up.profile.rk[0].m,4000);assert.equal(up.mmr.d,3160);assert.equal(up.profile.rk[0].pk,21);assert.equal(up.profile.rt,7);assert(up.profile.drops.length>drops);
+ await mmrGift(f,'m3','a',1,-4000);const down=await f.call('gift',{id:'gift-m3',gift:'m3'});
+ assert.equal(down.profile.rk[0].m,0);assert.equal(down.mmr.d,-4000);assert.equal(down.profile.rk[0].pk,21);assert.equal(down.profile.rt,7);
+ const row=await f.call('leaderboard-get',{uid:'a'});assert.equal(row.row.mmr,0);    // the leaderboard row follows (best placed playlist)
+});
+test('MMR gifts are admin-only: non-admin grants are rejected and MMR written into a gift document is ignored',async()=>{
+ const f=await fixture({dlv:1});await f.call('load');await f.call('load',{},'b');
+ const forged=await f.call('admin-grant',{id:'grant-x',gift:'x',to:'b',pl:1,mmr:1000},'a');assert.equal(forged.status,403);
+ f.docs.set('gifts/x',{to:'b',xp:0,mmr:1000,pl:1,claimed:false});const b=await f.call('gift',{id:'gift-x',gift:'x'},'b');
+ assert.equal(b.status,200);assert.equal(b.mmr,null);assert.equal(b.profile.rk[0].m,500);
+ // a grant for one player can't be claimed through another player's gift
+ await mmrGift(f,'y','b',1,300);f.docs.set('gifts/y',{to:'a',xp:0,claimed:false});const a=await f.call('gift',{id:'gift-y',gift:'y'});assert.equal(a.mmr,null);assert.equal(a.profile.rk[0].m,500);
+ // the admin can't reuse a gift ID for a second grant
+ assert.equal((await f.call('admin-grant',{id:'grant-y2',gift:'y',to:'b',pl:1,mmr:5},'admin')).status,409);
+});
+test('MMR gifts reject unknown playlists and bad amounts; a grant for a playlist the profile lacks is ignored',async()=>{
+ const f=await fixture({dlv:1});await f.call('load');
+ let k=0;for(const [pl,mmr] of [[0,50],[4,50],[7,50],['2',50],[1.5,50],[null,50],[1,0],[1,4001],[1,-4001],[1,2.5],[1,'50']]){
+  const r=await f.call('admin-grant',{id:'g-bad-'+k,gift:'bad'+k++,to:'a',pl,mmr},'admin');assert.equal(r.status,400,JSON.stringify([pl,mmr]));
+ }
+ assert.match((await f.call('admin-grant',{id:'g-unk',gift:'unk',to:'a',pl:9,mmr:50},'admin')).error,/Unknown playlist/);
+ f.data.set('grant:future',{to:'a',pl:6,mmr:50,by:'admin',at:0});f.docs.set('gifts/future',{to:'a',xp:0,claimed:false});
+ const r=await f.call('gift',{id:'gift-future',gift:'future'});assert.equal(r.status,200);assert.equal(r.mmr,null);assert.deepEqual(r.profile.rk.map(x=>x.m),[500,500,500]);
 });

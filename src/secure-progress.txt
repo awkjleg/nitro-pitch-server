@@ -58,9 +58,17 @@ const NPSecure = (() => {
    apply(r.profile);T.done=true;T.st='done';$('tradePop').hidden=true;lobbyPresence();toast('Trade complete. Your items are saved.');if(screen==='garage')renderGarage();
   }catch(e){if(trade===T){T.ok='';T.pending=false;lobbyPresence();toast(e.message);}}
  };
+ // the gift pop-up: an item, an MMR change ("+50 MMR in Doubles from the admin") and/or XP
+ const plName=n=>(typeof PLAYLISTS!=='undefined'&&PLAYLISTS[n]&&PLAYLISTS[n].name)||'playlist '+n;
+ function giftText(r){
+  const out=[];if(r.got)out.push('You got '+r.got.name+'! It is in your garage.');
+  if(r.mmr){const m=r.mmr,nm=plName(m.pl);out.push((m.d<0?'\u2212':'+')+Math.abs(m.d)+' MMR in '+nm+' from the admin. Your '+nm+' MMR is now '+m.after+'.');}
+  if((r.xp||r.px)||!out.length)out.push((r.xp||r.px)>=0?'Your bonus XP has been saved.':'Your XP has been adjusted.');
+  return out.join(' ');
+ }
  claimGifts=async function(){
   const A=adA();if(giftBusy||!giftQ.length||!dbOk||!A||!active())return;giftBusy=true;
-  try{while(giftQ.length){const g=giftQ.shift();try{const r=await api.call('gift',{id:'gift-'+g.id,gift:g.id});apply(r.profile);await A.claimGift(g.id);if(r.claimed)noteQ.push({id:'gift:'+g.id,title:'Gift from the developer',text:r.got?'You got '+r.got.name+'! It is in your garage.':(r.xp||r.px)>=0?'Your bonus XP has been saved.':'Your XP has been adjusted.',about:r.note||'',unlock:r.after?.lv>r.before?.lv?{before:r.before,after:r.after,mid:'gift-'+g.id}:null});}catch(e){giftSeen.delete(g.id);toast(e.message);}}}finally{giftBusy=false;showNote();}
+  try{while(giftQ.length){const g=giftQ.shift();try{const r=await api.call('gift',{id:'gift-'+g.id,gift:g.id});apply(r.profile);await A.claimGift(g.id);if(r.claimed)noteQ.push({id:'gift:'+g.id,title:r.mmr&&r.mmr.d<0&&!r.got&&!(r.xp>0||r.px>0)?'From the developer':'Gift from the developer',text:giftText(r),about:r.note||'',unlock:r.after?.lv>r.before?.lv?{before:r.before,after:r.after,mid:'gift-'+g.id}:null});}catch(e){giftSeen.delete(g.id);toast(e.message);}}}finally{giftBusy=false;showNote();}
  };
  return {apply,active,api,recover};
 })();

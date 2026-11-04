@@ -3,6 +3,7 @@ import {ApiError,reply,identify,readJson,firebaseDoc,ADMIN_UID} from './firebase
 import {catalog,Ranked,economy,levelInfo} from './reward-rules.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent} from './snowdrift.js';
 import {MATCH_SECONDS} from './room-guard.js';
+import {badName,safeName} from './moderation.js';
 const ID=/^[A-Za-z0-9_-]{1,128}$/, midOK=/^[A-Za-z0-9_-]{1,80}$/;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const n=(v,max=1e9)=>Number.isFinite(v)?clamp(Math.trunc(v),0,max):0;
@@ -23,9 +24,22 @@ export function cleanProfile(raw={}){
  return p;
 }
 function cloud(p){return {...p,rk:p.rk.map(([m,p,w,l,pk])=>({m,p,w,l,pk})),level:levelInfo(p.xp).lv};}
-function publicRow(p,uid){const best=p.rk.filter(r=>r[1]>=5).sort((a,b)=>b[0]-a[0])[0];return {uid,name:p.name||p.username||'Player',mmr:best?.[0]??0,rank:best?Ranked.info(best[0]).idx:-1,wins:p.wins,goals:p.goals,level:levelInfo(p.xp).lv,ti:p.title,bn:p.banner,clanId:p.clanId||''};}
+// the name other players see: an admin-locked name wins; an offensive name shows as a neutral "Player1234"
+const shownName=p=>safeName(p.nameLock?.name||p.name||p.username||'Player');
+function publicRow(p,uid){const best=p.rk.filter(r=>r[1]>=5).sort((a,b)=>b[0]-a[0])[0];return {uid,name:shownName(p),mmr:best?.[0]??0,rank:best?Ranked.info(best[0]).idx:-1,wins:p.wins,goals:p.goals,level:levelInfo(p.xp).lv,ti:p.title,bn:p.banner,clanId:p.clanId||''};}
 function permission(p,k,i,uid){const it=catalog[k]?.[i];if(!it)return false;if(it.admin)return uid===ADMIN_UID||(p.adminItems||[]).includes(k+':'+i);if(p.own[k]?.includes(i))return true;if(it.ev)return false;if(it.lead)return !!p.clanId&&p.clanRole==='owner';if(it.clan)return !!p.clanId; // Clan level visuals are additionally vetted by the Firebase clan client.
  if(it.tier>=0)return p.rt>=it.tier;if(it.qn)return p.qn>=it.qn;if(it.pass)return economy(p).passTier()>=it.pass;if(it.drop)return false;return levelInfo(p.xp).lv>=(it.lv||1);}
+// Ranked playlists by number (1 Duel, 2 Doubles, 3 Standard). Nitro 2D adds 4-6 here and in cleanProfile's rk.
+export const RANKED_PLAYLISTS=[1,2,3];
+// An admin MMR change in one playlist: MMR stays 0-4000; once placed, the peak rank (rk[4]) and best tier (rt) move
+// up exactly as after a match, with a rank-up drop for each tier reached for the first time. Peaks never go down.
+export function adjustMmr(p,pl,amount){
+ const r=Number.isInteger(pl)&&pl>=1?p.rk[pl-1]:null;if(!Array.isArray(r))return null;
+ const before=r[0],rt0=p.rt;r[0]=clamp(r[0]+Math.trunc(amount),0,4000);const info=Ranked.info(r[0]);
+ if(r[1]>=5){r[4]=Math.max(r[4],info.idx);p.rt=Math.max(p.rt,info.tier);}
+ const newTiers=Array.from({length:Math.max(0,p.rt-rt0)},(_,i)=>rt0+i+1),E=economy(p);for(const t of newTiers)E.addDrop([2,2,3,3,4,4,5,6][t]??2);
+ return {pl,before,after:r[0],d:r[0]-before,rank:info.name,newTiers};
+}
 export function awardMatch(p,e,now=Date.now(),averages=[500,500]){
  const E=economy(p,now);E.ensureQuests();const before=levelInfo(p.xp),passFrom=E.passTier(),st=e.st;
  const k=e.online?1:.5,part=Math.round(150*k),wb=e.won?Math.round(200*k):0,perf=Math.round(st[0]*k),mv=e.mvp?Math.round(100*k):0;
@@ -56,20 +70,47 @@ export async function progressFetch(req,env){
   return env.PROGRESS.get(env.PROGRESS.idFromName('accounts-v1')).fetch(new Request('https://progress/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body,token,user})}));
  }catch(e){return reply({error:e instanceof ApiError?e.message:'Progress service is unavailable. Please retry.'},e.status||503);}
 }
+// a clean admin-set name: the same rules as the rename box (3-14 letters, numbers, spaces, . _ -), never offensive
+export function adminName(raw){
+ const name=String(raw??'').replace(/[^\p{L}\p{N} _.\-]/gu,'').replace(/\s+/g,' ').trim();
+ if(name.length<3||name.length>14)throw new ApiError('Names need 3 to 14 letters or numbers');
+ if(badName(name))throw new ApiError('That name isn\u2019t allowed');
+ return name;
+}
 export class Progress extends DurableObject{
  constructor(ctx,env){super(ctx,env);this.tail=Promise.resolve();this.banCache=new Map();}
- async fetch(req){const run=this.tail.then(()=>this.run(req));this.tail=run.catch(()=>{});try{return await run;}catch(e){return reply({error:e instanceof ApiError?e.message:'Could not save progress. Please retry.'},e.status||503);}}
+ async fetch(req){const run=this.tail.then(()=>this.run(req));this.tail=run.catch(()=>{});try{return await run;}catch(e){return reply({error:e instanceof ApiError?e.message:'Could not save progress. Please retry.',...(e.data||{})},e.status||503);}}
+ // Bans: the admin's server record (reason, date, who) and the older Firebase bans/{uid} documents (no reason).
+ // A Firebase check needs that player's own token; without it only server records count.
+ async banOf(uid,token){
+  const rec=await this.ctx.storage.get('ban:'+uid);if(rec)return {reason:rec.reason,at:rec.at};
+  if(!token||(this.banCache.get(uid)||0)>Date.now())return null;
+  const doc=await firebaseDoc('bans/'+uid,token);
+  if(doc)return {reason:typeof doc.reason==='string'?doc.reason.slice(0,300):'',at:Date.parse(doc.at)||0};
+  this.banCache.set(uid,Date.now()+60000);return null;
+ }
+ // what the rooms and messages need to know about an account (internal; never reachable from a browser)
+ async account(uid,token){
+  const p=await this.ctx.storage.get('p:'+uid),lock=await this.ctx.storage.get('namelock:'+uid);
+  return {exists:!!p,name:p?shownName({...p,nameLock:lock||p.nameLock}):lock?.name||'',lock:lock?.name||null,banned:await this.banOf(uid,token)};
+ }
  async load(user,token){
   const {uid}=user,key='p:'+uid;
-  const until=this.banCache.get(uid)||0;if(until<Date.now()){if(await firebaseDoc('bans/'+uid,token))throw new ApiError('This account is banned',403);this.banCache.set(uid,Date.now()+60000);}
   let p=await this.ctx.storage.get(key);
   if(!p){const raw=await firebaseDoc('players/'+uid,token);p=cleanProfile(raw||{});p.username=user.username;p.rev=1;p.migratedAt=Date.now();p.imported=!!raw;p.adminItems=(await firebaseDoc('adminItems/'+uid,token))?.items||[];const E=economy(p);E.ensureQuests();E.payPassXp();E.grantLevelDrops();await this.ctx.storage.put(key,p);await this.ctx.storage.put('lb:'+uid,publicRow(p,uid));}
   if(!p.clanChecked||Date.now()-p.clanChecked>60000){const membership=await firebaseDoc('clanMembers/'+uid,token);p.clanId=membership?.clanId||'';p.clanRole=membership?.role||'';p.clanChecked=Date.now();await this.ctx.storage.put(key,p);}
+  // an admin-locked name always applies; an offensive saved name is replaced by a neutral one
+  const lock=await this.ctx.storage.get('namelock:'+uid);let fix=false;
+  if(lock&&(p.name!==lock.name||p.nameLock?.name!==lock.name)){p.name=lock.name;p.nameLock={name:lock.name,at:lock.at};fix=true;}
+  else if(!lock&&p.nameLock){delete p.nameLock;fix=true;}
+  if(p.name&&badName(p.name)){p.name=safeName(p.name);fix=true;}
+  if(fix)await this.save(uid,p);
   return p;
  }
  async save(uid,p){p.rev=(p.rev||0)+1;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await tx.put('lb:'+uid,publicRow(p,uid));});}
  async run(req){
   const path=new URL(req.url).pathname;
+  if(path==='/account'){const {uid,token}=await req.json();if(!ID.test(uid||''))throw new ApiError('Invalid account');return reply(await this.account(uid,token));}
   if(path==='/forfeit'){
    const {uid,room,mid,playlist}=await req.json();if(!ID.test(uid||'')||!/^np-m-[a-z0-9-]{1,50}$/.test(room||'')||!midOK.test(mid||'')||![1,2,3].includes(playlist))throw new ApiError('Invalid departure');
    const p=await this.ctx.storage.get('p:'+uid),key='match:'+uid+':'+room+':'+mid;if(!p||await this.ctx.storage.get(key))return reply({ok:true});
@@ -77,14 +118,20 @@ export class Progress extends DurableObject{
    await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await tx.put('lb:'+uid,publicRow(p,uid));await tx.put(key,{forfeit:true,at:Date.now()});});return reply({ok:true});
   }
   const {body:b,token,user}=await req.json();if(!user||!ID.test(user.uid))throw new ApiError('Invalid account',401);
+  // a banned account can only ask why (the game's jail screen); everything else is refused
+  const ban=await this.banOf(user.uid,token);
+  if(b.action==='ban-status')return reply({banned:ban});
+  if(ban){const e=new ApiError('This account is banned',403);e.data={banned:ban};throw e;}
   const uid=user.uid,p=await this.load(user,token),now=Date.now();const response=(extra={})=>reply({profile:cloud(p),rev:p.rev,...extra});
   if(b.action==='load'){const E=economy(p);if(E.ensureQuests())await this.save(uid,p);return response();}
   if(b.action==='save'){
    const d=b.profile||{};for(const[field,k]of Object.entries(cosmetics))if(Number.isInteger(d[field])&&permission(p,k,d[field],uid))p[field]=d[field];
    if(Number.isInteger(d.paint))p.paint=clamp(d.paint,-1,0xffffff);
-   if(typeof d.name==='string')p.name=d.name.replace(/[^\p{L}\p{N} _.\-]/gu,'').slice(0,14);
+   // names: an admin-locked name can't be changed; offensive names are refused (the old name stays)
+   let nameRejected='';
+   if(typeof d.name==='string'){const name=d.name.replace(/[^\p{L}\p{N} _.\-]/gu,'').slice(0,14);if(name!==p.name){if(p.nameLock)nameRejected='locked';else if(badName(name))nameRejected='offensive';else p.name=name;}}
    if(typeof d.settings==='string'&&d.settings.length<=20000){try{const v=JSON.parse(d.settings);if(v&&typeof v==='object'&&!Array.isArray(v))p.settings=d.settings;}catch{}}
-   await this.save(uid,p);return response();
+   await this.save(uid,p);return response(nameRejected?{nameRejected}:{});
   }
   if(b.action==='leaderboard'){
    if(!['mmr','wins','goals','level'].includes(b.field))throw new ApiError('Unknown leaderboard');
@@ -98,14 +145,19 @@ export class Progress extends DurableObject{
    }await this.ctx.storage.put(legacyKey,legacy);}
    const field=b.field;const rows=new Map(legacy.map(x=>[x.uid,x]));let after;
    do{const page=await this.ctx.storage.list({prefix:'lb:',limit:1000,...(after?{startAfter:after}:{})});for(const[key,row]of page){rows.set(row.uid,row);after=key;}if(page.size<1000)break;}while(true);
-   return reply({rows:[...rows.values()].filter(row=>field!=='level'||Number.isInteger(row.level)&&row.level>=1&&row.level<=100).sort((a,b)=>b[field]-a[field]||a.uid.localeCompare(b.uid)).slice(0,clamp(n(b.limit,100),1,100))});
+   return reply({rows:[...rows.values()].map(row=>({...row,name:safeName(row.name||'Player')})).filter(row=>field!=='level'||Number.isInteger(row.level)&&row.level>=1&&row.level<=100).sort((a,b)=>b[field]-a[field]||a.uid.localeCompare(b.uid)).slice(0,clamp(n(b.limit,100),1,100))});
   }
-  if(b.action==='leaderboard-get'){if(!ID.test(b.uid||''))throw new ApiError('Invalid player');return reply({row:await this.ctx.storage.get('lb:'+b.uid)||null});}
+  if(b.action==='leaderboard-get'){if(!ID.test(b.uid||''))throw new ApiError('Invalid player');const row=await this.ctx.storage.get('lb:'+b.uid)||null;return reply({row:row&&{...row,name:safeName(row.name||'Player')}});}
+  if(b.action==='admin-info'){
+   // the admin's player menu: is this player banned (why, since when) and is their name locked
+   if(uid!==ADMIN_UID)throw new ApiError('Admin only',403);if(!ID.test(b.to||''))throw new ApiError('Invalid player');
+   const info=await this.account(b.to,null),rec=await this.ctx.storage.get('ban:'+b.to);return reply({...info,ban:rec||null});
+  }
   // Idempotency keys survive refreshes and retrying a lost response.
   if(!midOK.test(b.id||''))throw new ApiError('Missing action ID');
   const receiptKey='paid:'+uid+':'+b.id,prior=await this.ctx.storage.get(receiptKey);
   if(prior){if(prior.action!==b.action)throw new ApiError('Action ID already used',409);return response(prior.result);}
-  let result={},extraWrites={};
+  let result={},extraWrites={};const deletes=[];
   if(b.action==='session-start'){
    if(!midOK.test(b.mid||''))throw new ApiError('Invalid match');
    if(p.session&&p.session.mid!==b.mid&&now-p.session.started<20000)throw new ApiError('A match is already starting',429);
@@ -150,10 +202,39 @@ export class Progress extends DurableObject{
    if(!midOK.test(b.gift||''))throw new ApiError('Invalid gift');const key='gift:'+b.gift;
    if(await this.ctx.storage.get(key))return response({claimed:false});
    const g=await firebaseDoc('gifts/'+b.gift,token);if(!g||g.to!==uid||g.claimed)throw new ApiError('Gift already claimed',409);
-   const E=economy(p,now),before=levelInfo(p.xp);let got=null;
+   const E=economy(p,now),before=levelInfo(p.xp);let got=null,mmr=null;
    if(g.item){const [kind,v]=g.item.split(':'),i=Number(v),it=catalog[kind]?.[i];if(!it)throw new ApiError('Invalid gift');if(it.admin){p.adminItems=(await firebaseDoc('adminItems/'+uid,token))?.items||[];if(!permission(p,kind,i,uid))throw new ApiError('This item was not granted to your account',403);}else if(!p.own[kind].includes(i))p.own[kind].push(i);got={kind,i,name:it.name,rar:it.rar};}
    p.xp=Math.max(0,p.xp+clamp(Math.trunc(Number(g.xp)||0),-1e6,1e6));const px=clamp(Math.trunc(Number(g.px)||0),-1e6,1e6);if(px>0)E.addPassXp(px);else p.pxp=Math.max(0,p.pxp+px);E.grantLevelDrops();
-   result={claimed:true,got,before,after:levelInfo(p.xp),xp:g.xp||0,px,note:String(g.note||'').slice(0,120)};extraWrites[key]={uid,at:now};
+   // MMR comes only from the server-side grant the admin registered for this gift (admin-grant), never from the gift
+   // document itself; it applies once, with the gift's receipt, and only to a playlist this profile has
+   const grant=await this.ctx.storage.get('grant:'+b.gift);
+   if(grant&&!grant.used&&grant.to===uid&&grant.by===ADMIN_UID){mmr=adjustMmr(p,grant.pl,grant.mmr);if(mmr)extraWrites['grant:'+b.gift]={...grant,used:now};}
+   result={claimed:true,got,before,after:levelInfo(p.xp),xp:g.xp||0,px,mmr,note:String(g.note||'').slice(0,120)};extraWrites[key]={uid,at:now};
+  }else if(b.action==='admin-grant'){
+   // the admin's "Give MMR": registered here first, then the Firebase gift with the same ID delivers it to the player
+   if(uid!==ADMIN_UID)throw new ApiError('Admin only',403);
+   const pl=b.pl,amount=b.mmr;if(!midOK.test(b.gift||'')||!ID.test(b.to||''))throw new ApiError('Invalid gift');
+   if(!RANKED_PLAYLISTS.includes(pl))throw new ApiError('Unknown playlist');
+   if(!Number.isInteger(amount)||!amount||Math.abs(amount)>4000)throw new ApiError('Pick an MMR change from -4000 to 4000');
+   if(await this.ctx.storage.get('grant:'+b.gift))throw new ApiError('Gift ID already used',409);
+   extraWrites['grant:'+b.gift]={to:b.to,pl,mmr:amount,note:String(b.note||'').slice(0,120),by:uid,at:now};result={granted:true,gift:b.gift};
+  }else if(['admin-ban','admin-unban','admin-name'].includes(b.action)){
+   // the admin's player menu: ban with a reason / unban, and set + lock / unlock a player's name
+   if(uid!==ADMIN_UID)throw new ApiError('Admin only',403);
+   const to=b.to;if(!ID.test(to||'')||to===ADMIN_UID)throw new ApiError('Invalid player');
+   const q=await this.ctx.storage.get('p:'+to);
+   if(b.action==='admin-ban'){
+    const reason=String(b.reason??'').replace(/\s+/g,' ').trim().slice(0,300);if(reason.length<3)throw new ApiError('Type the reason for the ban');
+    extraWrites['ban:'+to]={reason,at:now,by:uid,name:String(b.name??'').slice(0,30)};deletes.push('lb:'+to);this.banCache.delete(to);result={banned:true,reason,at:now};
+   }else if(b.action==='admin-unban'){
+    deletes.push('ban:'+to);this.banCache.delete(to);if(q)extraWrites['lb:'+to]=publicRow(q,to);result={banned:false};
+   }else if(b.lock===false){
+    deletes.push('namelock:'+to);if(q&&q.nameLock){delete q.nameLock;q.rev=(q.rev||0)+1;extraWrites['p:'+to]=q;}result={locked:false};
+   }else{
+    const name=adminName(b.name);extraWrites['namelock:'+to]={name,at:now,by:uid};
+    if(q){q.name=name;q.nameLock={name,at:now};q.rev=(q.rev||0)+1;extraWrites['p:'+to]=q;extraWrites['lb:'+to]=publicRow(q,to);}
+    result={locked:true,name};
+   }
   }else if(b.action==='trade-cancel'){
    if(!ID.test(b.other||'')||!midOK.test(b.trade||''))throw new ApiError('Invalid trade');const key='trade:'+[uid,b.other].sort().join(':')+':'+b.trade,existing=await this.ctx.storage.get(key);
    if(!existing?.done)await this.ctx.storage.put(key,{cancelled:true,at:now});return response({cancelled:!existing?.done});
@@ -171,7 +252,7 @@ export class Progress extends DurableObject{
    p.rev++;q.rev++;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await tx.put('p:'+other,q);await tx.put(key,{done:true,at:now});});return response({traded:true});
   }else throw new ApiError('Unknown progress action');
   // Write the state and the receipt atomically: a dropped response cannot duplicate a reward.
-  p.rev++;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await tx.put('lb:'+uid,publicRow(p,uid));await tx.put(receiptKey,{action:b.action,result,at:now});for(const[key,value]of Object.entries(extraWrites))await tx.put(key,value);});
+  p.rev++;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await tx.put('lb:'+uid,publicRow(p,uid));await tx.put(receiptKey,{action:b.action,result,at:now});for(const[key,value]of Object.entries(extraWrites))await tx.put(key,value);for(const key of deletes)await tx.delete(key);});
   return response(result);
  }
 }

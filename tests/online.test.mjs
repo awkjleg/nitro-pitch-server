@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {validCar,validHit,validGame,resultEvidence,rankedRules} from '../src/room-guard.js';
+import {safeName} from '../src/moderation.js';
 const root=new URL('../',import.meta.url);
 const read=path=>readFile(new URL(path,root),'utf8');
 
@@ -11,7 +12,7 @@ async function roomFixture(){
   const storage={get:async key=>data.get(key),list:async({prefix})=>new Map([...data].filter(([key])=>key.startsWith(prefix))),put:async(key,value)=>data.set(key,structuredClone(value)),delete:async key=>data.delete(key),setAlarm:async value=>{alarm=value;},deleteAlarm:async()=>{alarm=null;}};
   const ctx={storage,getWebSockets:id=>sockets.filter(ws=>ws.readyState===1&&(!id||ws.attachment.id===id)),setWebSocketAutoResponse(){},blockConcurrencyWhile(fn){this.ready=fn();}};
   const source=(await read('src/room.js')).replace(/^import .*;$/gm,'').replace('export class Room','class Room')+'\nglobalThis.TestRoom=Room;';
-  const context=vm.createContext({validCar,validHit,validGame,resultEvidence,reply:Response.json,identify:async()=>({uid:"test"}),structuredClone,DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},WebSocketRequestResponsePair:class{},TextEncoder,Response,Request,URL,JSON,Map,Set,Date:class extends Date{static now(){return now;}}});vm.runInContext(source,context);
+  const context=vm.createContext({safeName,validCar,validHit,validGame,resultEvidence,reply:Response.json,identify:async()=>({uid:"test"}),structuredClone,DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},WebSocketRequestResponsePair:class{},TextEncoder,Response,Request,URL,JSON,Map,Set,Date:class extends Date{static now(){return now;}}});vm.runInContext(source,context);
   const fixture={ctx,sockets,data,advance:ms=>{now+=ms;},get alarm(){return alarm;},async wake(){this.room=new context.TestRoom(ctx,{});await ctx.ready;return this.room;},socket(id){const ws={readyState:1,attachment:{id,ok:false},messages:[],serializeAttachment(value){this.attachment=structuredClone(value);},deserializeAttachment(){return structuredClone(this.attachment);},send(value){this.messages.push(JSON.parse(value));},close(){this.readyState=3;}};sockets.push(ws);return ws;},message(ws,value){return this.room.webSocketMessage(ws,JSON.stringify(value));}};
   await fixture.wake();return fixture;
 }
@@ -99,4 +100,29 @@ test('connection indicators reconcile snapshots, recovery events and final depar
  ws.receive({t:'connection',id:'other',until:0});assert.equal(room.connectionInfo().reconnecting.other,undefined);
  ws.receive({t:'connection',id:'other',until:170000});ws.receive({t:'l',id:'other'});assert.equal(room.connectionInfo().reconnecting.other,undefined);
  room.lost(ws);assert.equal(room.connectionInfo().disconnectedAt,100000);
+});
+
+// ---- bans, admin-locked names and offensive names in the rooms
+function progressStub(account){return {idFromName:x=>x,get:()=>({fetch:async req=>{const {uid}=await req.json();return Response.json({exists:true,name:'X',lock:null,banned:null,...account(uid)});}})};}
+test('rooms show offensive names as a neutral Player name',async()=>{
+ const f=await roomFixture(),a=f.socket('a'),b=f.socket('b');await f.message(b,{t:'hello',p:{nm:'B'}});
+ await f.message(a,{t:'hello',p:{nm:'Fuck Face'}});const j=b.messages.find(m=>m.t==='j'&&m.id==='a');assert.match(j.p.nm,/^Player\d{4}$/);
+ await f.message(a,{t:'p',p:{nm:'Classic Ace'}});assert.equal(b.messages.at(-1).p.nm,'Classic Ace');
+});
+test('a banned account is refused by the room and told why',async()=>{
+ const f=await roomFixture(),a=f.socket('a'),b=f.socket('b');f.room.env={PROGRESS:progressStub(()=>({banned:{reason:'Cheating',at:5}}))};
+ await f.message(b,{t:'hello',p:{nm:'B'}});await f.message(a,{t:'hello',p:{nm:'A'}});await f.message(a,{t:'auth',token:'x'.repeat(50)});
+ assert.deepEqual(a.messages.find(m=>m.t==='banned').banned,{reason:'Cheating',at:5});assert.equal(a.readyState,3);
+ assert(b.messages.some(m=>m.t==='l'&&m.id==='a'));assert(!f.room.pres.has('a'));
+});
+test('an admin-locked name replaces whatever name the game sends',async()=>{
+ const f=await roomFixture(),a=f.socket('a'),b=f.socket('b');f.room.env={PROGRESS:progressStub(()=>({lock:'Renamed'}))};
+ await f.message(b,{t:'hello',p:{nm:'B'}});await f.message(a,{t:'hello',p:{nm:'Mine'}});await f.message(a,{t:'auth',token:'x'.repeat(50)});
+ assert.equal(f.room.pres.get('a').nm,'Renamed');assert.equal(b.messages.filter(m=>m.t==='p'&&m.id==='a').at(-1).p.nm,'Renamed');
+ await f.message(a,{t:'p',p:{nm:'Changed'}});assert.equal(b.messages.at(-1).p.nm,'Renamed');assert.equal(f.room.pres.get('a').nm,'Renamed');
+});
+test('the game stops reconnecting once the server says the account is banned',async()=>{
+ const f=await clientFixture(),room=await f.lobby(),ws=f.sockets[0];
+ ws.open();ws.receive({t:'banned',banned:{reason:'Cheating',at:5}});assert.equal(room.banned,true);assert.equal(room.closed,true);assert.equal(JSON.stringify(room.bannedInfo),'{"reason":"Cheating","at":5}');
+ const n=f.sockets.length;ws.onclose?.();f.flush();assert.equal(f.sockets.length,n);
 });

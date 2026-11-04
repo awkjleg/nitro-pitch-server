@@ -99,6 +99,8 @@
         if(!message || typeof message!=='object')return;
         if(message.t==='auth-ok'){this.authUid=message.uid;return;}
         if(message.t==='auth-error'){this.authUid=null;return;}
+        // a banned account: the server closes the connection; stop reconnecting (the game shows the jail screen)
+        if(message.t==='banned'){this.banned=true;this.bannedInfo=message.banned&&typeof message.banned==='object'?message.banned:null;try{window.dispatchEvent(new CustomEvent('np-banned',{detail:this.bannedInfo}));}catch(_){}this.leave();return;}
         if(message.t==='connection'&&typeof message.id==='string'&&Number.isFinite(message.until)){if(message.until>0)this.reconnecting[message.id]=message.until;else delete this.reconnecting[message.id];this.fire();return;}
         if(message.t==='host'){this.serverHost=message.id;return;}
         if(message.t==='state'){

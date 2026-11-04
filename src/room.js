@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import {identify,reply} from './firebase-auth.js';
 import {validCar,validGame,validHit,resultEvidence,rankedRules} from './room-guard.js';
+import {safeName} from './moderation.js';
 const MAX_PLAYERS=400,MAX_MSG=64000,RECONNECT_GRACE=12000,MATCH_RECONNECT_GRACE=60000;
 const cleanId=value=>String(value||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,48);
 const bytes=new TextEncoder();
@@ -24,11 +25,18 @@ export class Room extends DurableObject {
     });
   }
   info(ws){try{return ws.deserializeAttachment()||{};}catch(_){return {};}}
+  // names other players see: an admin-locked name wins, an offensive one becomes a neutral "Player1234"
+  fixName(p,info){if(!p||typeof p!=='object')return;if(info.lockName)p.nm=info.lockName;else if(typeof p.nm==='string')p.nm=safeName(p.nm);}
+  // a signed-in player's account record from the Progress object: banned? admin-locked name?
+  async account(uid,token){
+    if(!this.env.PROGRESS)return null;
+    try{const r=await this.env.PROGRESS.get(this.env.PROGRESS.idFromName('accounts-v1')).fetch(new Request('https://progress/account',{method:'POST',body:JSON.stringify({uid,token})}));return r.ok?await r.json():null;}catch(_){return null;}
+  }
   send(ws,value){try{ws.send(typeof value==='string'?value:JSON.stringify(value));}catch(_){}}
   bcast(message,except){const value=JSON.stringify(message);for(const ws of this.ctx.getWebSockets())if(ws!==except&&ws.readyState===1&&this.info(ws).ok)this.send(ws,value);}
   current(ws,id){return !this.info(ws).replaced&&!this.ctx.getWebSockets(id).some(other=>other!==ws&&other.readyState===1&&!this.info(other).replaced);}
   cache(ws,id,p){
-    const prev=this.info(ws);let record={id,ok:true,p,full:true,uid:prev.uid||null,authAt:prev.authAt||0,order:prev.order||Date.now()};
+    const prev=this.info(ws);let record={id,ok:true,p,full:true,uid:prev.uid||null,authAt:prev.authAt||0,order:prev.order||Date.now(),...(prev.lockName?{lockName:prev.lockName}:{})};
     if(bytes.encode(JSON.stringify(record)).length>1900){
       const summary={};
       for(const key of ['nm','lv','j','tm','sp','lp','ingame','ui','un','rb','bv']){
@@ -119,8 +127,13 @@ export class Room extends DurableObject {
     const now=Date.now(),rate=this.rate.get(id)||{at:now,n:0};if(now-rate.at>1000){rate.at=now;rate.n=0;}this.rate.set(id,rate);if(++rate.n>100)return;
     if(message.t==='auth-clear'){ws.serializeAttachment({...info,uid:null});const p=this.pres.get(id);if(p){p.ui=null;this.cache(ws,id,p);this.bcast({t:'p',id,p:{ui:null}});}return;}
     if(message.t==='auth'){
-      try{const u=await identify(message.token);const cur=this.info(ws);if(!this.current(ws,id))return;ws.serializeAttachment({...cur,uid:u.uid,authAt:now});const p=this.pres.get(id);if(p){p.ui=u.uid;this.cache(ws,id,p);this.bcast({t:'p',id,p:{ui:u.uid}});}this.send(ws,{t:'auth-ok',uid:u.uid});}
-      catch{const cur=this.info(ws);ws.serializeAttachment({...cur,uid:null});this.send(ws,{t:'auth-error'});}return;
+      let u;try{u=await identify(message.token);}catch{const cur=this.info(ws);ws.serializeAttachment({...cur,uid:null});this.send(ws,{t:'auth-error'});return;}
+      // banned accounts are refused (their game shows the jail screen); locked names apply at once
+      const acct=await this.account(u.uid,message.token);if(!this.current(ws,id))return;
+      if(acct?.banned){this.send(ws,{t:'banned',banned:acct.banned});await this.gone(ws,true);try{ws.close(4003,'banned');}catch(_){}return;}
+      const cur=this.info(ws);ws.serializeAttachment({...cur,uid:u.uid,authAt:now,lockName:acct?.lock||null});
+      const p=this.pres.get(id);if(p){p.ui=u.uid;const nm=p.nm;this.fixName(p,{lockName:acct?.lock});this.cache(ws,id,p);this.bcast({t:'p',id,p:p.nm!==nm?{ui:u.uid,nm:p.nm}:{ui:u.uid}});}
+      this.send(ws,{t:'auth-ok',uid:u.uid});return;
     }
     if(message.t==='result-ack'){
       // account players confirm by account; guests (the CrazyGames version) by their place in the match
@@ -132,7 +145,7 @@ export class Room extends DurableObject {
     // Untrusted presence can never supply a verified account ID or authoritative host field.
     if(message.p&&typeof message.p==='object'){
       if(!validCar(message.p.c)||!validHit(message.p.h)||!validGame(message.p.g))return;
-      delete message.p.npUid;delete message.p.serverHost;message.p.ui=info.uid||null;
+      delete message.p.npUid;delete message.p.serverHost;message.p.ui=info.uid||null;if('nm' in message.p)this.fixName(message.p,info);
       if(message.p.g&&this.host&&this.host!==id){delete message.p.g;}
     }
     if(['hello','full','sync'].includes(message.t)){

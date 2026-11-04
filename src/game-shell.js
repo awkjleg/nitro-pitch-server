@@ -14,6 +14,9 @@ import seasonTools from "./season-tools.txt";
 import snowdrift from "./snowdrift.txt";
 import sideswipe from "./sideswipe.txt";
 import sideswipeMenu from "./sideswipe-menu.txt";
+import adminTools from "./admin-tools.txt";
+import socialTools from "./social.txt";
+import { moderationScript } from "./moderation.js";
 // The original game is a single prebuilt HTML asset. Keep the small, reviewed
 // compatibility changes here while the asset stays unchanged. Test these anchors
 // whenever replacing public/index.html with a new game build.
@@ -149,6 +152,14 @@ const patches = [
   {
     "before": "fov: 90, dist: 270, height: 100, angle: -3, stiff: 0.5, ver: SET_VER, ballCam: true, shake: true,",
     "after": "fov: 105, dist: 280, height: 100, angle: -3, stiff: 0.5, ver: SET_VER, ballCam: true, shake: false,"
+  },
+  {
+    "before": "      async giveXp(uid, xp, note, pass) {\n        await ready;\n        const d = { to: String(uid), xp: pass ? 0 : Math.floor(xp), note: String(note || \"\").slice(0, 120), claimed: false, at: firebase.firestore.FieldValue.serverTimestamp() };\n        if (pass) d.px = Math.floor(xp);\n        try { await fs.collection(\"gifts\").add(d); }\n        catch (e) { fail(e); }\n      },\n",
+    "after": "      // before(id): optional, runs with the new gift's ID before the gift is written (Give MMR registers it on the server)\n      async giveXp(uid, xp, note, pass, before) {\n        await ready;\n        const d = { to: String(uid), xp: pass ? 0 : Math.floor(xp), note: String(note || \"\").slice(0, 120), claimed: false, at: firebase.firestore.FieldValue.serverTimestamp() };\n        if (pass) d.px = Math.floor(xp);\n        const ref = fs.collection(\"gifts\").doc();\n        if (before) await before(ref.id);\n        try { await ref.set(d); }\n        catch (e) { fail(e); }\n      },\n"
+  },
+  {
+    "before": "const cleanName = s => String(s ?? \"\").replace(INVISIBLE, \"\").replace(/[^\\p{L}\\p{N} _.\\-()]/gu, \"\").trim().slice(0, 24) || \"Driver\";",
+    "after": "// offensive names (src/moderation.js) show as a neutral \"Player1234\" wherever the game shows a name\nconst cleanName = s => { const v = String(s ?? \"\").replace(INVISIBLE, \"\").replace(/[^\\p{L}\\p{N} _.\\-()]/gu, \"\").trim().slice(0, 24) || \"Driver\"; return window.NPModeration ? window.NPModeration.safeName(v) : v; };"
   },
   {
     "before": "    user: () => toUser(auth && auth.currentUser),",
@@ -424,6 +435,18 @@ const patches = [
   }
 ];
 
+// The release being served, read from the active BUILD and PATCH_NOTES patches above. The Worker announces a
+// release by Web Push ("Nitro Pitch — Big Update! <title>") once, when its patch notes have "big": true.
+function activeRelease() {
+  const build = Number((patches.find(p => /^const \$ = id => /.test(p.after))?.after.match(/const BUILD = (\d+);/) || [])[1]) || 0;
+  const text = (patches.find(p => p.after.startsWith("const PATCH_NOTES = ")) || { after: "" }).after.slice("const PATCH_NOTES = ".length).trim().replace(/;$/, "");
+  // keep the active PATCH_NOTES JSON (as it is now); anything unparsable is served but never announced (tests check it)
+  let notes = {};
+  try { notes = JSON.parse(text) || {}; } catch {}
+  return Object.freeze({ build, v: String(notes.v || ""), title: String(notes.title || ""), big: notes.big === true });
+}
+export const RELEASE = activeRelease();
+
 export function applyGameFixes(html) {
   for (const {before,after} of patches) {
     const index = html.indexOf(before);
@@ -432,5 +455,7 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools, snowdrift, "/* NP2D-START (website only: the CrazyGames build removes this block) */", sideswipe, sideswipeMenu, "/* NP2D-END */"].join("\n"));
+  // the name and message filter (src/moderation.js) loads before the game script, as window.NPModeration
+  html = html.replace('<script src="/progress-api.js"></script>', () => "<script>" + moderationScript + "</script>\n<script src=\"/progress-api.js\"></script>");
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools, snowdrift, adminTools, socialTools, "/* NP2D-START (website only: the CrazyGames build removes this block) */", sideswipe, sideswipeMenu, "/* NP2D-END */"].join("\n"));
 }
