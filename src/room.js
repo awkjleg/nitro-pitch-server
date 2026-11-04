@@ -87,7 +87,7 @@ export class Room extends DurableObject {
     }
     // Multiple tabs of one account cannot impersonate an opponent.
     const ids=r.roster.map(x=>x.uid).filter(Boolean);if(new Set(ids).size!==ids.length)r.invalid=true;
-    r.lastGame={rk:g.rk,mm:g.mm,pl:g.pl,mut:g.mut};
+    r.lastGame={rk:g.rk,mm:g.mm,pl:g.pl,md:g.md,mut:g.mut};
     const changed=JSON.stringify(r.score)!==JSON.stringify(g.s);r.score=g.s.slice();r.last=now;
     if(g.ph==='over'){r.final=structuredClone(g);r.ended=now;}
     if(fresh||changed||r.final||now-(r.saved||0)>5000){r.saved=now;await this.ctx.storage.put('match:'+g.mid,r);}

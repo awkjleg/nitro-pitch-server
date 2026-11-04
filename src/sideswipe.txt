@@ -1,1 +1,946 @@
-// Nitro 2D: side-view car soccer mode (gameplay). Filled in by the 2D gameplay work.
+// Nitro 2D: side-view car soccer (gameplay). Runs inside the game's closure, after the other injected files.
+// A 2D match is match.mut[6] === 6. Everything is the normal 3D engine locked to the plane x = 0, which runs
+// through both goals: cars and ball keep x = 0, cars only pitch (rotate about x) and face +z or -z, the ball only
+// spins about x. Controls, the camera and the bots are swapped for 2D ones while such a match runs; scoring,
+// overtime, MVP, stats, XP and quests stay on the game's normal path.
+window.NP2D = window.NP2D || {};
+(() => {
+  const N2 = window.NP2D;
+  N2.NAME = "Nitro 2D";                      // the only place the player-facing name is set
+  N2.MODE = 6;
+  N2.PL = { duel: 4, doubles: 5, standard: 6 };
+  N2.MATCH_SECONDS = 120;                    // 2D matches last 2 minutes (mut[0] stays 0)
+  const SIZE_PL = { 1: 4, 2: 5, 3: 6 };
+  const live = () => mode !== "menu" && (match.mut[6] | 0) === 6;
+  N2.on = () => { try { return live(); } catch { return false; } };
+
+  const AIR_SPIN = 3.8, SPIN_T = 0.5, _X = new V3(1, 0, 0), TILT = Math.tan(12 * Math.PI / 180), TURN_T = 0.17, REGEN = 15, KZ = [9.5, 12.5, 14.5], PI = Math.PI;
+  const _a = new V3(), _b = new V3(), _f = new V3(), _u = new V3(), _q = new Q(), _vq = new Q(), _Y = new V3(0, 1, 0), _P = new V3();
+  const sgn = v => v > 0 ? 1 : v < 0 ? -1 : 0;
+  const wrapA = a => { while (a > PI) a -= 2 * PI; while (a < -PI) a += 2 * PI; return a; };
+  // which side of the plane the camera watches from: every player attacks to the right of the screen
+  const viewSide = () => me.team === 1 ? 1 : -1;                 // camera x sign
+  const screenZ = () => me.team === 1 ? -1 : 1;                  // world z of "right" on screen
+
+  // ---------- plane lock ----------
+  function lockBall(b) {
+    if (!b || !b.p) return;
+    b.p.x = 0; if (b.v) b.v.x = 0;
+    if (b.w) { b.w.y = 0; b.w.z = 0; }
+  }
+  function lockCar(c) {
+    c.p.x = 0; c.v.x = 0;
+    if (c.recT > 0) return;                  // the auto-flip off the roof rolls through the side; snapped when it ends
+    _a.set(1, 0, 0).applyQuaternion(c.q);
+    const s = Math.abs(_a.x) > 0.05 ? sgn(_a.x) : (c.n2s || 1);
+    c.n2s = s;
+    if (_a.x * s < 0.999999) { _q.setFromUnitVectors(_a.normalize(), _b.set(s, 0, 0)); c.q.premultiply(_q).normalize(); }
+    c.w.y = 0; c.w.z = 0;
+  }
+
+  // ---------- the compact 2D arena ----------
+  // A 2D match plays in its own small arena on the plane (like Hoops plays on its own court): A2.L either side of
+  // centre to the goal lines, a ceiling at A2.H, goals A2.GH tall and A2.GD deep at floor level in both end walls,
+  // the end walls rounding into the ceiling (radius RC) and each goal's floor curving up into its back wall (RG).
+  // Everything is measured in the (y, z) plane; cars and ball never leave x = 0.
+  const A2 = N2.ARENA = Object.freeze({ L: 15, H: 12.5, GH: 5.5, GD: 4.5, RC: 2.5, RG: 1.5 });
+  // ...played with bigger cars (CAR_K: hitbox and model) at genre speeds: VMAX on the throttle, VBOOST with boost or in
+  // the air (the arena is about 2.5 s across flat out). Gravity, jumps and the ball are the game's.
+  const CAR_K = 1.5, VMAX = 11, VBOOST = 14.5;
+  N2.CAR_K = CAR_K;
+  function scaleCar(c) {
+    if (c.n2hb === c.body) return;
+    const B = CARS[c.body] || CARS[0];
+    c.h = B.h.map(v => v * CAR_K); c.ho = B.ho.map(v => v * CAR_K); c.n2hb = c.body;
+  }
+  function unscaleCar(c) { if (c.n2hb != null) { setCarBody(c, c.body); c.n2hb = null; } }
+  function capSpeed(c, dt) {
+    const k = 1 - Math.exp(-7 * dt);
+    const m = c.n2cap || 1;
+    if (c.ground) { const sp = c.v.length(), cap = (c.boosting ? VBOOST : VMAX) * m; if (sp > cap) c.v.multiplyScalar(1 - k * (1 - cap / sp)); }
+    else if (Math.abs(c.v.z) > VBOOST * m) c.v.z -= (c.v.z - sgn(c.v.z) * VBOOST * m) * k;
+  }
+  const oRemAtt = remAtt;
+  remAtt = function (r) { const a = oRemAtt(r); if (live()) { const B = CARS[r.body] || CARS[0]; a.h = B.h.map(v => v * CAR_K); a.ho = B.ho.map(v => v * CAR_K); } return a; };
+  function sdf2(p, out) {
+    const sz = p.z < 0 ? -1 : 1, az = Math.abs(p.z), y = p.y, AL = A2.L, AH = A2.H, G = A2.GH, RC = A2.RC, RG = A2.RG, back = AL + A2.GD;
+    let d = Infinity, ny = 1, nz = 0;
+    const take = (dd, a, b) => { if (dd < d) { d = dd; ny = a; nz = b; } };
+    if (az <= AL) {
+      take(y, 1, 0);
+      const cz = AL - RC, cy = AH - RC, round = az > cz && y > cy;
+      if (round) { const a = az - cz, b = y - cy, l = Math.hypot(a, b) || 1e-6; take(RC - l, -b / l, -a / l); }
+      else take(AH - y, -1, 0);
+      if (y >= G) { if (!round) take(AL - az, 0, -1); }
+      else { const a = AL - az, b = G - y, l = Math.hypot(a, b) || 1e-6; take(l, -b / l, -a / l); }   // the crossbar's edge
+    } else if (az <= back && y < G) {
+      take(y, 1, 0); take(G - y, -1, 0);
+      const bz = back - RG;
+      if (az > bz && y < RG) { const a = az - bz, b = RG - y, l = Math.hypot(a, b) || 1e-6; take(RG - l, b / l, -a / l); }
+      else if (az > back - 1 && y > G - 1) { const a = az - (back - 1), b = y - (G - 1), l = Math.hypot(a, b) || 1e-6; take(1 - l, -b / l, -a / l); }
+      else take(back - az, 0, -1);
+    } else if (y >= G && az <= back + 2) {
+      // inside the wall above a goal: out the short way (into the field or down into the goal)
+      const p1 = az - AL, p2 = y - G;
+      if (p1 < p2) take(-p1, 0, -1); else take(-p2, -1, 0);
+    } else take(back - az, 0, -1);                                            // behind a goal
+    out.set(0, ny, nz * sz);
+    return d;
+  }
+  const oSDF = arenaSDF;
+  arenaSDF = function (p, out, pad = 0) { return live() ? sdf2(p, out) : oSDF(p, out, pad); };
+  // goals: the ball fully over a compact goal line scores. The game's check looks at the full-size line, so the
+  // host's match logic sees the ball there for that one check (scoring, assists, stats and MVP stay the game's).
+  const SCORE_Z = L + 4.25 * UU + 0.5;
+  const oAuth = authorityMatch;
+  authorityMatch = function (dt) {
+    if (!(live() && match.ph === "play" && Math.abs(ball.p.z) > A2.L + BR + 0.05)) return oAuth(dt);
+    const z = ball.p.z; ball.p.z = sgn(z) * (SCORE_Z + BR);
+    try { return oAuth(dt); } finally { ball.p.z = z; }
+  };
+  const oPredGoal = predictGoal;
+  predictGoal = function (b) {
+    if (!live()) return oPredGoal(b);
+    const t = { p: b.p.clone(), v: b.v.clone(), w: (b.w || new V3()).clone() }, keep = bounceImpact;
+    for (let i = 0; i < 360; i++) { stepBall(t, STEP); if (Math.abs(t.p.z) > A2.L + BR) { bounceImpact = keep; return t.p.z > 0 ? 1 : 0; } }
+    bounceImpact = keep;
+    return -1;
+  };
+  const oBotPredict = botPredict;
+  botPredict = function () {
+    if (!live()) return oBotPredict();
+    const keep = bounceImpact, s = { p: ball.p.clone(), v: ball.v.clone(), w: (ball.w || new V3()).clone() };
+    BP.gi = -1; BP.gs = 0;
+    for (let i = 0; i < BP_N; i++) {
+      if (BP.gi < 0) { stepBall(s, BP_DT); if (Math.abs(s.p.z) > A2.L + BR) { BP.gi = i; BP.gs = sgn(s.p.z); } }
+      BP.x[i] = s.p.x; BP.y[i] = s.p.y; BP.z[i] = s.p.z;
+    }
+    bounceImpact = keep; BP.t0 = botClock; BP.dirty = false;
+  };
+  // the goal explosion and its blast go off at the compact goal
+  const atGoal = at => { if (live() && at && Math.abs(at.z) > A2.L + A2.GD + 4) { at = at.clone(); at.z = sgn(at.z) * (A2.L + 1.5); at.y = Math.min(at.y, A2.GH - 1); } return at; };
+  const oFxGoal = fx.goal;
+  fx.goal = function (type, at, hx) { return oFxGoal.call(this, type, atGoal(at), hx); };
+  const oBlast = goalBlast;
+  goalBlast = function (c, at) { return oBlast(c, atGoal(at)); };
+
+  // ---------- controls: a 2D stick (world z, y) -> the engine's inputs ----------
+  // ground: the stick picks the way to drive along the surface; the other way turns the car around (a quick 180 about
+  // the surface normal, momentum kept, then the brakes). Holding the same direction keeps driving (up a wall, onto the
+  // ceiling). air: left/right spins the car (clockwise on screen for right); jump with left/right flips that way,
+  // jump without them is a double jump.
+  function turnAround(c) {
+    _q.setFromAxisAngle(c.n, PI);
+    c.q.premultiply(_q).normalize(); c.pq.premultiply(_q).normalize();
+    // the drawn car swings round over TURN_T with its nose passing the camera side
+    _a.set(0, 0, 1).applyQuaternion(_vq.setFromAxisAngle(_Y, -PI / 2)).applyQuaternion(c.q);
+    c.n2sg = _a.x * viewSide() > 0 ? 1 : -1;
+    c.n2t = TURN_T;
+  }
+  // keyboard (and a gamepad's triggers): forward / back along the car. W drives the way the car faces; S brakes, then
+  // reverses; S pressed at (near) standstill turns the car round, and holding it then drives off the new way. In the
+  // air W / S spin the car (nose down / up), and pick the flip at a jump (none: double jump).
+  function mapKeys(c, out, kb) {
+    _f.set(0, 0, 1).applyQuaternion(c.q);
+    if (!c.ground) { c.n2k = 0; out.pitch = kb; out.dx = kb; return out; }
+    if (kb > 0) { c.n2k = 0; out.thr = kb; return out; }
+    if (kb === 0) { c.n2k = 0; return out; }
+    if (!c.n2k) c.n2k = c.v.dot(_f) > 2.5 ? 1 : 2;          // 1: braking hold; 2: a fresh press from a stop
+    if (c.n2k === 2) { turnAround(c); c.n2k = 3; }
+    out.thr = c.n2k === 3 ? -kb : kb;                        // after the turn: drive off; otherwise brake / reverse
+    return out;
+  }
+  function mapInput(c, inp) {
+    const raw = inp.n2;
+    const out = { ...inp, thr: 0, steer: 0, roll: 0, ar: false, hb: false, pitch: 0, dx: 0 };
+    if (!raw) { c.n2l = null; return out; }
+    if (raw.kb !== undefined) return mapKeys(c, out, clamp(+raw.kb || 0, -1, 1));
+    const wz = clamp(+raw.z || 0, -1, 1), wy = clamp(+raw.y || 0, -1, 1), mag = Math.min(1, Math.hypot(wz, wy));
+    _f.set(0, 0, 1).applyQuaternion(c.q);
+    const s = c.n2s || 1;
+    if (c.ground) {
+      if (mag < 0.25) { c.n2l = null; if (raw.trig) out.thr = clamp(raw.trig, -1, 1); return out; }
+      let want = 1;
+      const l = c.n2l;
+      if (!(l && l.z * wz + l.y * wy > 0.5 * mag)) {
+        const n = c.n;
+        let along = _f.z * wz + _f.y * wy;
+        if (Math.abs(n.y) < 0.75) along -= (n.z * wz + n.y * wy) * (_f.y >= 0 ? 1 : -1);   // pushing into a wall climbs it
+        want = along > 0.2 ? 1 : along < -0.2 ? -1 : 0;
+        c.n2l = want ? { z: wz / mag, y: wy / mag } : null;
+      }
+      if (want < 0) turnAround(c);
+      if (want) out.thr = mag > 0.85 ? 1 : mag;
+      else if (raw.trig) out.thr = clamp(raw.trig, -1, 1);
+      return out;
+    }
+    c.n2l = null;
+    out.pitch = clamp(wz * s, -1, 1);
+    const flipping = c.flipX && c.flipAge < FLIP_TORQUE_TIME + 0.3;
+    if (flipping) out.dx = Math.abs(wz) >= 0.5 && sgn(wz) !== c.n2fd ? -sgn(c.flipX) : 0;   // against the flip: cancel it
+    else {
+      const fz = Math.abs(_f.z) > 1e-3 ? sgn(_f.z) : 1;            // (the engine's dodge uses the flattened nose)
+      out.dx = Math.abs(wz) >= 0.5 ? sgn(wz) * fz : 0;
+      c.n2fdp = sgn(wz);
+    }
+    return out;
+  }
+
+  const oStepCar = stepCar;
+  stepCar = function (c, inp, dt, jp) {
+    if (!live()) { unscaleCar(c); return oStepCar(c, inp, dt, jp); }
+    scaleCar(c);
+    lockCar(c);
+    const m = mapInput(c, inp || {});
+    // on the roof: rolls back over by itself after a moment (jump does it at once)
+    if (c.ground === false && c.restT > 0 && carUp(c, _u).dot(c.restN) < -0.45) { c.n2tt = (c.n2tt || 0) + dt; if (c.n2tt > 0.6) { jp = true; c.n2tt = 0; } }
+    else c.n2tt = 0;
+    const wasDodged = c.dodged, wasGround = c.ground;
+    oStepCar(c, m, dt, jp);
+    if (c.flipAge === 0 && c.flipX) c.n2fd = c.n2fdp || sgn(c.v.z);
+    // a double jump spins the car right round (drawn), the way it is pitching or else nose first
+    if (!wasDodged && c.dodged && !wasGround && !c.ground && c.flipAge > 0) { c.n2spin = 1; c.n2spd = sgn(c.w.x) || 1; }
+    // held air spin: faster than a 3D car can turn, so it keeps rotating like a pinwheel
+    if (!c.ground && Math.abs(m.pitch) > 0.9 && !(c.flipX && c.flipAge < FLIP_TORQUE_TIME + 0.3) && !(c.recT > 0)) {
+      c.q.multiply(_vq.setFromAxisAngle(_X, sgn(m.pitch) * AIR_SPIN * dt)).normalize();
+    }
+    capSpeed(c, dt);
+    lockCar(c);
+  };
+  const oStepBall = stepBall;
+  stepBall = function (b, dt) {
+    if (!live()) return oStepBall(b, dt);
+    lockBall(b); oStepBall(b, dt); lockBall(b);
+  };
+  const oCarBall = carBall;
+  const hitQ = [];
+  carBall = function (c, b) {
+    const vy = b.v.y, vz = b.v.z;
+    const r = oCarBall(c, b);
+    if (r && live()) {
+      lockBall(b); c.v.x = 0; c.p.x = 0;
+      // a bot's touch is softer the lower its rank (n2pow, set by the bot brain; players always hit at full power)
+      if (c.n2pow && c.n2pow < 1) { b.v.y = vy + (b.v.y - vy) * c.n2pow; b.v.z = vz + (b.v.z - vz) * c.n2pow; }
+      const dv = Math.hypot(b.v.y - vy, b.v.z - vz);
+      if (b === ball && dv > 12 && hitQ.length < 4 && nowS() - (ball.n2hit || -9) > 0.12) { ball.n2hit = nowS(); hitQ.push({ p: b.p.clone(), s: dv, col: c === me.car ? TEAM_COL[me.team] || 0xffffff : 0xffffff }); }
+    }
+    return r;
+  };
+  function teamOfCar(c) {
+    if (c === me.car) return me.team;
+    for (const b of bots) if (b.car === c) return b.team;
+    for (const [, r] of remotes) if (r.att === c) return r.team;
+    return -1;
+  }
+  // teammates share the lane: they drive through each other (opponents still bump)
+  const oCarCar = carCar;
+  carCar = function (c, a, key) {
+    if (!live()) return oCarCar(c, a, key);
+    const tc = teamOfCar(c);
+    if (tc >= 0 && tc === teamOfCar(a)) return false;
+    const r = oCarCar(c, a, key);
+    c.p.x = 0; c.v.x = 0;
+    return r;
+  };
+  // no demolitions in a single lane
+  const oDemo = demoCheck;
+  demoCheck = function (c, t) { return live() ? false : oDemo(c, t); };
+  // the drawn car swings round during a turn-around
+  const oInterp = interpCar;
+  interpCar = function (c, a, dt) {
+    oInterp(c, a, dt);
+    if (c.n2t > 0) {
+      c.n2t = Math.max(0, c.n2t - dt);
+      if (!live()) { c.n2t = 0; return; }
+      const k = c.n2t / TURN_T, e = k * k * (3 - 2 * k);
+      c.rq.multiply(_vq.setFromAxisAngle(_Y, -c.n2sg * PI * e));
+    }
+    if (c.n2spin > 0) {
+      c.n2spin = Math.max(0, c.n2spin - dt / SPIN_T);
+      if (!live() || c.ground) { c.n2spin = 0; return; }
+      const k = 1 - c.n2spin, e = 1 - (1 - k) * (1 - k) * (1 - k);             // fast, easing out
+      c.rq.multiply(_vq.setFromAxisAngle(_X, c.n2spd * 2 * PI * e));
+    }
+  };
+  // online: remote cars come from clients that lock their own car; keep the drawn and predicted spots on the plane too
+  const oSnap = sampleSnap;
+  sampleSnap = function (r, nowMs) {
+    oSnap(r, nowMs);
+    if (live()) { if (r.p) r.p.x = 0; if (r.cp) r.cp.x = 0; }
+  };
+  // the host's match state: the game clamps mut[6] to 0..5 and pl to 0..3; keep 2D matches 2D on every client
+  const oHost = applyHostState;
+  applyHostState = function (g) {
+    oHost(g);
+    if (!g || typeof g !== "object") return;
+    if (Array.isArray(g.mut) && g.mut.length >= 7 && (g.mut[6] | 0) === 6) match.mut[6] = 6;
+    if (g.pl === 4 || g.pl === 5 || g.pl === 6) match.pl = g.pl;
+  };
+  // 2-minute matches
+  const oFresh = freshMatch;
+  freshMatch = function (base) {
+    const m = oFresh(base);
+    if ((m.mut[6] | 0) === 6 && (m.mut[0] | 0) === 0) m.tl = N2.MATCH_SECONDS;
+    return m;
+  };
+
+  // ---------- spawns ----------
+  const oKick = kickSpot;
+  kickSpot = function (team, idx, k) {
+    if (!live()) return oKick(team, idx, k);
+    const n = clamp(match.md | 0, 1, 3);
+    let slot = idx;
+    if (n >= 2 && idx < n) {
+      // who takes the kickoff changes from kickoff to kickoff (the same for both teams)
+      const order = [...Array(n).keys()], r = rng((k | 0) * 7919 + 29);
+      for (let i = n - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+      slot = order[idx];
+    }
+    const z = KZ[Math.min(slot, KZ.length - 1)];
+    return [0, team === 0 ? -z : z, team === 0 ? 0 : PI];
+  };
+  const oRespawn = respawnSpot;
+  respawnSpot = function (team) {
+    if (!live()) return oRespawn(team);
+    return [0, team === 0 ? -(A2.L - 2.5) : A2.L - 2.5, team === 0 ? 0 : PI];
+  };
+  const oKickReset = kickoffReset;
+  kickoffReset = function () {
+    oKickReset();
+    if (!live()) return;
+    const cars = [];
+    if (me.team === 0 || me.team === 1) cars.push(me.car);
+    if (isAuthority) for (const b of bots) { cars.push(b.car); if (b.n2) { b.n2.act = null; b.n2.q = []; b.n2.think = 0; } }
+    for (const c of cars) { if (boostRule() === 0) c.boost = 100; c.n2l = null; c.n2t = 0; c.n2s = 0; lockCar(c); c.pq.copy(c.q); c.rq.copy(c.q); }
+  };
+
+  // ---------- input ----------
+  const oRead = readInput;
+  readInput = function () {
+    const r = oRead();
+    const ap = N2.test && N2.test.pilot;
+    if (ap && live() && (me.team === 0 || me.team === 1)) {
+      if (ap.car !== me.car || ap.team !== me.team) { ap.car = me.car; ap.team = me.team; ap.n2 = null; }
+      const busy = !inGamePhase(match.ph) || match.ph === "countdown" || match.ph === "replay";
+      return busy ? r : { ...r, ...think2D(ap, 1 / 60) };
+    }
+    if (live()) {
+      // the phone joystick and a gamepad's left stick are screen-space (left / right on screen, up / down for air
+      // spin); keyboard keys and gamepad triggers drive along the car. A / D (steer) do nothing in 2D.
+      let sx = 0, sy = 0, kb = (held("fwd") ? 1 : 0) - (held("back") ? 1 : 0);
+      const pads = padList(), B = settings.binds;
+      if (touch.x || touch.y) { sx = touch.x; sy = -touch.y; }
+      else if (pads.length) {
+        const ax = k => pads.reduce((m, gp) => Math.abs(gp.axes[k] || 0) > Math.abs(m) ? gp.axes[k] : m, 0);
+        const x = ax(0), y = ax(1);
+        if (Math.abs(x) > settings.dead) sx = x;
+        if (Math.abs(y) > settings.dead) sy = -y;
+        const val = i => i < 0 ? 0 : Math.max(0, ...pads.map(gp => gp.buttons[i] ? gp.buttons[i].value : 0));
+        const trig = val(B.fwd.p) - val(B.back.p);
+        if (Math.abs(trig) > 0.05) kb = trig;
+      }
+      r.n2 = Math.hypot(sx, sy) > 0.05 ? { z: clamp(sx, -1, 1) * screenZ(), y: clamp(sy, -1, 1) } : { kb };
+    }
+    return r;
+  };
+  const oBallCam = toggleBallCam;
+  toggleBallCam = function () { if (live()) return; oBallCam(); };
+
+  // ---------- per frame: boost refill, labels, UI ----------
+  let lastMid = "", bodyOn = false;
+  const css = document.createElement("style");
+  css.textContent = "body.np2d-play #tCam,body.np2d-play #tRear,body.np2d-play #tDrift,body.np2d-play #tRollL,body.np2d-play #tRollR{display:none!important}";
+  document.head.append(css);
+  const oSim = simulate;
+  simulate = function (dt, now) {
+    if (N2.test && N2.test.held && !N2.test.inRun) return;
+    oSim(dt, now);
+    if (!live()) return;
+    if (match.mid && match.mid !== lastMid) { lastMid = match.mid; cam.snap = true; if (me.team === 0 || me.team === 1) toast(N2.NAME + ": score in the goal on the right! Jump, flip, spin and boost."); }
+    // boost refills by itself (the lane passes few pads)
+    if (match.ph === "play" && boostRule() === 0) {
+      const list = [];
+      if (me.team === 0 || me.team === 1) list.push(me.car);
+      if (isAuthority) for (const b of bots) list.push(b.car);
+      for (const c of list) if (!c.dead && !c.boosting) c.boost = Math.min(100, c.boost + REGEN * dt);
+    }
+  };
+  const oHud = updateHud;
+  updateHud = function (dt, now) {
+    oHud(dt, now);
+    const on = live();
+    if (on !== bodyOn) { bodyOn = on; document.body.classList.toggle("np2d-play", on); try { renderHelp(); } catch {} }
+  };
+  const oHelp = renderHelp;
+  renderHelp = function () {
+    oHelp();
+    if (!live()) return;
+    const k = a => { const b = settings.binds[a].k.filter(Boolean); return b.length ? b.map(c => "<kbd>" + keyName(c).replace(/[<>&]/g, "") + "</kbd>").join("") : "<kbd>—</kbd>"; };
+    $("help").innerHTML = k("fwd") + " drive " + k("back") + " brake / reverse / turn round &nbsp; air: " + k("fwd") + k("back") + " spin<br>"
+      + k("jump") + " jump, again to flip &nbsp; " + k("boost") + " boost &nbsp; " + k("help") + " hide";
+  };
+  const oTitle = matchTitle;
+  matchTitle = function () {
+    const t = oTitle();
+    if (!live() || String(t).includes(N2.NAME)) return t;
+    const P = { 4: "Duel", 5: "Doubles", 6: "Standard" }[match.pl], md = match.md + "v" + match.md;
+    return N2.NAME + " · " + String(t).replace(/^(Competitive|Casual) \d+v\d+$/, "$1 " + (P || md));
+  };
+
+  // ---------- side camera ----------
+  const cam = { f: new V3(), d: 40, w: 30, snap: true };
+  // Side view from slightly above (TILT, ~12 degrees down) with a normal lens: the pitch reads as a strip in front of
+  // the stadium. Framed by the width of view at the lane: in landscape most of the compact arena (goal to goal with
+  // gentle panning, zooming out to all of it when the play is spread); on a portrait phone a tighter window that pans.
+  function sideCamera(dt) {
+    if (viewOffsetOn) { camera.clearViewOffset(); viewOffsetOn = false; camera.updateProjectionMatrix(); }
+    dt = clamp(dt, 0, 0.1);
+    const a = innerWidth / Math.max(1, innerHeight), portrait = a < 1;
+    const B = ballMesh.position;
+    const player = match.ph !== "replay" && !spec && (me.team === 0 || me.team === 1) && !me.car.dead;
+    const C = player ? me.car.rp : B;
+    const fz = player ? C.z + (B.z - C.z) * 0.55 : B.z, fy = player ? C.y + (B.y - C.y) * 0.5 : B.y;
+    const full = 2 * (A2.L + A2.GD) + 3;
+    const base = portrait ? 18 : full, most = portrait ? 26 : full;
+    const mz = portrait ? 4 : 5;
+    const needW = 2 * (Math.max(Math.abs(B.z - fz), Math.abs(C.z - fz)) + mz);
+    const want = clamp(Math.max(base, needW), base, most);
+    if (cam.snap) { cam.w = want; cam.f.set(0, fy, fz); }
+    cam.w += (want - cam.w) * (1 - Math.exp(-(want > cam.w ? 3 : 1.2) * dt));
+    cam.f.z += (fz - cam.f.z) * (1 - Math.exp(-5 * dt));
+    cam.f.y += (fy - cam.f.y) * (1 - Math.exp(-4 * dt));
+    cam.snap = false;
+    const vfov = portrait ? 58 : 34, hz = cam.w / 2, hy = hz / a;
+    const D = hz / (Math.tan(vfov * PI / 360) * a);
+    cam.d = D;
+    let y = cam.f.y, z = cam.f.z;
+    if (player) { const kz = Math.min(hz * 0.7, mz); z = clamp(z, C.z - hz + kz, C.z + hz - kz); cam.f.z = z; }
+    // the floor about a fifth of the way up (the HUD lives along the bottom); in portrait about a third (above the
+    // touch controls), the whole arena height in view and the stands above it
+    const lo = hy * (portrait ? 0.36 : 0.62), hi = A2.H + 3 - hy * 0.85;
+    y = lo > hi ? lo : clamp(y, lo, hi);
+    const zMax = Math.max(0, A2.L + A2.GD + 1 - hz);
+    z = clamp(z, -zMax, zMax);
+    let sy = 0, sz = 0;
+    if (shakeT > 0) { shakeT = Math.max(0, shakeT - dt); if (settings.shake && !NPDrive.phone()) { sy = (Math.random() - 0.5) * shakeT * 0.5; sz = (Math.random() - 0.5) * shakeT * 0.5; } }
+    camera.up.set(0, 1, 0);
+    camera.position.set(viewSide() * D, y + D * TILT + sy, z + sz);
+    camLook.set(0, y, z + sz);
+    camera.lookAt(camLook);
+    camPos.copy(camera.position); camUp.set(0, 1, 0); camFollow = false;
+    if (Math.abs(camera.fov - vfov) > 0.01) { camera.fov = vfov; camera.updateProjectionMatrix(); }
+  }
+  const oCam = updateCamera;
+  updateCamera = function (dt, now) {
+    if (!live() || showroomOn() || viewer || match.ph === "lobby" || match.ph === "over") { cam.snap = true; return oCam(dt, now); }
+    sideCamera(dt);
+  };
+  N2.camera = cam;
+
+  // ---------- bots ----------
+  // 2D bots press the same 2D stick (world z / y), jump and boost that players do; skill sk is the game's bot skill
+  // (match skill from botMatchSkill / the rank-based bm, plus a personal offset): t = 0 at Bronze, 1 at SSL.
+  //   low: slow reactions (0.4 s), sloppy approach points, ball chasing (double commits), mistimed jumps, boost spent
+  //        early at kickoffs, no aerials
+  //   mid: quicker reads, rotation (attacker, support behind the play, keeper in 3v3), jump shots and saves, now and
+  //        then a power flip into an uncontested ball
+  //   high: 0.12 s reads, aerial saves (Diamond and up), aerial shots in their half (Champion and up, double-jump
+  //        aerials at the top), boost kept for the air
+  // Tuned with bot-vs-bot batches (tests' NP2D.test hooks): strength rises with skill at every step. b.flags (tests
+  // only) switches single behaviours off for such comparisons.
+  const BOT_IN = () => ({ thr: 0, steer: 0, boost: false, hb: false, roll: 0, jp: false, jh: false, n2: { z: 0, y: 0, trig: 0 } });
+  const fwdA = c => { _f.set(0, 0, 1).applyQuaternion(c.q); return Math.atan2(_f.y, _f.z); };
+  const upA = c => { carUp(c, _u); return Math.atan2(_u.y, _u.z); };
+  const spinX = c => _a.copy(c.w).applyQuaternion(c.q).x;
+  // a stick value that turns an in-plane angle (now) to target: a PD controller on the spin about x
+  function spinTo(c, now, target) { const e = wrapA(target - now); return clamp(-3.6 * e - 0.9 * spinX(c), -1, 1); }
+  function facing(c) { _f.set(0, 0, 1).applyQuaternion(c.q); return sgn(_f.z) || 1; }
+  // drive toward z (rush: full speed through it); otherwise brake to stop on it, then face o.face
+  function driveTo(b, c, tz, inp, o) {
+    tz = clamp(tz, -A2.L + 2.5, A2.L - 2.5);
+    const dz = tz - c.p.z, vz = c.v.z, sp = Math.abs(vz), st = b.n2;
+    const toward = sgn(dz) === sgn(vz), f = facing(c);
+    const stop = sp * sp / (2 * 55) + 0.6;
+    if (Math.abs(dz) < 1.6 && sp < 5) {
+      if (o.face && f !== o.face && c.ground && st.faceCD <= 0) { inp.n2.z = o.face; st.faceCD = 0.6; }
+      return;
+    }
+    // arriving: brake (the reverse pedal) instead of turning round; short moves backwards are reversed into
+    if (!o.rush && toward && Math.abs(dz) < stop) { if (c.ground) inp.n2.trig = sgn(vz) === f ? -1 : 1; return; }
+    if (!o.rush && c.ground && f !== sgn(dz) && Math.abs(dz) < 7 && sp < 9) { inp.n2.trig = -1; return; }
+    inp.n2.z = sgn(dz) * (o.rush && st.save ? 1 : st.drive || 1);
+    const okDir = c.ground ? facing(c) === sgn(dz) && c.n.y > 0.7 : false;
+    if (okDir && (o.rush ? Math.abs(dz) > (st.lateBoost || 0) : Math.abs(dz) > o.boostD + (st.lateBoost || 0)) && sp < VBOOST - 0.5 && (c.boost > o.keep + (st.hoard || 0) || boostRule() === 1)) inp.boost = true;
+  }
+  function stState(b) {
+    return b.n2 || (b.n2 = { think: 0, role: 0, act: null, faceCD: 0, noise: 0, noiseT: 0, plan: null, chase: false });
+  }
+  // where to meet the ball: first point on the predicted path this car can reach from its own goal side
+  const F2 = b => b.flags || NOFLAGS;
+  function intercept(b, c, t, atk, urgent) {
+    const age = botClock - BP.t0, lim = BP.gi >= 0 ? BP.gi : BP_N;
+    const bst = c.boost > 12 || boostRule() === 1, acc = bst ? 30 : 18, vm = bst ? VBOOST : VMAX;
+    const maxAir = t < 0.55 || (b.flags && b.flags.noAerial) ? 0 : Math.min(A2.H - 2, 8 + t * 22);   // Diamond and up
+    let air = null;
+    for (let i = 1; i < lim; i += 2) {
+      const T = (i + 1) * BP_DT - age; if (T < 0.05) continue;
+      const pz = BP.z[i], py = BP.y[i];
+      const az = pz - atk * (BR + 1.1 * CAR_K), d = Math.abs(az - c.p.z), dir = sgn(az - c.p.z) || atk;
+      if ((c.p.z - pz) * atk > 0.5) continue;                       // the ball is behind us
+      let vT = c.v.z * dir, tt = vT < -1 ? -vT / 70 + 0.12 : 0;
+      vT = Math.max(0, vT);
+      const t1 = Math.max(0, (vm - vT) / acc), d1 = (vT + vm) / 2 * t1;
+      tt += d <= d1 ? (-vT + Math.sqrt(vT * vT + 2 * acc * d)) / acc : t1 + (d - d1) / vm;
+      let kind;
+      if (py < 3.3) kind = 0;
+      else if (py < 6.3 && t >= (F2(b).jumpT ?? 0.25) && botRise(py - 1.2) > 0) { kind = 1; tt = Math.max(tt, botRise(py - 1.2) + 0.05); }
+      else if (py < maxAir && c.boost > 18 + py) { kind = 2; tt = Math.max(tt, (py - 1) / 13 + 0.35); }
+      else continue;
+      if (tt > T) continue;
+      const hit = { T, kind, z: pz, y: py, at: botClock + T };
+      if (kind < 2) return air && urgent && air.T < T - 0.4 ? air : hit;
+      // aerials: saves, and (Champion and up) shots in their half that nobody else can reach first
+      if (!air && (urgent || (t >= (F2(b).airT ?? 0.75) && pz * atk > 0 && !b.n2.press))) air = hit;
+      if (air && T > air.T + 1.2) break;
+    }
+    return air;
+  }
+  // a decision from what the bot sees now; think2D acts on it after the bot's reaction time
+  function decide(b, c, t, atk) {
+    const S = stState(b), st = {}, team = BT[b.team], ownZ = -atk * A2.L;
+    const kick = ball.v.lengthSq() < 0.05 && Math.abs(ball.p.z) < 0.05;
+    // rank the team by who should play the ball: distance, plus a penalty for being upfield of it
+    const score = o => kick ? Math.abs(o.p.z) : Math.abs(ball.p.z - o.p.z) / 30 + ((o.p.z - ball.p.z) * atk > 1 ? 1.1 : 0) + (o.p.y > 4 ? 0.2 : 0);
+    const mine = score(c);
+    if (!(S.chaseT > botClock)) { S.chaseT = botClock + 1; S.chaseOn = Math.random() < (F2(b).chase ?? (1 - t) * 0.45); }
+    st.chase = !kick && S.chaseOn;
+    let rank = 0;
+    if (!st.chase) for (const o of team) if (o.p !== c.p) { const s = score(o); if (s < mine - 1e-6 || (Math.abs(s - mine) < 1e-6 && o.b && o.b.key < b.key)) rank++; }
+    st.role = rank; st.kick = kick;
+    const tGoal = BP.gs === -atk && BP.gi >= 0 ? (BP.gi + 1) * BP_DT - (botClock - BP.t0) : 99;
+    let closest = true;
+    for (const o of team) if (o.p !== c.p && Math.abs(o.p.z - ownZ) < Math.abs(c.p.z - ownZ)) closest = false;
+    // saves from Platinum up; higher ranks read the shot earlier (Platinum ~1.2 s before it would go in, Legend 3 s)
+    st.save = t > (F2(b).saveT ?? 0.5) && tGoal < bmix(1.2, 3, clamp((t - 0.5) / 0.5, 0, 1)) && !F2(b).noSave && (rank === 0 || closest);
+    // a challenge: an opponent is about to play the ball too
+    const eta = o => Math.abs(ball.p.z - o.p.z) / Math.max(12, Math.abs(o.v.z) * 0.6 + 18);
+    let oppEta = 9; for (const o of BT[1 - b.team]) if ((o.p.z - ball.p.z) * atk >= -1) oppEta = Math.min(oppEta, eta(o));
+    st.press = oppEta < eta(c) + 0.35;
+    // shadow defence (Gold and up, more often higher): the opponent will clearly get there first and the ball is in
+    // our half: hold a spot in front of our goal and step up only when the ball comes close
+    st.shadow = !kick && rank === 0 && closest && oppEta + 0.25 < eta(c) && ball.p.z * atk < 4 && t >= (F2(b).shadowT ?? 0.35) && Math.random() < bmix(0.5, 1, t);
+    st.plan = !kick && (rank === 0 || st.save) ? intercept(b, c, t, atk, tGoal < 3) : null;
+    // the random handicaps are drawn on a clock, not per decision (so quicker thinking never means more mistakes):
+    // an aim offset, and now and then a hesitation (low ranks pull up short of the ball)
+    const tn = F2(b).noiseT ?? Math.pow(t, 1.4);
+    if (!(S.mistakeT > botClock)) {
+      S.mistakeT = botClock + 0.9;
+      S.noise = (Math.random() - 0.5) * (1 - tn) * 3;
+      S.wrongOn = Math.random() < (F2(b).wrongP ?? (1 - tn) * 0.35);
+      S.placeOn = Math.random() < (F2(b).placeP ?? t);
+    }
+    st.wrong = !kick && S.wrongOn; st.placeOn = S.placeOn;
+    return st;
+  }
+  function startAct(st, kind, o) { st.act = { kind, t: 0, ...o }; }
+  // a move in progress owns the controls; false when it is over
+  function runAct(b, c, t, atk, dt, inp) {
+    const st = b.n2, A = st.act; A.t += dt;
+    const toBall = sgn(ball.p.z - c.p.z) || atk;
+    if (A.kind === "flip") {
+      // jump, then flip toward dir
+      if (A.t < 0.07) { inp.jh = true; inp.n2.z = 0; if (A.t <= dt) inp.jp = true; return true; }
+      if (!A.done) { if (c.ground) return false; inp.jp = true; inp.n2.z = A.dir; A.done = true; return true; }
+      if (A.t < 0.75) { inp.n2.z = A.dir; return !c.ground || A.t < 0.2; }
+      return false;
+    }
+    if (A.kind === "jump") {
+      // jump shot: hold the jump, point the nose at the ball, flip into it when it is close
+      if (A.t <= dt) { inp.jp = true; inp.jh = true; return true; }
+      if (c.ground && A.t > 0.15) return false;
+      inp.jh = A.t < 0.22;
+      _P.subVectors(ball.p, c.p);
+      if (!A.flip && _P.length() < 3.4 + BR && t > 0.25 && Math.abs(_P.z) > 0.6) { A.flip = true; inp.jp = true; inp.n2.z = sgn(_P.z); return true; }
+      if (A.flip) { inp.n2.z = sgn(_P.z) || toBall; return A.t < 1.2; }
+      inp.n2.z = spinTo(c, fwdA(c), Math.atan2(_P.y, _P.z));
+      return A.t < 1.3;
+    }
+    if (A.kind === "aerial") {
+      if (A.t <= dt) { inp.jp = true; inp.jh = true; return true; }
+      if (c.ground && A.t > 0.2) return false;
+      inp.jh = A.t < 0.2;
+      if (A.dbl && A.t > 0.17 && !A.dj) { A.dj = true; inp.jp = true; inp.n2.z = 0; return true; }
+      const left = Math.max(0.05, A.at - botClock);
+      botBallAt(left, _P);
+      _P.z -= atk * BR * 0.8; _P.y -= 0.3;                            // a little behind and under: it goes their way
+      _P.sub(c.p);
+      const want = Math.atan2(_P.y - 0.5 * CAR_G0 * left * left * 0.4, _P.z), now = fwdA(c);
+      inp.n2.z = spinTo(c, now, want);
+      if (Math.abs(wrapA(want - now)) < 0.55 && c.boost > 0) inp.boost = true;
+      const d = _P.length();
+      if (A.t > 0.45 && A.last != null && d > A.last + 0.05 && !A.flip) return false;   // going past it: give up
+      A.last = d;
+      if (!A.flip && d < 3 + BR && t > 0.7 && A.t > 0.3) { A.flip = true; inp.jp = true; inp.n2.z = sgn(_P.z) || atk; }
+      return A.t < A.T + 0.6 && (d < 40 || A.t < 0.6);
+    }
+    return false;
+  }
+  // bot skill from a 2D MMR: the 2D ladder's tiers line up with the 3D ones (2D Bronze = 3D Bronze ... 2D Champion
+  // spans Champion and Grand Champion, Legend = Supersonic Legend and up) and go through the game's own curve
+  const MAP2D = [[0, 0], [275, 294], [550, 475], [825, 655], [1100, 835], [1375, 1075], [1650, 1861], [1850, 2000]];
+  N2.mmrTo3D = function (m) {
+    m = fin(+m) ? +m : Ranked.START;
+    if (m <= 0) return 0;
+    for (let i = 1; i < MAP2D.length; i++) if (m <= MAP2D[i][0]) { const [a0, b0] = MAP2D[i - 1], [a1, b1] = MAP2D[i]; return b0 + (b1 - b0) * (m - a0) / (a1 - a0); }
+    return MAP2D[MAP2D.length - 1][1] + (m - MAP2D[MAP2D.length - 1][0]);
+  };
+  N2.botSkill = m => Ranked.botSkill(N2.mmrTo3D(m));
+  // the match's bot skill: matchmade games (ranked and casual, bot-filled) from the bots' MMR bm (the humans' 2D MMR),
+  // exhibitions from the chosen difficulty
+  N2.matchSkill = () => match.mm && match.bm > 0 ? N2.botSkill(match.bm) : botMatchSkill();
+  const NOFLAGS = {};
+  function think2D(b, dt) {
+    const c = b.car, atk = b.team === 0 ? 1 : -1, ownZ = -atk * A2.L;
+    const sk = b.sk = fin(b.skx) ? b.skx : clamp(N2.matchSkill() + (b.skd || 0), 0.3, 1.25);
+    const t = clamp((sk - 0.45) / 0.67, 0, 1);
+    const inp = BOT_IN();
+    if (c.dead) return inp;
+    const st = stState(b), F = b.flags || NOFLAGS;
+    st.faceCD -= dt;
+    // handicaps that fall away with skill: a lighter foot (Bronze drives at ~70% throttle) and boost hoarded unused
+    // (the handicaps ease off slowly through the low and middle ranks and fast towards the top: u = t^1.4)
+    const u = Math.pow(t, 1.4);
+    st.drive = F.drive ?? bmix(0.6, 1, u); st.hoard = F.hoard ?? bmix(60, 0, u); st.lateBoost = F.lateBoost ?? (1 - u) * 10;
+    c.n2cap = F.cap ?? bmix(0.62, 0.82, u);         // a lower top speed (and bots never drive flat out: they'd over-run the ball)
+    c.n2pow = F.pow ?? bmix(0.62, 1, u);             // softer touches at low ranks
+    st.u = u;
+    lockCar(c);
+    if (st.act) { if (runAct(b, c, t, atk, dt, inp)) return inp; st.act = null; }
+    st.think -= dt;
+    // decisions every ~0.2 s for everyone; skill is how soon they act on one: the reaction time (Bronze 0.45 s ...
+    // Legend 0.04 s), so a low-rank bot keeps playing the old read for a while after the ball changes
+    const q = st.q || (st.q = []);
+    if (st.think <= 0 || (!q.length && st.plan && st.plan.at < botClock - 0.05)) {
+      st.think = (F.think || 0.2) * (0.75 + 0.5 * Math.random());
+      q.push({ at: botClock + (F.delay ?? bmix(0.45, 0.04, st.u)), R: decide(b, c, t, atk) });
+    }
+    while (q.length && q[0].at <= botClock) Object.assign(st, q.shift().R);
+    // in the air with nothing planned: land on the wheels
+    if (!c.ground) {
+      inp.n2.z = spinTo(c, upA(c), PI / 2);
+      if (c.p.y > 6 && c.v.y < 0 && st.save && t > 0.5 && c.boost > 10) inp.boost = false;
+      return inp;
+    }
+    // on a wall or the ceiling without a reason to be there: jump off
+    if (c.n.y < 0.55 && !(Math.abs(ball.p.z - c.p.z) < 9 && ball.p.y > c.p.y)) { if (st.faceCD <= 0) { st.faceCD = 0.5; inp.jp = true; inp.jh = true; } return inp; }
+    const bz = ball.p.z, by = ball.p.y, distZ = bz - c.p.z, spd = Math.abs(c.v.z);
+    // kickoff: the first man goes, flips into the ball at the end; the others wait back
+    if (st.kick) {
+      if (st.role === 0) {
+        // straight through it with boost (a flip at the ball loses the 50/50 in a single lane)
+        // (a beat's pause off the line: in a single lane the second car to the ball tends to win the kickoff)
+        if (st.kickWait == null) st.kickWait = Math.random() * (F.kickW ?? 0.36);
+        if (st.kickWait > 0) { st.kickWait -= dt; return inp; }
+        driveTo(b, c, 0, inp, { rush: true, keep: F.kickKeep ?? 0, boostD: 0 });
+      } else driveTo(b, c, c.p.z, inp, { face: atk, keep: 100, boostD: 99 });
+      return inp;
+    }
+    st.kickWait = null;
+    const goalSide = (c.p.z - bz) * atk < 0.8;
+    if (st.role === 0 || st.save) {
+      const plan = st.plan;
+      if (!goalSide) {
+        // beaten: get back past the ball (under a high one; a low one gets played back), then play it again
+        driveTo(b, c, bz - atk * 6, inp, { rush: true, keep: 10, boostD: 6 });
+        return inp;
+      }
+      // nothing reachable: a save goes back to the goal line, otherwise follow the ball from our side
+      if (!plan) { const tz = st.save ? ownZ + atk * 2 : bz - atk * (BR + 2); driveTo(b, c, tz, inp, { rush: st.save && Math.abs(tz - c.p.z) > 6, face: atk, keep: 30, boostD: 14 }); return inp; }
+      const left = plan.at - botClock;
+      const az = plan.z - atk * (BR + 1.1 * CAR_K) + st.noise;
+      // low ranks hesitate: pull up short of the ball and let it come (or let the opponent have it)
+      if (st.wrong) { driveTo(b, c, az - atk * 2.5, inp, { keep: 100, boostD: 99 }); return inp; }
+      if (st.shadow) {
+        const hold = ownZ + atk * 3.5;
+        if (Math.abs(distZ) < 5 + spd * 0.15 && by < 4) driveTo(b, c, bz + atk * 2, inp, { rush: true, keep: 0, boostD: 0 });
+        else driveTo(b, c, hold, inp, { face: atk, keep: 40, boostD: 8, rush: (c.p.z - hold) * atk > 5 });
+        return inp;
+      }
+      // placed shots (higher ranks, more often): near their goal a rolling ball is pushed in at a controlled speed
+      // instead of blasted (a hard hit there flies over the goal and comes back off the wall)
+      if (plan.kind === 0 && by < 3 && A2.L - plan.z * atk < 12 && (c.p.z - bz) * atk < 0 && st.placeOn) {
+        driveTo(b, c, az + atk * 3, inp, { keep: 100, boostD: 99, rush: true });
+        inp.n2.z *= 0.65; inp.boost = false;
+        return inp;
+      }
+      if (plan.kind === 0) {
+        driveTo(b, c, az + atk * 3, inp, { rush: true, keep: F.atkKeep ?? (t > 0.6 ? 15 : 0), boostD: 10 });
+        // close in, nobody contesting it: now and then a flip into it for a harder shot
+        const gap = Math.abs(distZ) - BR - 1.3 * CAR_K, closing = c.v.z * sgn(distZ) - ball.v.z * sgn(distZ);
+        if (by < 3 && gap < 1.2 + closing * 0.14 && closing > 6 && facing(c) === sgn(distZ) && !st.press && Math.random() < (F.flipP ?? 0.15) && !F.noFlip) startAct(st, "flip", { dir: sgn(distZ) });
+        return inp;
+      }
+      // in the air: be under it, then jump (or take off) at the right moment
+      driveTo(b, c, az, inp, { rush: Math.abs(az - c.p.z) > Math.max(6, left * 12), keep: plan.kind === 2 ? 40 : 15, boostD: 12 });
+      const err = (Math.random() - 0.5) * (1 - (F.errT ?? t)) * 0.25, hz = plan.z - c.p.z, toward = sgn(hz) || atk;
+      // only off the ground, pointing and rolling the right way
+      const ready = c.ground && c.n.y > 0.8 && (facing(c) === toward || Math.abs(hz) < 2) && c.v.z * toward > -3;
+      if (!ready) return inp;
+      if (plan.kind === 1) {
+        const rise = botRise(plan.y - 1.2);
+        if (rise > 0 && left <= rise + 0.03 + err && Math.abs(az - c.p.z) < 2 + spd * left && !F.noJump) startAct(st, "jump", {});
+      } else {
+        const need = (plan.y - 1) / 13 + 0.35;
+        if (left <= need + err + 0.1 && Math.abs(hz) < (Math.max(0, c.v.z * toward) + 12) * left + 2 && !F.noAerial) startAct(st, "aerial", { at: plan.at, T: left, dbl: t > 0.75 && plan.y > 14 });
+      }
+      return inp;
+    }
+    // support: behind the play, between the ball and our goal, ready to follow up; keeper: in goal
+    if (st.role === 1) {
+      const back = F.back ?? bmix(9, 7, t), tz = atk > 0 ? Math.max(ownZ + 3, Math.min(bz - back, A2.L * 0.3)) : Math.min(ownZ - 3, Math.max(bz + back, -A2.L * 0.3));
+      driveTo(b, c, tz, inp, { face: atk, keep: 60, boostD: 16 });
+    } else driveTo(b, c, ownZ + atk * 2.5, inp, { face: atk, keep: 60, boostD: 8 });
+    return inp;
+  }
+  const oThink = botThink;
+  botThink = function (b, dt) {
+    if (!live()) return oThink(b, dt);
+    if (N2.test && N2.test.idleBots) return BOT_IN();
+    return think2D(b, dt);
+  };
+
+  // ---------- 2D effects (drawn every frame) ----------
+  // bigger boost trails in each car's own boost colour or style, a trail off spinning cars, dust when a car jumps or
+  // lands hard, sparks and a shockwave on strong hits, and a streak behind a fast ball
+  const prevQ = new Map(), prevAir = new WeakMap(), _e = new V3(), _e2 = new V3(), _eq = new Q();
+  const RING_FACE = [0, PI / 2, 0];
+  function dust(p, n, col) {
+    for (let i = 0; i < n; i++) { const s = (Math.random() - 0.5) * 2; fx.emit(p.x, 0.15, p.z + s * 0.9, (Math.random() - 0.5) * 2, 1 + Math.random() * 2.5, s * 7, col, 0.45 + Math.random() * 0.2, 2.5, 6); }
+    fx.ring(_e.set(p.x, 0.12, p.z), col, 2.2, false, null, 0.35);
+  }
+  function fx2(dt, now) {
+    if (paused || !(dt > 0)) return;
+    const showReplay = match.ph === "replay" && replay.active && !replay.skip;
+    if (!showReplay) {
+      // jumps and landings of the cars this page simulates
+      const locals = [];
+      if (me.team === 0 || me.team === 1) locals.push(me.car);
+      if (isAuthority) for (const b of bots) locals.push(b.car);
+      for (const c of locals) {
+        if (c.dead) continue;
+        const air = !c.ground, was = prevAir.get(c);
+        if (was === false && air && c.jumped && c.p.y < 2) dust(c.p, 12, 0xdfe8ff);
+        if (was === true && !air && c.n.y > 0.7 && (c.n2vy || 0) < -8) dust(c.p, 18, 0xffffff);
+        prevAir.set(c, air); c.n2vy = c.v.y;
+      }
+      // strong hits
+      while (hitQ.length) {
+        const h = hitQ.shift(), k = clamp((h.s - 12) / 35, 0, 1);
+        fx.burst(h.p, 0xffe9a8, Math.round(18 + 50 * k), 10 + 18 * k, 0.45, 4);
+        fx.ring(h.p, h.col, 5 + 8 * k, false, RING_FACE, 0.3 + 0.15 * k);
+        if (k > 0.5) fx.ring(h.p, 0xffffff, 9 + 6 * k, false, RING_FACE, 0.45);
+      }
+      // a fast ball leaves a streak
+      const bs = ball.v.length();
+      if (bs > 24 && ballMesh.visible) {
+        _e.copy(ball.v).multiplyScalar(-1 / bs);
+        for (let i = 0; i < 3; i++) fx.emit(ball.rp.x, ball.rp.y + (Math.random() - 0.5) * BR, ball.rp.z + _e.z * BR * Math.random(), _e.x * 4, _e.y * 4, _e.z * 4, i ? 0xcfe8ff : 0xffffff, 0.3, 3, 0);
+      }
+    } else hitQ.length = 0;
+    // boost trails and spin trails, for every drawn car (yours, bots, other players, replays)
+    let list = [];
+    try { list = showReplay ? (replay.frame(now) || {}).cars || [] : match.ph === "replay" ? [] : liveCarList(); } catch {}
+    const seen = new Set();
+    for (const e of list) {
+      if (!e.p || !e.q || e.dead) continue;
+      seen.add(e.k);
+      _f.set(0, 0, 1).applyQuaternion(e.q);
+      if (e.boosting) {
+        _e.copy(e.p).addScaledVector(_f, -1.35 * CAR_K);
+        const T = TRAILS[e.trail];
+        if (T && T.fx) fx.trail(e.trail, _e.x, _e.y, _e.z, -_f.x, -_f.y, -_f.z, dt, now);
+        for (let i = 0; i < 7; i++) fx.emit(_e.x + (Math.random() - 0.5) * 0.6, _e.y + (Math.random() - 0.5) * 0.6, _e.z + (Math.random() - 0.5) * 0.6, -_f.x * 18 + (Math.random() - 0.5) * 4, -_f.y * 18 + (Math.random() - 0.5) * 4, -_f.z * 18 + (Math.random() - 0.5) * 4, i < 2 ? 0xffffff : trailColor(e.trail, now), 0.7, 2, 0);
+      }
+      // spinning in the air: streaks off the nose and tail
+      const pq = prevQ.get(e.k);
+      if (pq) {
+        const dot = Math.min(1, Math.abs(pq.dot(e.q))), rate = 2 * Math.acos(dot) / dt;
+        if (rate > 5 && e.p.y > 1.4) {
+          const col = TEAM_COL[e.team] || 0xffffff;
+          for (const sd of [-1, 1]) { _e2.copy(e.p).addScaledVector(_f, sd * 1.25 * CAR_K); fx.emit(_e2.x, _e2.y, _e2.z, 0, 0, 0, i2c(col, now), 0.28, 0, 0); }
+        }
+        pq.copy(e.q);
+      } else prevQ.set(e.k, e.q.clone());
+    }
+    for (const k of prevQ.keys()) if (!seen.has(k)) prevQ.delete(k);
+  }
+  const i2c = (col, now) => (now * 8 | 0) % 2 ? 0xffffff : col;
+
+  // ---------- the compact arena's look (2D matches only) ----------
+  // Built for a camera on the -x side and mirrored for the other: a glowing front edge to the pitch (it also hides the
+  // big stadium floor in front of the lane), glass behind the lane and as the ceiling, glass end walls above framed,
+  // team-coloured goals, and dark panels past the goals and behind the glass that close the arena off from the big
+  // field (the stadium's stands and lights stay in view above and behind).
+  const FRONT_X = 6, BACK_X = 9;
+  const arena = (() => {
+    const g = new THREE.Group(); g.visible = false; scene.add(g);
+    const AL = A2.L, AH = A2.H, G = A2.GH, back = AL + A2.GD, depth = FRONT_X + BACK_X, midX = (BACK_X - FRONT_X) / 2;
+    const basic = (o) => new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, fog: false, ...o });
+    const add = (geo, mat, x, y, z, rx = 0, ry = 0, ro) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); if (ro != null) m.renderOrder = ro; g.add(m); return m; };
+    const canvasTex = (w, h, draw, rep) => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; draw(cv.getContext("2d"), w, h); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]); } return t; };
+    // the front edge: a bright line along the floor, the pitch's side face below it
+    const edgeTex = canvasTex(4, 256, (c) => { const gr = c.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, "#ffffff"); gr.addColorStop(0.015, "#ffffff"); gr.addColorStop(0.03, "#9fb0d0"); gr.addColorStop(0.12, "#2a3550"); gr.addColorStop(1, "#04060c"); c.fillStyle = gr; c.fillRect(0, 0, 4, 256); });
+    const edgeMat = basic({ map: edgeTex });
+    add(new THREE.PlaneGeometry(2 * back + 40, 30), edgeMat, -FRONT_X, -15, 0, 0, PI / 2);
+    // dark floor and wall around the arena: behind the back glass, and past each goal
+    const outerMat = basic({ color: 0x0a0f1c });
+    // (the big stadium floor is covered everywhere but the lane: in front of it and behind the back glass)
+    add(new THREE.PlaneGeometry(160, 2 * back + 300), outerMat, BACK_X + 80, 0.25, 0, -PI / 2);
+    add(new THREE.PlaneGeometry(160, 2 * back + 300), outerMat, -FRONT_X - 80, 0.25, 0, -PI / 2);
+    for (const sd of [-1, 1]) add(new THREE.PlaneGeometry(depth, 150), outerMat, midX, 0.25, sd * (back + 75), -PI / 2);
+    // glass: behind the lane (with a hex pattern) and the ceiling
+    const hexTex = canvasTex(128, 148, (c) => { c.strokeStyle = "rgba(255,255,255,.6)"; c.lineWidth = 3; const hx = (x, y, r) => { c.beginPath(); for (let i = 0; i <= 6; i++) { const a = PI / 3 * i + PI / 6; c[i ? "lineTo" : "moveTo"](x + r * Math.cos(a), y + r * Math.sin(a)); } c.stroke(); }; for (const [x, y] of [[0, 0], [128, 0], [64, 74], [0, 148], [128, 148]]) hx(x, y, 42); }, [2 * back / 5, AH / 5.8]);
+    const glassMat = basic({ color: 0x8fb4ff, transparent: true, opacity: 0.1, depthWrite: false });
+    const hexMat = basic({ color: 0x8fb4ff, map: hexTex, transparent: true, opacity: 0.13, depthWrite: false, blending: THREE.AdditiveBlending });
+    add(new THREE.PlaneGeometry(2 * back, AH), glassMat, BACK_X, AH / 2, 0, 0, PI / 2, 1);
+    add(new THREE.PlaneGeometry(2 * back, AH), hexMat, BACK_X - 0.02, AH / 2, 0, 0, PI / 2, 1);
+    add(new THREE.PlaneGeometry(depth, 2 * AL), basic({ color: 0x8fb4ff, transparent: true, opacity: 0.05, depthWrite: false }), midX, AH, 0, PI / 2, 0, 1);
+    // light strips along the floor and ceiling edges (theme colour)
+    const stripMat = basic({ color: 0x8fb4ff });
+    const bar = (len, axis, x, y, z, t = 0.22) => add(axis === "z" ? new THREE.BoxGeometry(t, t, len) : axis === "x" ? new THREE.BoxGeometry(len, t, t) : new THREE.BoxGeometry(t, len, t), stripMat, x, y, z);
+    bar(2 * back, "z", BACK_X, 0.12, 0, 0.16); bar(2 * AL, "z", BACK_X, AH, 0); bar(2 * AL, "z", -FRONT_X, AH, 0);
+    add(new THREE.PlaneGeometry(0.35, 2 * back), basic({ color: 0xffffff }), -FRONT_X + 0.17, 0.06, 0, -PI / 2);   // the front edge line
+    // the pitch: the lane's own grass (theme stripes) with markings: halfway line, centre circle, boxes, side lines
+    const pitchCv = document.createElement("canvas"); pitchCv.width = 1024; pitchCv.height = 256;
+    const pitchTex = new THREE.CanvasTexture(pitchCv); pitchTex.colorSpace = THREE.SRGBColorSpace; pitchTex.anisotropy = 4;
+    const pitchMat = new THREE.MeshLambertMaterial({ map: pitchTex });
+    const pitch = add(new THREE.PlaneGeometry(2 * back, depth), pitchMat, midX, 0.03, 0, -PI / 2);
+    pitch.rotation.z = PI / 2;   // texture u along z, v along x
+    function paintPitch(T) {
+      const g = pitchCv.getContext("2d"), W = 1024, Hh = 256, sx = W / (2 * back), sy = Hh / depth;
+      const st = T.stripes || ["#2f7a3a", "#36863f"];
+      for (let i = 0; i < 12; i++) { g.fillStyle = st[i % 2]; g.fillRect(i * W / 12, 0, W / 12 + 1, Hh); }
+      const X = z => (z + back) * sx, Y = x => (x + FRONT_X) * sy;
+      g.strokeStyle = T.line || "rgba(255,255,255,.9)"; g.lineWidth = 5;
+      g.strokeRect(X(-AL), Y(-FRONT_X + 0.8), X(AL) - X(-AL), Y(BACK_X - 0.8) - Y(-FRONT_X + 0.8));
+      g.beginPath(); g.moveTo(X(0), Y(-FRONT_X + 0.8)); g.lineTo(X(0), Y(BACK_X - 0.8)); g.stroke();
+      g.beginPath(); g.ellipse(X(0), Y(midX), 4 * sx, 4 * sy, 0, 0, 2 * PI); g.stroke();
+      for (const sd of [-1, 1]) { const z0 = sd * AL, z1 = sd * (AL - 4.5); g.strokeRect(Math.min(X(z0), X(z1)), Y(-FRONT_X + 3), Math.abs(X(z1) - X(z0)), Y(BACK_X - 3) - Y(-FRONT_X + 3)); }
+      g.fillStyle = "#ffffff"; g.beginPath(); g.arc(X(0), Y(midX), 6, 0, 2 * PI); g.fill();
+      pitchTex.needsUpdate = true;
+    }
+    // end walls above the goals: glass, framed; the goals: team-coloured frames and nets
+    const netTex = canvasTex(64, 64, (c) => { c.strokeStyle = "rgba(255,255,255,.9)"; c.lineWidth = 3; c.strokeRect(0, 0, 64, 64); c.beginPath(); c.moveTo(0, 32); c.lineTo(64, 32); c.moveTo(32, 0); c.lineTo(32, 64); c.stroke(); }, [1, 1]);
+    const goals = [];
+    for (const sd of [-1, 1]) {
+      const team = sd < 0 ? 0 : 1, col = TEAM_COL[team];
+      const frame = basic({ color: col }), glow = basic({ color: col, transparent: true, opacity: 0.16, depthWrite: false });
+      const t1 = netTex.clone(); t1.needsUpdate = true; t1.repeat.set(A2.GD / 1.2, G / 1.2);
+      const t2 = netTex.clone(); t2.needsUpdate = true; t2.repeat.set(depth / 1.2, G / 1.2);
+      const t3 = netTex.clone(); t3.needsUpdate = true; t3.repeat.set(depth / 1.2, A2.GD / 1.2);
+      const net = o => basic({ color: col, map: o, transparent: true, opacity: 0.5, depthWrite: false });
+      const zc = sd * (AL + A2.GD / 2);
+      add(new THREE.PlaneGeometry(A2.GD, G), net(t1), BACK_X - 0.05, G / 2, zc, 0, PI / 2, 2);       // far side net
+      add(new THREE.PlaneGeometry(depth, G), net(t2), midX, G / 2, sd * (back - 0.05), 0, 0, 2);     // back net
+      add(new THREE.PlaneGeometry(depth, A2.GD), net(t3), midX, G, zc, PI / 2, 0, 2);               // roof net
+      add(new THREE.PlaneGeometry(depth, A2.GD), glow, midX, 0.04, zc, -PI / 2, 0, 2);               // floor glow
+      const T = 0.42;
+      for (const x of [-FRONT_X, BACK_X]) {
+        add(new THREE.BoxGeometry(T, G + T, T), frame, x, G / 2, sd * AL);                         // posts
+        add(new THREE.BoxGeometry(T, T, A2.GD), frame, x, G, zc);                                   // roof edges
+        add(new THREE.BoxGeometry(T, G, T), frame, x, G / 2, sd * back);                            // back posts
+      }
+      add(new THREE.BoxGeometry(depth + T, T, T), frame, midX, G, sd * AL);                         // crossbar
+      add(new THREE.BoxGeometry(depth + T, T, T), frame, midX, 0.2, sd * AL);                       // goal line
+      // the wall above the goal: tinted glass with a frame, rounded into the ceiling
+      add(new THREE.PlaneGeometry(depth, AH - G), basic({ color: col, transparent: true, opacity: 0.1, depthWrite: false }), midX, (AH + G) / 2, sd * AL, 0, 0, 1);
+      for (const x of [-FRONT_X, BACK_X]) add(new THREE.BoxGeometry(0.2, AH - G, 0.2), stripMat, x, (AH + G) / 2, sd * AL);
+      goals.push(frame);
+    }
+    let shown = -1;
+    return { g, theme(i) {
+      if (i === shown) return; shown = i; const T = THEMES[i] || THEMES[0];
+      paintPitch(T);
+      stripMat.color.set(T.strip ?? 0x8fb4ff); glassMat.color.set(T.wall ?? 0x8fb4ff); hexMat.color.set(T.rim ?? 0xbcd2ff);
+      outerMat.color.set(T.stand ?? 0x141e36).multiplyScalar(0.55);
+    } };
+  })();
+  const oViews = updateViews;
+  updateViews = function (dt, now) {
+    oViews(dt, now);
+    const on = live();
+    arena.g.visible = on;
+    // the bigger cars: scale each drawn car about its origin and lift it so the wheels stay on the surface
+    for (const v of views.values()) {
+      const k = on ? CAR_K : 1;
+      if (v.g.scale.x !== k) v.g.scale.setScalar(k);
+      if (on && v.g.visible) v.g.position.addScaledVector(_u.set(0, 1, 0).applyQuaternion(v.g.quaternion), (CAR_K - 1) * RIDE);
+    }
+    if (jumbo.visible === on) jumbo.visible = !on;          // (the hanging scoreboard would sit in the frame)
+    if (on) { arena.g.scale.x = viewSide() < 0 ? 1 : -1; arena.theme(match.mut[4] | 0); fx2(dt, now); }
+  };
+
+  // ---------- test hooks (read-only snapshot, and stepping the game without waiting for frames) ----------
+  const arr = v => [v.x, v.y, v.z];
+  const carSnap = (c, team) => { _f.set(0, 0, 1).applyQuaternion(c.q); _a.set(1, 0, 0).applyQuaternion(c.q); return { p: arr(c.p), v: arr(c.v), fwd: arr(_f), side: arr(_a), w: arr(c.w), ground: c.ground, boost: c.boost, team, turning: c.n2t > 0, rolling: c.recT > 0, spinning: c.n2spin > 0 }; };
+  const brain = b => { const st = b && b.n2; return st ? { role: st.role, act: st.act ? st.act.kind : "", plan: st.plan ? st.plan.kind : -1, save: !!st.save, sk: b.sk } : { role: -1 }; };
+  N2.test = {
+    snap() {
+      const cd = new V3(0, 0, -1).applyQuaternion(camera.quaternion);
+      return { live: live(), mode, ph: match.ph, s: match.s.slice(), tl: match.tl, md: match.md, pl: match.pl, rk: match.rk, mm: match.mm, mut: match.mut.slice(), team: me.team,
+        me: { ...carSnap(me.car, me.team), ...brain(this.pilot) }, bots: bots.map(b => ({ name: b.name, ...brain(b), ...carSnap(b.car, b.team) })), ball: { p: arr(ball.p), v: arr(ball.v), w: arr(ball.w) },
+        cam: { p: arr(camera.position), dir: arr(cd), fov: camera.fov } };
+    },
+    held: false, inRun: false, idleBots: false,
+    // hold(true): the page's own frames stop advancing the game, so only run() does (repeatable tests)
+    hold(on) { this.held = !!on; },
+    // fix every bot's skill (null: back to the match skill)
+    skill(sk) { for (const b of bots) b.skx = sk == null ? undefined : sk; },
+    _bots: () => bots,
+    // watch only: your seat goes to a bot (bot-vs-bot matches)
+    spectate() { me.team = -1; bots = []; manageBots(); return this.snap(); },
+    // where your car and the ball are on screen (-1..1 each way)
+    screen() { camera.updateMatrixWorld(); const p = v => { _P.copy(v).project(camera); return [_P.x, _P.y]; }; return { me: p(me.car.rp), ball: p(ballMesh.position) }; },
+    host(g) { applyHostState(g); return this.snap(); },
+    // drive your own car with the 2D bot brain at skill sk (null: off)
+    autopilot(sk, flags) { this.pilot = sk == null ? null : { key: "me", skx: sk, skd: 0, car: me.car, team: me.team, n2: null, flags }; },
+    // advance the game by sec in frames of dt (drawing every `draw` frames; 0 = never)
+    run(sec, dt = 1 / 60, draw = 6) {
+      let t = performance.now() / 1000;
+      this.inRun = true;
+      try {
+        for (let i = 0, n = Math.round(sec / dt); i < n; i++) { t += dt; simulate(dt, t); updateViews(dt, t); updateCamera(dt, t); if (draw && (i % draw === 0 || i === n - 1)) { updateHud(dt, t); renderer.render(scene, camera); } }
+      } finally { this.inRun = false; }
+      return this.snap();
+    },
+    place(z, y, vz, vy) { ball.p.set(0, y, z); ball.v.set(0, vy || 0, vz || 0); ball.w.set(0, 0, 0); ball.pp.copy(ball.p); ball.rp.copy(ball.p); },
+    placeCar(z, face, boost) { resetCar(me.car, 0, z, face < 0 ? PI : 0); if (boost != null) me.car.boost = boost; },
+    phase(ph, pt) { match.ph = ph; if (pt != null) match.pt = pt; }
+  };
+
+  // ---------- starting matches ----------
+  function rankMmr(pl) { const e = profile.rk && profile.rk[pl - 1]; return Array.isArray(e) && fin(e[0]) ? e[0] : Ranked.START; }
+  // the match config for a 2D match of `size` per team (bot-filled): mut [0,0,0,0,theme,0,6]. Matchmade like the
+  // game's own bot-filled matches (mm 1; ranked: rk 1 and pl 4-6 so the server counts it for the 2D playlist; casual:
+  // pl = team size). pl 0 (or exhibition: true) is an exhibition: difficulty df (0 Rookie, 1 Pro, 2 All-Star), no MMR.
+  N2.config = function (o = {}) {
+    const base = o.cfg && typeof o.cfg === "object" ? o.cfg : {};
+    let size = clamp((o.size | 0) || (base.md | 0) || 1, 1, 3);
+    if ([4, 5, 6].includes(o.pl | 0)) size = (o.pl | 0) - 3;
+    const ranked = !!(o.ranked ?? base.rk), exhibition = !ranked && (o.exhibition || o.pl === 0 || base.mm === 0);
+    const pl = ranked ? SIZE_PL[size] : exhibition ? 0 : size;
+    const themeIn = fin(o.theme) ? o.theme : fin(o.arena) ? o.arena : base.mut && fin(base.mut[4]) ? base.mut[4] : null;
+    const theme = themeIn === null ? Math.floor(Math.random() * THEMES.length) : clamp(themeIn | 0, 0, THEMES.length - 1);
+    const mut = [0, 0, 0, 0, theme, 0, 6];
+    if (exhibition) return { md: size, bf: 1, df: clamp(fin(o.df) ? o.df | 0 : 1, 0, 2), mut, rk: 0, pl: 0, x: -1, bm: 0, bs: 0, mm: 0 };
+    const bm = fin(o.bm) ? o.bm : fin(base.bm) ? base.bm : ranked ? rankMmr(SIZE_PL[size]) : fin(profile.cm2) ? profile.cm2 : Ranked.START;
+    return { md: size, bf: 1, df: 1, mut, rk: ranked ? 1 : 0, pl, x: -1, bm, bs: N2.botSkill(bm), mm: 1 };
+  };
+  // NP2D.startOffline({ size: 1|2|3, ranked, pl, team, bm, df, arena, exhibition }): a bot-filled 2D match on this device
+  N2.startOffline = function (o = {}) {
+    const cfg = N2.config(o);
+    if (cfg.rk && loginGate()) return false;
+    startOfflineMatch(cfg, o.team === 1 ? 1 : 0);
+    return true;
+  };
+})();

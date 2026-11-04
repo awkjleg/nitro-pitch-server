@@ -1,17 +1,26 @@
 import {DurableObject} from 'cloudflare:workers';
 import {ApiError,reply,identify,readJson,firebaseDoc,ADMIN_UID} from './firebase-auth.js';
-import {catalog,Ranked,economy,levelInfo} from './reward-rules.js';
+import {catalog,Ranked,Ranked2D,economy,levelInfo} from './reward-rules.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent} from './snowdrift.js';
-import {MATCH_SECONDS} from './room-guard.js';
+import {matchSeconds,PLAYLISTS,playlistFits,is2D} from './room-guard.js';
 const ID=/^[A-Za-z0-9_-]{1,128}$/, midOK=/^[A-Za-z0-9_-]{1,80}$/;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const n=(v,max=1e9)=>Number.isFinite(v)?clamp(Math.trunc(v),0,max):0;
+const STATS=['games','wins','goals','saves','mvps'],RK_DEFAULT=[500,0,0,0,-1];
+// rk[i] uses the 3D ladder (Ranked) for playlists 1-3 and Nitro 2D's own ladder (Ranked2D) for 4-6;
+// each ladder has its own placement count (3D 5, 2D 3)
+const ladderOf=pl=>pl>=4?Ranked2D:Ranked,placed=(pl,r)=>r[1]>=ladderOf(pl).PLACEMENTS;
+// the shared rank tier (3D tier numbers) a rating reaches: XP multiplier, p.rt, tier items and rank-up drops
+const sharedTier=(pl,mmr)=>pl>=4?Ranked2D.sharedTier(Ranked2D.info(mmr).tier):Ranked.info(mmr).tier;
 const cosmetics={body:'body',decal:'decal',wheel:'wheel',trail:'boost',boom:'boom',finish:'paint',topper:'topper',antenna:'antenna',title:'title',banner:'banner'};
 export function cleanProfile(raw={}){
- const p={xp:0,pxp:0,pxc:0,qn:0,games:0,wins:0,goals:0,saves:0,mvps:0,dlv:0,cm:500,rt:-1,rk:[0,1,2].map(()=>[500,0,0,0,-1]),own:{},drops:[],qs:null,ab:null,cv:2,paint:-1,name:'',fr:[]};
+ const p={xp:0,pxp:0,pxc:0,qn:0,games:0,wins:0,goals:0,saves:0,mvps:0,dlv:0,cm:500,cm2:500,rt:-1,rk:PLAYLISTS.map(()=>[...RK_DEFAULT]),s2:{games:0,wins:0,goals:0,saves:0,mvps:0},own:{},drops:[],qs:null,ab:null,cv:2,paint:-1,name:'',fr:[]};
  for(const key of ['xp','pxp','pxc','qn','games','wins','goals','saves','mvps','dlv'])p[key]=n(raw[key]);
- p.cm=Number.isFinite(raw.cm)?n(raw.cm,4000):500;p.rt=Number.isFinite(raw.rt)?clamp(Math.trunc(raw.rt),-1,7):-1;
- p.rk=[0,1,2].map(i=>{let r=raw.rk?.[i];if(r&&!Array.isArray(r))r=[r.m,r.p,r.w,r.l,r.pk];return Array.isArray(r)?[n(r[0],4000),n(r[1]),n(r[2]),n(r[3]),clamp(Number.isFinite(r[4])?Math.trunc(r[4]):-1,-1,21)]:[500,0,0,0,-1];});
+ p.cm=Number.isFinite(raw.cm)?n(raw.cm,4000):500;p.cm2=Number.isFinite(raw.cm2)?n(raw.cm2,4000):500;p.rt=Number.isFinite(raw.rt)?clamp(Math.trunc(raw.rt),-1,7):-1;
+ // rk[0..2]: Duel/Doubles/Standard (3D); rk[3..5]: Nitro 2D Duel/Doubles/Standard. Older profiles get default 2D entries.
+ p.rk=PLAYLISTS.map((_,i)=>{let r=raw.rk?.[i];if(r&&!Array.isArray(r))r=[r.m,r.p,r.w,r.l,r.pk];return Array.isArray(r)?[n(r[0],4000),n(r[1]),n(r[2]),n(r[3]),clamp(Number.isFinite(r[4])?Math.trunc(r[4]):-1,-1,ladderOf(i+1).RANKS.length-1)]:[...RK_DEFAULT];});
+ // Nitro 2D keeps its own match stats; the top-level games/wins/goals/saves/mvps are 3D only
+ for(const key of STATS)p.s2[key]=n(raw.s2?.[key]);
  for(const[k,list]of Object.entries(catalog))p.own[k]=Array.isArray(raw.own?.[k])?[...new Set(raw.own[k].filter(i=>Number.isInteger(i)&&list[i]&&!list[i].admin))]:[];
  p.drops=Array.isArray(raw.drops)?raw.drops.filter(i=>Number.isInteger(i)&&i>=2&&i<=6).slice(0,200):[];
  if(raw.qs&&typeof raw.qs==='object')p.qs=economy(p).cleanQuests(raw.qs);
@@ -22,28 +31,35 @@ export function cleanProfile(raw={}){
  p.ev=cleanEv(raw.ev);
  return p;
 }
+// stored profiles from before Nitro 2D: add the 2D rank entries, stats and casual MMR in place (true when changed)
+export function upgradeProfile(p){let changed=false;if(!Array.isArray(p.rk))p.rk=[];while(p.rk.length<PLAYLISTS.length){p.rk.push([...RK_DEFAULT]);changed=true;}
+ if(!p.s2||typeof p.s2!=='object'){p.s2={games:0,wins:0,goals:0,saves:0,mvps:0};changed=true;}if(!Number.isFinite(p.cm2)){p.cm2=500;changed=true;}return changed;}
 function cloud(p){return {...p,rk:p.rk.map(([m,p,w,l,pk])=>({m,p,w,l,pk})),level:levelInfo(p.xp).lv};}
-function publicRow(p,uid){const best=p.rk.filter(r=>r[1]>=5).sort((a,b)=>b[0]-a[0])[0];return {uid,name:p.name||p.username||'Player',mmr:best?.[0]??0,rank:best?Ranked.info(best[0]).idx:-1,wins:p.wins,goals:p.goals,level:levelInfo(p.xp).lv,ti:p.title,bn:p.banner,clanId:p.clanId||''};}
+// Leaderboard rows: lb:<uid> is the 3D board (playlists 1-3, 3D stats); lb2:<uid> the Nitro 2D board (playlists 4-6, p.s2),
+// written once the account has played a 2D match.
+function publicRow(p,uid,d2=false){const s=d2?p.s2:p,best=p.rk.filter((r,i)=>(i>=3)===d2&&placed(i+1,r)).sort((a,b)=>b[0]-a[0])[0];return {uid,name:p.name||p.username||'Player',mmr:best?.[0]??0,rank:best?ladderOf(d2?4:1).info(best[0]).idx:-1,wins:s.wins,goals:s.goals,level:levelInfo(p.xp).lv,ti:p.title,bn:p.banner,clanId:p.clanId||''};}
+function boardRows(p,uid){const rows=[['lb:'+uid,publicRow(p,uid)]];if(p.s2?.games>0||p.rk.slice(3).some(r=>r[1]>0))rows.push(['lb2:'+uid,publicRow(p,uid,true)]);return rows;}
+async function putBoards(tx,p,uid){for(const[k,v]of boardRows(p,uid))await tx.put(k,v);}
 function permission(p,k,i,uid){const it=catalog[k]?.[i];if(!it)return false;if(it.admin)return uid===ADMIN_UID||(p.adminItems||[]).includes(k+':'+i);if(p.own[k]?.includes(i))return true;if(it.ev)return false;if(it.lead)return !!p.clanId&&p.clanRole==='owner';if(it.clan)return !!p.clanId; // Clan level visuals are additionally vetted by the Firebase clan client.
  if(it.tier>=0)return p.rt>=it.tier;if(it.qn)return p.qn>=it.qn;if(it.pass)return economy(p).passTier()>=it.pass;if(it.drop)return false;return levelInfo(p.xp).lv>=(it.lv||1);}
 export function awardMatch(p,e,now=Date.now(),averages=[500,500]){
  const E=economy(p,now);E.ensureQuests();const before=levelInfo(p.xp),passFrom=E.passTier(),st=e.st;
  const k=e.online?1:.5,part=Math.round(150*k),wb=e.won?Math.round(200*k):0,perf=Math.round(st[0]*k),mv=e.mvp?Math.round(100*k):0;
- const tier=p.rk.filter(r=>r[1]>=5).reduce((a,r)=>Math.max(a,Ranked.info(r[0]).tier),-1),mult=Ranked.xpMult(tier),base=part+wb+perf+mv,bonus=Math.round(base*(mult-1));
+ const tier=p.rk.reduce((a,r,i)=>placed(i+1,r)?Math.max(a,sharedTier(i+1,r[0])):a,-1),mult=Ranked.xpMult(tier),base=part+wb+perf+mv,bonus=Math.round(base*(mult-1));
  const lines=[['Match played',part],['Win bonus',wb],['Performance',perf]];if(mv)lines.push(['MVP',mv]);if(bonus)lines.push(['Rank bonus ×'+mult,bonus,true]);
- p.xp+=base+bonus;p.games++;if(e.won)p.wins++;p.goals+=st[1];p.saves+=st[3];if(mv)p.mvps++;
+ p.xp+=base+bonus;const s=e.d2?p.s2:p;s.games++;if(e.won)s.wins++;s.goals+=st[1];s.saves+=st[3];if(mv)s.mvps++;
  const quests=E.advanceQuests({...e,mvp:!!mv});for(const q of quests){p.xp+=q.xp;lines.push([q.text,q.xp,true]);}
  const xp0=p.xp,px=base+bonus+quests.reduce((s,q)=>s+q.px,0),tiers=E.addPassXp(px);if(p.xp>xp0)lines.push(['Nitro Pass rewards',p.xp-xp0,true]);
  const snow=snowQuests(p,now,quests.length);
  let rank=null;
- if(e.ranked&&[1,2,3].includes(e.playlist)){
-  const r=p.rk[e.playlist-1],b={mmr:r[0],played:r[1],info:Ranked.info(r[0])},rt0=p.rt,d=Ranked.delta(averages[e.team],averages[1-e.team],e.won,r[1]);
-  r[0]=clamp(r[0]+d,0,4000);r[1]++;r[e.won?2:3]++;const after={mmr:r[0],played:r[1],info:Ranked.info(r[0])};
-  if(r[1]>=5){r[4]=Math.max(r[4],after.info.idx);p.rt=Math.max(p.rt,after.info.tier);}
-  rank={pl:e.playlist,d,won:e.won,before:b,after,placedNow:b.played<5&&after.played>=5,newTiers:Array.from({length:Math.max(0,p.rt-rt0)},(_,i)=>rt0+i+1)};
+ if(e.ranked&&PLAYLISTS.includes(e.playlist)&&(e.playlist>=4)===!!e.d2){
+  const R=ladderOf(e.playlist),r=p.rk[e.playlist-1],b={mmr:r[0],played:r[1],info:R.info(r[0])},rt0=p.rt,d=R.delta(averages[e.team],averages[1-e.team],e.won,r[1]);
+  r[0]=clamp(r[0]+d,0,4000);r[1]++;r[e.won?2:3]++;const after={mmr:r[0],played:r[1],info:R.info(r[0])};
+  if(placed(e.playlist,r)){r[4]=Math.max(r[4],after.info.idx);p.rt=Math.max(p.rt,sharedTier(e.playlist,r[0]));}
+  rank={pl:e.playlist,ladder:e.playlist>=4?'2d':'3d',d,won:e.won,before:b,after,placedNow:b.played<R.PLACEMENTS&&after.played>=R.PLACEMENTS,newTiers:Array.from({length:Math.max(0,p.rt-rt0)},(_,i)=>rt0+i+1)};
   // a rank-up drop for each rank tier reached for the first time (Bronze/Silver Rare ... Supersonic Legend Black Market)
   for(const t of rank.newTiers)E.addDrop([2,2,3,3,4,4,5,6][t]??2);
- }else if(e.online&&e.kind==='casual')p.cm=clamp(p.cm+Math.round(15*((e.won?1:0)-1/(1+10**((averages[1-e.team]-averages[e.team])/400)))),0,4000);
+ }else if(e.online&&e.kind==='casual')p[e.d2?'cm2':'cm']=clamp(p[e.d2?'cm2':'cm']+Math.round(15*((e.won?1:0)-1/(1+10**((averages[1-e.team]-averages[e.team])/400)))),0,4000);
  p.ab=null;const drops=E.grantLevelDrops();
  return {snow,before,after:levelInfo(p.xp),xpGain:lines.reduce((s,l)=>s+l[1],0),lines,kind:e.kind,rank,mid:e.mid,pass:{from:passFrom,tiers,px},quests,drops,clanContribution:{xp:(e.won?100:0)+20*st[1],wins:e.won?1:0,goals:st[1],cvw:0,cvl:0}};
 }
@@ -62,19 +78,19 @@ export class Progress extends DurableObject{
  async load(user,token){
   const {uid}=user,key='p:'+uid;
   const until=this.banCache.get(uid)||0;if(until<Date.now()){if(await firebaseDoc('bans/'+uid,token))throw new ApiError('This account is banned',403);this.banCache.set(uid,Date.now()+60000);}
-  let p=await this.ctx.storage.get(key);
-  if(!p){const raw=await firebaseDoc('players/'+uid,token);p=cleanProfile(raw||{});p.username=user.username;p.rev=1;p.migratedAt=Date.now();p.imported=!!raw;p.adminItems=(await firebaseDoc('adminItems/'+uid,token))?.items||[];const E=economy(p);E.ensureQuests();E.payPassXp();E.grantLevelDrops();await this.ctx.storage.put(key,p);await this.ctx.storage.put('lb:'+uid,publicRow(p,uid));}
+  let p=await this.ctx.storage.get(key);if(p&&upgradeProfile(p))await this.ctx.storage.put(key,p);
+  if(!p){const raw=await firebaseDoc('players/'+uid,token);p=cleanProfile(raw||{});p.username=user.username;p.rev=1;p.migratedAt=Date.now();p.imported=!!raw;p.adminItems=(await firebaseDoc('adminItems/'+uid,token))?.items||[];const E=economy(p);E.ensureQuests();E.payPassXp();E.grantLevelDrops();await this.ctx.storage.put(key,p);for(const[k,v]of boardRows(p,uid))await this.ctx.storage.put(k,v);}
   if(!p.clanChecked||Date.now()-p.clanChecked>60000){const membership=await firebaseDoc('clanMembers/'+uid,token);p.clanId=membership?.clanId||'';p.clanRole=membership?.role||'';p.clanChecked=Date.now();await this.ctx.storage.put(key,p);}
   return p;
  }
- async save(uid,p){p.rev=(p.rev||0)+1;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await tx.put('lb:'+uid,publicRow(p,uid));});}
+ async save(uid,p){p.rev=(p.rev||0)+1;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await putBoards(tx,p,uid);});}
  async run(req){
   const path=new URL(req.url).pathname;
   if(path==='/forfeit'){
-   const {uid,room,mid,playlist}=await req.json();if(!ID.test(uid||'')||!/^np-m-[a-z0-9-]{1,50}$/.test(room||'')||!midOK.test(mid||'')||![1,2,3].includes(playlist))throw new ApiError('Invalid departure');
-   const p=await this.ctx.storage.get('p:'+uid),key='match:'+uid+':'+room+':'+mid;if(!p||await this.ctx.storage.get(key))return reply({ok:true});
-   const r=p.rk[playlist-1],d=Ranked.delta(r[0],r[0],false,r[1]);r[0]=Math.max(0,r[0]+d);r[1]++;r[3]++;p.ab=null;p.rev++;
-   await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await tx.put('lb:'+uid,publicRow(p,uid));await tx.put(key,{forfeit:true,at:Date.now()});});return reply({ok:true});
+   const {uid,room,mid,playlist}=await req.json();if(!ID.test(uid||'')||!/^np-m-[a-z0-9-]{1,50}$/.test(room||'')||!midOK.test(mid||'')||!PLAYLISTS.includes(playlist))throw new ApiError('Invalid departure');
+   const p=await this.ctx.storage.get('p:'+uid),key='match:'+uid+':'+room+':'+mid;if(!p||await this.ctx.storage.get(key))return reply({ok:true});upgradeProfile(p);
+   const r=p.rk[playlist-1],d=ladderOf(playlist).delta(r[0],r[0],false,r[1]);r[0]=Math.max(0,r[0]+d);r[1]++;r[3]++;p.ab=null;p.rev++;
+   await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await putBoards(tx,p,uid);await tx.put(key,{forfeit:true,at:Date.now()});});return reply({ok:true});
   }
   const {body:b,token,user}=await req.json();if(!user||!ID.test(user.uid))throw new ApiError('Invalid account',401);
   const uid=user.uid,p=await this.load(user,token),now=Date.now();const response=(extra={})=>reply({profile:cloud(p),rev:p.rev,...extra});
@@ -87,20 +103,21 @@ export class Progress extends DurableObject{
    await this.save(uid,p);return response();
   }
   if(b.action==='leaderboard'){
-   if(!['mmr','wins','goals','level'].includes(b.field))throw new ApiError('Unknown leaderboard');
+   if(!['mmr','wins','goals','level'].includes(b.field)||![undefined,'3d','2d'].includes(b.board))throw new ApiError('Unknown leaderboard');
+   const d2=b.board==='2d';
    // Existing rankings remain visible as a frozen baseline. Once migrated, an account's server row always wins.
    const legacyKey=b.field==='level'?'legacy-level-leaderboard':'legacy-leaderboard';
-   let legacy=await this.ctx.storage.get(legacyKey);
+   let legacy=d2?[]:await this.ctx.storage.get(legacyKey);   // the Nitro 2D board has no Firebase baseline
    if(!legacy){legacy=[];for(const field of b.field==='level'?['level']:['mmr','wins','goals']){
     const r=await fetch('https://firestore.googleapis.com/v1/projects/nitro-pitch/databases/(default)/documents:runQuery',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({structuredQuery:{from:[{collectionId:'leaderboard'}],orderBy:[{field:{fieldPath:field},direction:'DESCENDING'}],limit:100}}),signal:AbortSignal.timeout(12000)});
     if(!r.ok)throw new ApiError('Could not load rankings. Please retry.',503);
     for(const row of await r.json()){if(!row.document)continue;const f=row.document.fields||{},get=k=>f[k]?.stringValue??Number(f[k]?.integerValue??f[k]?.doubleValue??0);legacy.push({uid:row.document.name.split('/').at(-1),name:get('name'),mmr:get('mmr'),rank:get('rank'),wins:get('wins'),goals:get('goals'),level:get('level'),ti:get('ti'),bn:get('bn'),clanId:get('clanId')||''});}
    }await this.ctx.storage.put(legacyKey,legacy);}
    const field=b.field;const rows=new Map(legacy.map(x=>[x.uid,x]));let after;
-   do{const page=await this.ctx.storage.list({prefix:'lb:',limit:1000,...(after?{startAfter:after}:{})});for(const[key,row]of page){rows.set(row.uid,row);after=key;}if(page.size<1000)break;}while(true);
+   do{const page=await this.ctx.storage.list({prefix:d2?'lb2:':'lb:',limit:1000,...(after?{startAfter:after}:{})});for(const[key,row]of page){rows.set(row.uid,row);after=key;}if(page.size<1000)break;}while(true);
    return reply({rows:[...rows.values()].filter(row=>field!=='level'||Number.isInteger(row.level)&&row.level>=1&&row.level<=100).sort((a,b)=>b[field]-a[field]||a.uid.localeCompare(b.uid)).slice(0,clamp(n(b.limit,100),1,100))});
   }
-  if(b.action==='leaderboard-get'){if(!ID.test(b.uid||''))throw new ApiError('Invalid player');return reply({row:await this.ctx.storage.get('lb:'+b.uid)||null});}
+  if(b.action==='leaderboard-get'){if(!ID.test(b.uid||''))throw new ApiError('Invalid player');return reply({row:await this.ctx.storage.get((b.board==='2d'?'lb2:':'lb:')+b.uid)||null});}
   // Idempotency keys survive refreshes and retrying a lost response.
   if(!midOK.test(b.id||''))throw new ApiError('Missing action ID');
   const receiptKey='paid:'+uid+':'+b.id,prior=await this.ctx.storage.get(receiptKey);
@@ -109,7 +126,9 @@ export class Progress extends DurableObject{
   if(b.action==='session-start'){
    if(!midOK.test(b.mid||''))throw new ApiError('Invalid match');
    if(p.session&&p.session.mid!==b.mid&&now-p.session.started<20000)throw new ApiError('A match is already starting',429);
-   p.session={mid:b.mid,started:now,last:now,active:0,mut:Array.isArray(b.mut)?b.mut.slice(0,7):[0,0,0,0,0,0,0],rk:b.rk===1&&[1,2,3].includes(b.pl)?b.pl:0};
+   const mut=Array.isArray(b.mut)?b.mut.slice(0,7):[0,0,0,0,0,0,0];
+   // a bot-filled ranked match counts only in a playlist of its own mode: 1-3 in 3D (mut[6] 0), 4-5 in Nitro 2D (mut[6] 6)
+   p.session={mid:b.mid,started:now,last:now,active:0,mut,rk:b.rk===1&&playlistFits(b.pl,mut,Number.isInteger(b.md)?b.md:null)?b.pl:0};
   }else if(b.action==='session-tick'){
    if(!p.session||p.session.mid!==b.mid||now-p.session.started>7200000)throw new ApiError('This practice session expired',409);
    p.session.active+=Math.min(20000,Math.max(0,now-p.session.last));p.session.last=now;
@@ -122,13 +141,13 @@ export class Progress extends DurableObject{
     const s=p.session;if(!s||s.mid!==b.mid||now-s.started>7200000)throw new ApiError('Practice session was not registered',409);
     const elapsed=(s.active+Math.min(20000,now-s.last))/1000,score=b.score,st=b.st;
     if(elapsed<20||!Array.isArray(score)||score.length!==2||!score.every(x=>Number.isInteger(x)&&x>=0&&x<=99)||!Array.isArray(st)||st.length!==6||!st.every(x=>Number.isInteger(x)&&x>=0)||st[0]>elapsed*25+500||st[1]>Math.max(...score)||st.slice(1).some(x=>x>elapsed/2+10))throw new ApiError('Practice result failed validation',422);
-    const length=MATCH_SECONDS[s.mut[0]];if(!length||elapsed+20<length)throw new ApiError('Finish the practice match to earn rewards',422);
+    const length=matchSeconds(s.mut);if(!length||elapsed+20<length)throw new ApiError('Finish the practice match to earn rewards',422);
     // a ranked match filled with bots (not enough players online) still counts for rank, against bots at your own MMR
-    e={mid:b.mid,st,score,won:score[0]>score[1],mvp:!!b.mvp,online:false,extra:!!s.mut[6],kind:s.rk?'ranked':'exhibition',ranked:!!s.rk,playlist:s.rk||0,team:0,elapsed};p.session=null;
+    e={mid:b.mid,st,score,won:score[0]>score[1],mvp:!!b.mvp,online:false,extra:!!s.mut[6]&&!is2D(s.mut),d2:is2D(s.mut),kind:s.rk?'ranked':'exhibition',ranked:!!s.rk,playlist:s.rk||0,team:0,elapsed};p.session=null;
    }
    // A room/match may be claimed only once, even with a fresh HTTP action ID.
    const key='match:'+uid+':'+(b.room||'practice')+':'+e.mid;if(await this.ctx.storage.get(key))throw new ApiError('This match has already been saved',409);
-   const averages=[500,500];if(!e.roster&&e.ranked){const own=p.rk[e.playlist-1]?.[0]??500;averages[0]=averages[1]=own;}if(e.roster){for(const t of [0,1]){const players=e.roster.filter(x=>x.team===t&&x.uid),values=[];for(const m of players){const other=m.uid===uid?p:await this.ctx.storage.get('p:'+m.uid);values.push(e.ranked?other?.rk?.[e.playlist-1]?.[0]??500:other?.cm??500);}if(values.length)averages[t]=values.reduce((a,b)=>a+b,0)/values.length;}}if(e.roster){const hasAccount=[0,1].map(t=>e.roster.some(x=>x.team===t&&x.uid));for(const t of [0,1])if(!hasAccount[t]&&hasAccount[1-t])averages[t]=averages[1-t];}// a guest-only team is rated at the other team's MMR
+   const averages=[500,500];if(!e.roster&&e.ranked){const own=p.rk[e.playlist-1]?.[0]??500;averages[0]=averages[1]=own;}if(e.roster){for(const t of [0,1]){const players=e.roster.filter(x=>x.team===t&&x.uid),values=[];for(const m of players){const other=m.uid===uid?p:await this.ctx.storage.get('p:'+m.uid);if(other)upgradeProfile(other);values.push(e.ranked?other?.rk?.[e.playlist-1]?.[0]??500:(e.d2?other?.cm2:other?.cm)??500);}if(values.length)averages[t]=values.reduce((a,b)=>a+b,0)/values.length;}}if(e.roster){const hasAccount=[0,1].map(t=>e.roster.some(x=>x.team===t&&x.uid));for(const t of [0,1])if(!hasAccount[t]&&hasAccount[1-t])averages[t]=averages[1-t];}// a guest-only team is rated at the other team's MMR
    
    const avgKey='averages:'+(b.room||uid)+':'+e.mid;const savedAverages=await this.ctx.storage.get(avgKey);extraWrites[avgKey]=savedAverages||averages;
    result={result:awardMatch(p,e,now,savedAverages||averages)};extraWrites[key]={at:now};
@@ -171,7 +190,7 @@ export class Progress extends DurableObject{
    p.rev++;q.rev++;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await tx.put('p:'+other,q);await tx.put(key,{done:true,at:now});});return response({traded:true});
   }else throw new ApiError('Unknown progress action');
   // Write the state and the receipt atomically: a dropped response cannot duplicate a reward.
-  p.rev++;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await tx.put('lb:'+uid,publicRow(p,uid));await tx.put(receiptKey,{action:b.action,result,at:now});for(const[key,value]of Object.entries(extraWrites))await tx.put(key,value);});
+  p.rev++;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await putBoards(tx,p,uid);await tx.put(receiptKey,{action:b.action,result,at:now});for(const[key,value]of Object.entries(extraWrites))await tx.put(key,value);});
   return response(result);
  }
 }

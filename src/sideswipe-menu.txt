@@ -1,1 +1,1029 @@
-// Nitro 2D: menus, play screen, ranks. Filled in by the 2D menu work.
+// Nitro 2D: menus, play screen, ranks and stats (website only). Runs inside the game closure after src/sideswipe.txt.
+// ==== NP2D-RANKED-START ==== pure ladder + badges (no game state): tests load this block on its own
+// Nitro 2D's own rank ladder, mirroring Ranked2D in src/reward-rules.js: 6 tiers x 5 ranks (I-V) then Legend.
+// Rank i (0-29) starts at i*55 MMR, Legend (30) at 1650 with a 200-MMR bar. No divisions. Badges are original SVGs.
+const NP2DRanked = (() => {
+  const PLACEMENTS = 3, START = 500, STEP = 55, PER_TIER = 5, LEGEND_CAP = 200;
+  const ROMAN = ["", "I", "II", "III", "IV", "V"];
+  const TIERS = [
+    { name: "Bronze", color: "#d9925a", dark: "#5a2c10" },
+    { name: "Silver", color: "#c9d2df", dark: "#3a4352" },
+    { name: "Gold", color: "#ffcf4a", dark: "#6a4504" },
+    { name: "Platinum", color: "#5fe3d8", dark: "#0d4a52" },
+    { name: "Diamond", color: "#5cb8ff", dark: "#123a8a" },
+    { name: "Champion", color: "#b77cff", dark: "#3a1478" },
+    { name: "Legend", color: "#f2f6ff", dark: "#5d6a86" },
+  ];
+  TIERS[-1] = { name: "Unranked", color: "#8d9bbd", dark: "#2a3142" };
+  const TIER_COLORS = TIERS.map(t => t.color);
+  TIER_COLORS[-1] = TIERS[-1].color;
+  const TOP = (TIERS.length - 1) * PER_TIER;                       // 30 = Legend
+  const MINS = Object.freeze(Array.from({ length: TOP + 1 }, (_, i) => i * STEP));
+  const RANKS = MINS.map((min, i) => {
+    const tier = i === TOP ? TIERS.length - 1 : Math.floor(i / PER_TIER), lvl = i === TOP ? 0 : i % PER_TIER + 1;
+    return Object.freeze({ name: TIERS[tier].name + (lvl ? " " + ROMAN[lvl] : ""), tier, lvl, min });
+  });
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  const num = (v, d) => (typeof v === "number" || typeof v === "string") && v !== "" && Number.isFinite(+v) ? +v : d;
+  function info(mmr) {
+    mmr = num(mmr, START);
+    let idx = 0;
+    while (idx < TOP && mmr >= MINS[idx + 1]) idx++;
+    const r = RANKS[idx], min = r.min, end = idx === TOP ? min + LEGEND_CAP : MINS[idx + 1];
+    return { idx, name: r.name, tier: r.tier, tierName: TIERS[r.tier].name, lvl: r.lvl, div: 0, divName: "",
+      frac: clamp((mmr - min) / (end - min), 0, 1), min, max: idx === TOP ? end : end - 1, dmin: min, dmax: end };
+  }
+  // Elo, the same rule as the 3D ladder: K 40 during placements, 20 after
+  function delta(teamAvg, oppAvg, won, placementsPlayed) {
+    const team = num(teamAvg, START), opp = num(oppAvg, START), K = num(placementsPlayed, PLACEMENTS) < PLACEMENTS ? 40 : 20;
+    const E = 1 / (1 + Math.pow(10, clamp(opp - team, -4000, 4000) / 400));
+    return won ? Math.max(1, Math.round(K * (1 - E))) : -Math.max(1, Math.round(K * E));
+  }
+  // shared progression (XP bonus, rank-tier drops, season rewards): a 2D tier counts as the 3D tier with the same index
+  const sharedTier = t => { t = Math.floor(num(t, -1)); return t < 0 ? -1 : Math.min(t, TIERS.length - 1); };
+
+  // ---- badges: one shape per tier, metal faces, the rank's numeral in the middle ----
+  // palette per tier: [highlight, face, shadow, rim light, rim dark, numeral, numeral outline, glow]
+  const PAL = [
+    ["#ffe0c2", "#d98a4e", "#6e3412", "#ffc89a", "#4a200a", "#3a1806", "#ffd9b5", "#ff9a52"],
+    ["#ffffff", "#c3ccd9", "#5d6879", "#f4f8ff", "#333b49", "#232a36", "#ffffff", "#dfe8ff"],
+    ["#fff6c4", "#ffc83a", "#9a5d00", "#fff0a0", "#5a3500", "#4a2a00", "#fff4c8", "#ffd84a"],
+    ["#f0ffff", "#7fe6f2", "#16788c", "#d8fbff", "#0b4250", "#06343f", "#eafeff", "#6ff4ff"],
+    ["#e2f1ff", "#4f9cff", "#16348f", "#bfe0ff", "#0c1f5e", "#ffffff", "#0e2a78", "#58b4ff"],
+    ["#f3e3ff", "#b26cff", "#46168a", "#e6c8ff", "#280a55", "#ffffff", "#2c0b60", "#c487ff"],
+    ["#ffffff", "#dfe5f2", "#6b7790", "#ffffff", "#3c4560", "#2a3044", "#ffffff", "#ffffff"],
+  ];
+  PAL[-1] = ["#c6cfe2", "#6f7a92", "#2c3346", "#a9b4cc", "#1c2232", "#e8eefc", "#1c2232", "#8d9bbd"];
+  const f1 = v => Math.round(v * 10) / 10;
+  const pts = list => list.map(p => f1(p[0]) + " " + f1(p[1])).join(" ");
+  const ring = (n, r, cx, cy, a0) => Array.from({ length: n }, (_, k) => { const a = a0 + k * Math.PI * 2 / n; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; });
+  const starPts = (cx, cy, R, r) => Array.from({ length: 10 }, (_, k) => { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? r : R; return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]; });
+  const scaleAbout = (s, cx, cy) => `translate(${f1(cx)} ${f1(cy)}) scale(${s}) translate(${f1(-cx)} ${f1(-cy)})`;
+  // numerals built from paths (no fonts): I is a serifed bar, V a chevron; glyph height 30
+  const GLYPH = { I: { w: 11, d: x => `M${x} 0H${x + 11}V4H${x + 8}V26H${x + 11}V30H${x}V26H${x + 3}V4H${x}Z` },
+    V: { w: 20, d: x => `M${x} 0H${x + 7}L${x + 10} 19L${x + 13} 0H${x + 20}L${x + 12.5} 30H${x + 7.5}Z` } };
+  function numeral(lvl, cx, cy, h, P) {
+    const s = ROMAN[lvl] || "", gap = 1.6;
+    let x = 0, d = "";
+    for (const ch of s) { d += GLYPH[ch].d(x); x += GLYPH[ch].w + gap; }
+    const w = x - gap, k = h / 30;
+    return `<g transform="translate(${f1(cx - w * k / 2)} ${f1(cy - h / 2)}) scale(${f1(k * 100) / 100})">` +
+      `<path d="${d}" fill="${P[6]}" stroke="${P[6]}" stroke-width="5" stroke-linejoin="round" opacity=".9"/>` +
+      `<path d="${d}" fill="url(#nm)"/></g>`;
+  }
+  const sparkle = (x, y, r, c, o = 1) => `<path d="M${f1(x)} ${f1(y - r)}Q${f1(x + r * .18)} ${f1(y - r * .18)} ${f1(x + r)} ${f1(y)}Q${f1(x + r * .18)} ${f1(y + r * .18)} ${f1(x)} ${f1(y + r)}Q${f1(x - r * .18)} ${f1(y + r * .18)} ${f1(x - r)} ${f1(y)}Q${f1(x - r * .18)} ${f1(y - r * .18)} ${f1(x)} ${f1(y - r)}Z" fill="${c}" opacity="${o}"/>`;
+  const stud = (x, y, r, P) => `<path d="M${f1(x)} ${f1(y - r)}L${f1(x + r)} ${f1(y)}L${f1(x)} ${f1(y + r)}L${f1(x - r)} ${f1(y)}Z" fill="${P[0]}" stroke="${P[4]}" stroke-width="1.3" stroke-linejoin="round"/>`;
+  // each tier: outer shape d, the face drawn inside it, where the numeral sits, studs (III+) and the top spark (IV+)
+  const triPts = [[50, 9], [91, 82], [9, 82]];
+  const gem = [[29, 13], [71, 13], [92, 37], [50, 92], [8, 37]];
+  const shield = "M50 13L71 20.5V50Q71 72 50 87Q29 72 29 50V20.5Z";
+  const wing = "M31 25C21 15 11 13 2 15C6 20 10 23 14 25C7 26 3 29 2 33C9 35 16 35 22 34C14 37 10 41 9 46C17 47 24 45 30 41Z";
+  const crown = "M31 26L34 13L42 20L50 8L58 20L66 13L69 26Z";
+  const SHAPE = [
+    { outer: `<circle cx="50" cy="50" r="42" fill="url(#rim)"/>`, face: `<circle cx="50" cy="50" r="34.5" fill="url(#face)"/>`,
+      line: `<circle cx="50" cy="50" r="28" fill="none"/>`, n: [50, 51, 31], studs: [[13.5, 50], [86.5, 50]], top: [50, 8] },
+    { outer: `<polygon points="${pts(ring(6, 45, 50, 50, -Math.PI / 2))}" fill="url(#rim)" stroke="url(#rim)" stroke-width="4" stroke-linejoin="round"/>`,
+      face: `<polygon points="${pts(ring(6, 36, 50, 50, -Math.PI / 2))}" fill="url(#face)" stroke="url(#face)" stroke-width="3" stroke-linejoin="round"/>`,
+      line: `<polygon points="${pts(ring(6, 29, 50, 50, -Math.PI / 2))}" fill="none" stroke-linejoin="round"/>`, n: [50, 51, 30], studs: [[12, 50], [88, 50]], top: [50, 3] },
+    { outer: `<polygon points="${pts(triPts)}" fill="url(#rim)" stroke="url(#rim)" stroke-width="12" stroke-linejoin="round"/>`,
+      face: `<polygon points="${pts([[50, 21], [80.5, 75], [19.5, 75]])}" fill="url(#face)" stroke="url(#face)" stroke-width="8" stroke-linejoin="round"/>`,
+      line: `<polygon points="${pts([[50, 31], [72, 70], [28, 70]])}" fill="none" stroke-linejoin="round"/>`, n: [50, 59, 25], studs: [[22, 87], [78, 87]], top: [50, 1.5] },
+    { outer: `<polygon points="${pts(starPts(50, 53, 48, 25))}" fill="url(#rim)" stroke="url(#rim)" stroke-width="6" stroke-linejoin="round"/>`,
+      face: `<polygon points="${pts(starPts(50, 53, 39, 20.5))}" fill="url(#face)" stroke="url(#face)" stroke-width="4" stroke-linejoin="round"/>`,
+      line: `<polygon points="${pts(starPts(50, 53, 30, 16))}" fill="none" stroke-linejoin="round"/>`, n: [50, 56, 20], studs: [[17, 80], [83, 80]], top: [50, 2] },
+    { outer: `<polygon points="${pts(gem)}" fill="url(#rim)" stroke="url(#rim)" stroke-width="5" stroke-linejoin="round"/>`,
+      face: `<polygon points="${pts([[32.5, 19.5], [67.5, 19.5], [84.5, 38.5], [50, 82], [15.5, 38.5]])}" fill="url(#face)" stroke="url(#face)" stroke-width="2" stroke-linejoin="round"/>` +
+        `<path d="M15.5 38.5H84.5M32.5 19.5L40 38.5L50 19.5L60 38.5L67.5 19.5M40 38.5L50 82L60 38.5" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="1.3"/>` +
+        `<polygon points="40,38.5 60,38.5 50,19.5" fill="#fff" opacity=".16"/>`,
+      line: `<polygon points="${pts([[37, 25], [63, 25], [77, 40], [50, 74], [23, 40]])}" fill="none" stroke-linejoin="round"/>`, n: [50, 49, 24], studs: [[8, 30], [92, 30]], top: [50, 3] },
+    { outer: `<path d="${wing}" fill="url(#rim)" stroke="url(#rim)" stroke-width="3" stroke-linejoin="round"/><path d="${wing}" transform="translate(100 0) scale(-1 1)" fill="url(#rim)" stroke="url(#rim)" stroke-width="3" stroke-linejoin="round"/>` +
+        `<path d="${wing}" transform="${scaleAbout(.8, 26, 30)}" fill="url(#face)" opacity=".9"/><path d="${wing}" transform="translate(100 0) scale(-1 1) ${scaleAbout(.8, 26, 30)}" fill="url(#face)" opacity=".9"/>` +
+        `<path d="${shield}" fill="url(#rim)" stroke="url(#rim)" stroke-width="7" stroke-linejoin="round"/>`,
+      face: `<path d="${shield}" transform="${scaleAbout(.83, 50, 50)}" fill="url(#face)"/>`,
+      line: `<path d="${shield}" transform="${scaleAbout(.66, 50, 50)}" fill="none"/>`, n: [50, 49, 24], studs: [[9, 55], [91, 55]], top: [50, 2] },
+    { outer: `<circle cx="50" cy="57" r="40" fill="url(#rb)"/><circle cx="50" cy="57" r="36.5" fill="url(#rim)"/>` +
+        `<path d="${crown}" fill="url(#rb)" stroke="url(#rb)" stroke-width="5" stroke-linejoin="round"/><path d="${crown}" fill="url(#crown)" stroke="url(#crown)" stroke-width="1.5" stroke-linejoin="round"/>` +
+        `<circle cx="50" cy="8" r="2.6" fill="#fff"/><circle cx="34" cy="14" r="2" fill="#fff"/><circle cx="66" cy="14" r="2" fill="#fff"/>`,
+      face: `<circle cx="50" cy="57" r="28" fill="url(#legend)"/><circle cx="50" cy="57" r="28" fill="none" stroke="url(#rb)" stroke-width="1.8" opacity=".95"/>`,
+      line: `<circle cx="50" cy="57" r="22" fill="none"/>`, n: null, studs: [[12, 57], [88, 57]], top: [50, 1] },
+  ];
+  function svg(idx) {
+    idx = Math.floor(num(idx, -1)); idx = idx < 0 ? -1 : Math.min(idx, TOP);
+    const r = idx >= 0 ? RANKS[idx] : null, t = r ? r.tier : -1, P = PAL[t], lvl = r ? (r.lvl || 6) : 0;
+    const rimLit = lvl >= 4 ? P[0] : P[3];
+    let defs = `<linearGradient id="face" x1="0" y1="0" x2=".35" y2="1"><stop offset="0" stop-color="${P[0]}"/><stop offset=".48" stop-color="${P[1]}"/><stop offset="1" stop-color="${P[2]}"/></linearGradient>` +
+      `<linearGradient id="rim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${rimLit}"/><stop offset=".38" stop-color="${P[4]}"/><stop offset=".62" stop-color="${rimLit}"/><stop offset="1" stop-color="${P[4]}"/></linearGradient>` +
+      `<linearGradient id="nm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${P[5]}"/><stop offset="1" stop-color="${P[5]}" stop-opacity=".82"/></linearGradient>` +
+      `<linearGradient id="shine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>` +
+      `<filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3.2"/></filter>`;
+    if (t === 6) defs += `<linearGradient id="rb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff6b8b"/><stop offset=".2" stop-color="#ffcf5a"/><stop offset=".4" stop-color="#7dffb0"/><stop offset=".6" stop-color="#5ad6ff"/><stop offset=".8" stop-color="#9a7dff"/><stop offset="1" stop-color="#ff7de0"/></linearGradient>` +
+      `<linearGradient id="crown" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#d5dcef"/><stop offset="1" stop-color="#8590ad"/></linearGradient>` +
+      `<radialGradient id="legend" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#ffffff"/><stop offset=".35" stop-color="#cfd8ff"/><stop offset=".7" stop-color="#8a7dd8"/><stop offset="1" stop-color="#3b3a78"/></radialGradient>`;
+    let body = "";
+    if (!r) {                                               // Unranked: a plain slate disc with a question mark
+      body = `<circle cx="50" cy="50" r="40" fill="url(#rim)"/><circle cx="50" cy="50" r="33" fill="url(#face)"/>` +
+        `<circle cx="50" cy="50" r="27" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="1.4" stroke-dasharray="4 4"/>` +
+        `<path d="M40.5 40.5C40.5 34 45 30.5 50.5 30.5C56.5 30.5 60.5 34.5 60.5 39.5C60.5 46 52.5 46.5 52.5 55" fill="none" stroke="${P[6]}" stroke-width="10" stroke-linecap="round"/>` +
+        `<path d="M40.5 40.5C40.5 34 45 30.5 50.5 30.5C56.5 30.5 60.5 34.5 60.5 39.5C60.5 46 52.5 46.5 52.5 55" fill="none" stroke="${P[5]}" stroke-width="6.5" stroke-linecap="round"/>` +
+        `<circle cx="52.5" cy="66" r="5.2" fill="${P[6]}"/><circle cx="52.5" cy="66" r="3.6" fill="${P[5]}"/>`;
+    } else {
+      const S = SHAPE[t];
+      if (lvl >= 5) body += `<g filter="url(#glow)" opacity="${t === 6 ? .95 : .8}">${S.outer.replace(/url\(#(rim|face|rb)\)/g, P[7])}</g>`;
+      body += S.outer + S.face;
+      if (lvl >= 2) body += S.line.replace("<", `<g stroke="#fff" stroke-opacity="${lvl >= 4 ? .42 : .28}" stroke-width="1.4"><`).replace(/\/>$/, "/></g>");
+      body += `<g opacity=".9">${S.face.replace(/fill="url\(#face\)"/g, 'fill="url(#shine)"').replace(/stroke="url\(#face\)"/g, 'stroke="none"')}</g>`.replace(/<path d="M15\.5[^>]*>|<polygon points="40,38\.5[^>]*>/g, "");
+      if (lvl >= 3) for (const [x, y] of S.studs) body += stud(x, y, lvl >= 5 ? 4.4 : 3.8, P);
+      if (lvl >= 4) body += sparkle(S.top[0], S.top[1] + 1, lvl >= 5 ? 6 : 4.6, "#fff", .95);
+      if (lvl >= 5) body += sparkle(85, 15, 3.6, "#fff", .85) + sparkle(15, 86, 2.8, "#fff", .7);
+      if (S.n) body += numeral(r.lvl, S.n[0], S.n[1], S.n[2], P);
+      else body += sparkle(50, 57, 16, "#ffffff", 1) + sparkle(50, 57, 8.5, "url(#rb)", .95);
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs>${defs}</defs>${body}</svg>`;
+  }
+  const urls = new Map();
+  function emblemURL(idx) {
+    const key = Math.floor(num(idx, -1));
+    if (!urls.has(key)) urls.set(key, "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg(key)));
+    return urls.get(key);
+  }
+  return { PLACEMENTS, START, ROMAN, TIERS, TIER_COLORS, RANKS, MINS, TOP, info, delta, sharedTier, svg, emblemURL,
+    rankIdx: mmr => info(mmr).idx };
+})();
+// ==== NP2D-RANKED-END ====
+// ---- Nitro 2D menus: the mode switch, the 2D look, the 2D play screen and search, and 2D ranks and stats ----
+// Contract (see the Nitro 2D spec): a 2D match has match.mut[6] === NP2D.MODE (6). Ranked 2D playlists are 4 (Duel),
+// 5 (Doubles) and 6 (Standard); profile.rk[3..5] hold them, profile.s2 the 2D stats and profile.cm2 the 2D casual MMR.
+// 2D searches go through the lobby matcher as q.r = 2 with q.x = 100 (casual) or 101 (ranked), so they only ever meet
+// other 2D searches. NP2D.menu (saved as np-2d-menu) is true while the 2D menus show, with body.np2d set.
+const NP2DMenu = (() => {
+  const N = window.NP2D || (window.NP2D = {});
+  if (!N.NAME) N.NAME = "Nitro 2D";
+  if (N.MODE == null) N.MODE = 6;
+  if (!N.PL) N.PL = { duel: 4, doubles: 5, standard: 6 };
+  if (N.PL.standard == null) N.PL.standard = 6;
+  N.Ranked = NP2DRanked;
+  const RK = NP2DRanked, NAME = () => N.NAME || "Nitro 2D", MODE = () => N.MODE == null ? 6 : N.MODE;
+  const KEY = "np-2d-menu", X_CASUAL = 100, X_RANKED = 101, STATS = ["games", "wins", "goals", "saves", "mvps"];
+  const info3 = Ranked.info;
+  const is2DMatch = () => !!(match && Array.isArray(match.mut) && match.mut[6] === MODE());
+  const is2DQ = q => !!q && q.r === 2 && (q.x === X_CASUAL || q.x === X_RANKED);
+  const node = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  for (const [pl, name, tag] of [[4, "Duel", "1v1"], [5, "Doubles", "2v2"], [6, "Standard", "3v3"]]) if (!PLAYLISTS[pl]) PLAYLISTS[pl] = { name, tag };
+
+  // ---------- profile: rk[3..5], s2 and cm2 survive loading, saving and account sync ----------
+  const zeroStats = () => ({ games: 0, wins: 0, goals: 0, saves: 0, mvps: 0 });
+  function cleanStats(s) { const o = zeroStats(); if (s && typeof s === "object") for (const k of STATS) if (fin(s[k]) && s[k] >= 0) o[k] = int(s[k], 0, 1e9); return o; }
+  function clean2(e) {
+    if (e && typeof e === "object" && !Array.isArray(e)) e = [e.m, e.p, e.w, e.l, e.pk];
+    if (!Array.isArray(e) || !fin(e[0])) return RK0();
+    return [clamp(Math.round(e[0]), 0, MMR_MAX), fin(e[1]) ? int(e[1], 0, 1e6) : 0, fin(e[2]) ? int(e[2], 0, 1e6) : 0, fin(e[3]) ? int(e[3], 0, 1e6) : 0, fin(e[4]) ? int(e[4], -1, RK.TOP) : -1];
+  }
+  // the 2D fields of a raw profile (this browser's save, the account, the progress service) onto a sanitized one
+  function add2D(s, o) {
+    if (!s || typeof s !== "object" || !o) return o;
+    const full = Array.isArray(s.rk);
+    if (full) o.rk = [0, 1, 2].map(i => o.rk && o.rk[i] ? o.rk[i] : cleanRk(s.rk[i])).concat([3, 4, 5].map(i => clean2(s.rk[i])));
+    if (s.s2 && typeof s.s2 === "object") o.s2 = cleanStats(s.s2); else if (full) o.s2 = zeroStats();
+    if (fin(s.cm2)) o.cm2 = clamp(Math.round(s.cm2), 0, MMR_MAX); else if (full) o.cm2 = Ranked.START;
+    if (okArr(s.ab, 3) && s.ab[0] >= 4 && s.ab[0] <= 6) o.ab = [s.ab[0] | 0, clamp(s.ab[1], 0, MMR_MAX), clamp(s.ab[2], 0, MMR_MAX)];
+    return o;
+  }
+  const sanitize0 = sanitizeProfile;
+  sanitizeProfile = function (s) { return add2D(s, sanitize0.apply(this, arguments)); };
+  function ensure() {
+    if (!Array.isArray(profile.rk)) profile.rk = [];
+    while (profile.rk.length < 6) profile.rk.push(RK0());
+    if (profile.rk.length > 6) profile.rk.length = 6;
+    if (!profile.s2 || typeof profile.s2 !== "object") profile.s2 = zeroStats();
+    if (!fin(profile.cm2)) profile.cm2 = Ranked.START;
+  }
+  ensure();
+  // the start-up load ran before this file and kept only the 3D fields: take the 2D ones again from this browser's save
+  try {
+    const s = JSON.parse(localStorage.getItem("np-profile") || "null");
+    if (s && typeof s === "object") {
+      if (Array.isArray(s.rk)) for (const i of [3, 4, 5]) profile.rk[i] = clean2(s.rk[i]);
+      if (s.s2 && typeof s.s2 === "object") profile.s2 = cleanStats(s.s2);
+      if (fin(s.cm2)) profile.cm2 = clamp(Math.round(s.cm2), 0, MMR_MAX);
+      if (profile.ab == null && okArr(s.ab, 3) && s.ab[0] >= 4 && s.ab[0] <= 6) { profile.ab = [s.ab[0] | 0, clamp(s.ab[1], 0, MMR_MAX), clamp(s.ab[2], 0, MMR_MAX)]; settleAbandoned(); }
+    }
+  } catch {}
+  const rk2 = pl => { ensure(); return profile.rk[clamp(pl | 0, 4, 6) - 1]; };
+  const placed2 = e => e[1] >= RK.PLACEMENTS;
+  function view2(pl) {
+    const e = rk2(pl), inf = RK.info(e[0]);
+    if (!placed2(e)) return { idx: -1, name: "Unranked", sub: "Placement " + e[1] + " of " + RK.PLACEMENTS, inf, e, placed: false };
+    return { idx: inf.idx, name: inf.name, sub: inf.tierName, inf, e, placed: true };
+  }
+  function best2() { let b = -1; for (let pl = 4; pl <= 6; pl++) { const e = rk2(pl); if (placed2(e)) b = Math.max(b, RK.info(e[0]).idx); } return b; }
+  const rankView0 = rankView;
+  rankView = function (pl) { return (pl | 0) >= 4 ? view2(pl) : rankView0.apply(this, arguments); };
+  // XP bonus, rank-tier drops and season rewards use the best rank across every playlist, 3D and 2D
+  bestPlacedTier = function () {
+    let t = -1;
+    for (let pl = 1; pl <= 3; pl++) { const e = profile.rk[pl - 1]; if (e && e[1] >= Ranked.PLACEMENTS) t = Math.max(t, info3(e[0]).tier); }
+    for (let pl = 4; pl <= 6; pl++) { const e = rk2(pl); if (placed2(e)) t = Math.max(t, RK.sharedTier(RK.info(e[0]).tier)); }
+    return t;
+  };
+  // a guest's 2D ranked result (signed-in players get theirs from the progress service)
+  const record0 = recordRankedResult;
+  recordRankedResult = function (playlist, teamAvg, oppAvg, won) {
+    if ((playlist | 0) < 4) return record0.apply(this, arguments);
+    if (typeof NPSecure !== "undefined" && NPSecure.active()) return null;
+    const pl = clamp(playlist | 0, 4, 6), e = rk2(pl), P = RK.PLACEMENTS;
+    const before = { mmr: e[0], played: e[1], info: RK.info(e[0]) };
+    const d = RK.delta(fin(teamAvg) ? teamAvg : e[0], fin(oppAvg) ? oppAvg : e[0], !!won, e[1]);
+    e[0] = clamp(e[0] + d, 0, MMR_MAX); e[1]++; if (won) e[2]++; else e[3]++;
+    const after = { mmr: e[0], played: e[1], info: RK.info(e[0]) }, rt0 = profile.rt;
+    if (e[1] >= P) { e[4] = Math.max(e[4], after.info.idx); profile.rt = Math.max(profile.rt, RK.sharedTier(after.info.tier)); }
+    profile.ab = null;
+    saveProfile();
+    const newTiers = []; for (let t = rt0 + 1; t <= profile.rt; t++) newTiers.push(t);
+    lastRank = { pl, ladder: "2d", d, won: !!won, before, after, placedNow: before.played < P && after.played >= P, newTiers };
+    return lastRank;
+  };
+  const casual0 = recordCasualResult;
+  recordCasualResult = function () {
+    if (!is2DMatch()) return casual0.apply(this, arguments);
+    const cm = profile.cm; ensure(); profile.cm = profile.cm2;
+    try { return casual0.apply(this, arguments); } finally { profile.cm2 = profile.cm; profile.cm = cm; }
+  };
+  const mmr0 = myMatchMmr;
+  myMatchMmr = function () { if (!is2DMatch()) return mmr0.apply(this, arguments); ensure(); return match.rk && match.pl >= 4 ? rk2(match.pl)[0] : profile.cm2; };
+  // stats: a 2D match counts in profile.s2, never in the 3D games / wins / goals / saves / MVPs
+  const over0 = onMatchOver;
+  onMatchOver = function () {
+    if (!is2DMatch()) return over0.apply(this, arguments);
+    ensure();
+    const before = STATS.map(k => profile[k]);
+    try { return over0.apply(this, arguments); } finally {
+      const d = STATS.map((k, i) => (profile[k] | 0) - (before[i] | 0));
+      if (d.some(x => x)) { STATS.forEach((k, i) => { profile[k] = before[i]; profile.s2[k] = Math.max(0, (profile.s2[k] | 0) + d[i]); }); saveProfile(); lobbyPresence(); }
+    }
+  };
+  // the leaderboard row stays 3D (playlists 1-3)
+  const lb0 = lbEntry;
+  lbEntry = function () {
+    const e = lb0.apply(this, arguments), placed = profile.rk.slice(0, 3).filter(x => x[1] >= Ranked.PLACEMENTS), best = placed.length ? Math.max(...placed.map(x => x[0])) : 0;
+    e.mmr = best; e.rank = best ? info3(best).idx : -1; return e;
+  };
+  // lobby presence: 2D MMRs for party searches (mv2), 2D stats and best 2D rank for other players' menus
+  const mv2 = () => { ensure(); return [profile.cm2, rk2(4)[0], rk2(5)[0], rk2(6)[0]].map(v => Math.round(v)); };
+  const rb2Of = pr => pr && fin(pr.rb2) ? int(pr.rb2, -1, RK.TOP) : -1;
+  const okMv2 = v => Array.isArray(v) && v.length === 4 && v.every(fin);
+  const pp0 = partyPresence;
+  partyPresence = function () {
+    const o = pp0.apply(this, arguments) || {};
+    ensure();
+    o.mv2 = mv2(); o.st2 = STATS.map(k => profile.s2[k] | 0); o.rb2 = best2(); o.m2 = N.menu ? 1 : 0;
+    o.g2 = (mode !== "menu" ? is2DMatch() : !!N.menu) ? 1 : 0;   // the game you're on right now (older clients: none = Nitro Pitch)
+    return o;
+  };
+
+  // ---------- 2D search ----------
+  function start2D(kind, playlists) {
+    if (loginGate()) return false;
+    if (!isPartyLeader()) { toast("Only the party leader can start a search"); return false; }
+    const size = partyState().size;
+    const pl = [...new Set(playlists || [])].map(Number).filter(s => s >= 1 && s <= 3 && s >= size).sort();
+    if (!pl.length) { if (size > 3) toast("A party of " + size + " is too big for " + NAME() + " playlists (3v3 is the biggest). Play together in a private match!"); return false; }
+    clearTimeout(searchTimer);
+    const x = kind === "ranked" ? X_RANKED : X_CASUAL;
+    search = { id: Math.random().toString(36).slice(2, 10), kind: kind === "ranked" ? "ranked" : "casual", r: 2, pl, x, t: Date.now(), d2: 1 };
+    lastSearch = { kind: search.kind, playlists: pl.slice(), extraId: x };
+    sfx.ready();
+    lobbyPresence(); renderSearchBar();
+    const id = search.id;
+    if (!roomApi) searchTimer = setTimeout(() => { if (search && search.id === id) onMatchFound(sim2(search)); }, searchSimMs);
+    return true;
+  }
+  function sim2(q) {
+    const md = q.pl[Math.floor(Math.random() * q.pl.length)], bm = Math.round((q.x === X_RANKED ? rk2(md + 3)[0] : (ensure(), profile.cm2)) + (Math.random() - 0.5) * 30);
+    return { code: null, sid: q.id, r: 2, x: q.x, md, bm, bs: Ranked.botSkill(bm), team: Math.random() < 0.5 ? 0 : 1, expect: 1 };
+  }
+  const ss0 = startSearch;
+  startSearch = function (kind, playlists, extraId) {
+    if (extraId === X_CASUAL || extraId === X_RANKED) return start2D(extraId === X_RANKED ? "ranked" : "casual", playlists);
+    if (N.menu && (kind === "casual" || kind === "ranked")) return start2D(kind, playlists);
+    if (N.menu && kind === "extra") return false;
+    return ss0.apply(this, arguments);
+  };
+  const sq0 = searchQ;
+  searchQ = function () {
+    const q = sq0.apply(this, arguments);
+    if (!q || !search || !is2DQ(search)) return q;
+    const ps = partyState(), players = lobbyPlayers(), ranked = search.x === X_RANKED;
+    const vals = ps.members.map(m => m.me ? mv2() : ((players.find(p => p.peer === m.peer) || { pr: {} }).pr || {}).mv2).filter(okMv2);
+    if (!vals.length) vals.push(mv2());
+    q.m = {}; for (const s of [1, 2, 3]) q.m[s] = Math.round(vals.reduce((a, v) => a + clamp(v[ranked ? s : 0], 0, MMR_MAX), 0) / vals.length);
+    q.r = 2; q.x = search.x; q.pl = search.pl.slice();
+    return q;
+  };
+  // the original names EXTRA_MODES[m.x] for r = 2: a 2D match is announced here instead
+  const found0 = onMatchFound;
+  onMatchFound = function (m) {
+    if (!is2DQ(m)) return found0.apply(this, arguments);
+    if (!search || (m.sid && m.sid !== search.id) || mmDone.has(search.id)) return false;
+    clearTimeout(searchTimer);
+    mmDone.add(search.id);
+    search = null; lobbyPresence(); renderSearchBar();
+    const md = clamp(m.md | 0, 1, 3);
+    showMatchFound(NAME() + " · " + (m.x === X_RANKED ? "Competitive " : "Casual ") + md + "v" + md);
+    if ((m.expect | 0) < 2 * md) { toast((m.expect | 0) <= partyState().size ? "No players near your rank right now, so bots filled the open seats" : "Not enough players near your rank right now, so bots filled the open seats"); toastT = 4; }
+    clearTimeout(foundT);
+    foundT = setTimeout(() => {
+      hideMatchFound();
+      if (mode !== "menu") { if (match.ph !== "over" && !spec && !freePlay) return; leaveToMenu(true); }
+      if (m.code && roomApi) joinMatchmade(m); else startLocalMatch(m);
+    }, 1500);
+    return true;
+  };
+  const cfg0 = matchCfg;
+  matchCfg = function (m) {
+    if (!is2DQ(m)) return cfg0.apply(this, arguments);
+    const md = clamp(m.md | 0, 1, 3), ranked = m.x === X_RANKED, bm = fin(m.bm) ? m.bm : Ranked.START;
+    return { md, bf: 1, df: 1, mut: [0, 0, 0, 0, Math.floor(Math.random() * THEMES.length), 0, MODE()], rk: ranked ? 1 : 0, pl: ranked ? md + 3 : md, x: -1, bm, bs: fin(m.bs) ? m.bs : Ranked.botSkill(bm), mm: 1 };
+  };
+  // no lobby: a 2D search ends in a local bot match; a ranked one stays ranked (rk 1, mm 1, pl 4-6)
+  const local0 = startLocalMatch;
+  startLocalMatch = function (m) {
+    if (!is2DQ(m)) return local0.apply(this, arguments);
+    const cfg = matchCfg(m), team = m.team === 1 ? 1 : 0;
+    if (typeof N.startOffline === "function") N.startOffline({ size: cfg.md, ranked: !!cfg.rk, pl: cfg.pl, cfg, team, arena: cfg.mut[4], df: cfg.df, bm: cfg.bm, bs: cfg.bs });
+    else startOfflineMatch(cfg, team);
+    if (cfg.rk && (!match.rk || match.pl !== cfg.pl || match.mut[6] !== MODE())) { match.rk = 1; match.mm = 1; match.pl = cfg.pl; match.mut[6] = MODE(); }
+    toast(cfg.rk ? "Ranked " + NAME() + " match against bots: it counts for your 2D rank" : NAME() + " match against bots");
+  };
+  // a member's copy of the leader's search: keep the 2D mode, sizes and label
+  const sync0 = partySync;
+  partySync = function () {
+    const r = sync0.apply(this, arguments);
+    if (search && search.mirror && !search.d2) {
+      const ps = partyState(), L = lobbyPlayers().find(p => p.peer === ps.leader), q = L && L.pr && L.pr.q;
+      if (q && String(q.id) === search.id && is2DQ(q)) {
+        search.x = q.x; search.d2 = 1; search.kind = q.x === X_RANKED ? "ranked" : "casual";
+        search.pl = (Array.isArray(q.pl) ? q.pl : []).map(Number).filter(s => s >= 1 && s <= 3); if (!search.pl.length) search.pl = [2];
+        renderSearchBar();
+      }
+    }
+    followLeader();
+    return r;
+  };
+  // the party leader's game decides: a member's menus follow the leader between 3D and 2D
+  function leaderMode() {
+    const ps = partyState();
+    if (ps.isLeader || ps.size < 2) return null;
+    const L = lobbyPlayers().find(p => p.peer === ps.leader), m2 = L && L.pr ? L.pr.m2 : undefined;
+    return m2 === 1 ? true : m2 === 0 ? false : null;
+  }
+  function followLeader() {
+    if (mode !== "menu") return;
+    const want = leaderMode();
+    if (want === null || want === !!N.menu) return;
+    setMenu(want);
+    toast(want ? "Your party is playing " + NAME() : "Your party is playing Nitro Pitch 3D");
+  }
+  const invite0 = renderPartyInvite;
+  renderPartyInvite = function () {
+    const r = invite0.apply(this, arguments), card = $("partyInv");
+    if (card.hidden) return r;
+    const p = lobbyPlayers().find(x => x.peer === card.dataset.peer), m2 = p && p.pr ? p.pr.m2 : undefined;
+    if (m2 === 1) { $("partyInvSub").textContent += " · " + NAME(); $("partyInvEmb").src = RK.emblemURL(rb2Of(p.pr)); }
+    else if (m2 === 0 && N.menu) $("partyInvSub").textContent += " · Nitro Pitch 3D";
+    return r;
+  };
+  const bar0 = renderSearchBar;
+  renderSearchBar = function () {
+    const q = search;
+    if (!q || !is2DQ(q)) return bar0.apply(this, arguments);
+    search = Object.assign({}, q, { r: q.x === X_RANKED ? 1 : 0 });
+    try { bar0.apply(this, arguments); } finally { search = q; }
+    if (!$("searchBar").hidden) setTxt("searchWhat", NAME() + " · " + $("searchWhat").textContent);
+  };
+  // players searching a 2D playlist (r: 0 casual, 1 ranked)
+  function count2(ranked, size) {
+    let n = 0; const x = ranked ? X_RANKED : X_CASUAL;
+    if (roomApi) for (const p of roomApi.peers()) { const q = (p.presence || {}).q; if (q && typeof q === "object" && q.r === 2 && q.x === x && Array.isArray(q.pl) && (size == null || q.pl.includes(size))) n += clamp(q.n | 0, 1, 3); }
+    return n;
+  }
+  const title0 = matchTitle;
+  matchTitle = function () { const t = title0.apply(this, arguments); return is2DMatch() && !/^Nitro/.test(t) ? NAME() + " · " + t : t; };
+  // leaving a match returns to the menus of its kind
+  const leave0 = leaveToMenu;
+  leaveToMenu = function () {
+    const was = mode !== "menu" ? is2DMatch() : null;
+    const r = leave0.apply(this, arguments);
+    if (was !== null && was !== !!N.menu) setMenu(was);
+    return r;
+  };
+
+  // ---------- the look: a magenta / violet accent, a 2D tag on the player card and screen titles, a side-view strip ----------
+  const CAR_SVG = '<svg viewBox="0 0 40 24" aria-hidden="true"><path d="M2 21.5h36" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>' +
+    '<path d="M4 16.4l1.6-4.3c.3-.8 1-1.3 1.9-1.3h7.6l4.6-3.9c.4-.3.9-.5 1.4-.5h6.3c.8 0 1.5.4 1.8 1.1l1.9 3.3h2.3c1 0 1.8.8 1.8 1.8v3.8c0 .6-.4 1-1 1H5c-.7 0-1.2-.5-1-1z" fill="currentColor"/>' +
+    '<circle cx="11" cy="17.6" r="3.2" fill="#0b1020" stroke="currentColor" stroke-width="1.8"/><circle cx="29" cy="17.6" r="3.2" fill="#0b1020" stroke="currentColor" stroke-width="1.8"/>' +
+    '<circle cx="34.5" cy="4.6" r="3.3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M27 6.2c2-.9 3.6-1.4 4.4-1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="1.6 2" fill="none"/></svg>';
+  const CUBE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l8 4.4v9.6l-8 4.4-8-4.4V7.2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M4.3 7.4L12 11.8l7.7-4.4M12 11.8v9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  const css = node("style"); css.id = "np2d-menu-style";
+  css.textContent = `
+/* ---- the 3D menus: the switch into Nitro 2D wears the 2D colours ---- */
+.nb.np2d-switch{height:58px;background:linear-gradient(90deg,rgba(74,23,71,.96),rgba(46,15,58,.75))!important;box-shadow:inset 0 0 0 1px rgba(255,138,61,.55),0 10px 26px rgba(0,0,0,.3)}
+.nb.np2d-switch::before{background:linear-gradient(180deg,#ff8a3d,#22e0c6)}
+.nb.np2d-switch .np2d-ic{flex:0 0 auto;width:40px;height:24px;color:#ff9b52;display:grid;place-items:center}
+.nb.np2d-switch .np2d-ic svg{width:40px;height:24px;display:block}
+.nb.np2d-switch b{font-size:22px}
+.nb.np2d-switch b em{font-style:normal;margin-left:8px;padding:2px 7px 1px;font:11px var(--display);letter-spacing:.08em;vertical-align:4px;color:#2a0b2e;background:#22e0c6;border-radius:3px}
+.nb.np2d-switch:hover,.nb.np2d-switch:focus-visible{background:linear-gradient(90deg,rgba(255,122,48,.96),rgba(255,90,60,.5))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.4),0 14px 36px rgba(255,122,48,.3)}
+.nb.np2d-switch:hover .np2d-ic,.nb.np2d-switch:focus-visible .np2d-ic{color:#fff}
+.np-phone .nb.np2d-switch{grid-column:1/-1;height:54px}
+.np-phone .nb.np2d-switch b{font-size:18px}
+.np-phone.np-landscape .nb.np2d-switch{grid-column:auto;height:auto;min-height:46px}
+.np-phone.np-landscape .nb.np2d-switch small{display:none}
+.np-phone.np-landscape .nb.np2d-switch b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.np-phone.np-landscape .nb.np2d-switch .np2d-ic{display:none!important}
+.np-phone.np-landscape .nb.np2d-switch>span>span{min-width:0}
+.np-phone.np-landscape body.np2d #home>.nav{padding-top:8px}
+#np2dTag,.np2d-mark,#np2dScene,.np2d-note,.np2d-rules,.np2d-chip{display:none}
+.np2d-game{display:inline-block;margin-left:7px;padding:1px 6px 0;font:10px/1.5 var(--display);font-weight:400;letter-spacing:.05em;text-transform:uppercase;vertical-align:1px;border-radius:4px;color:#cfe2ff;background:rgba(46,139,255,.28);box-shadow:inset 0 0 0 1px rgba(110,170,255,.45);white-space:nowrap}
+.np2d-game.on2d{color:#2a0b2e;background:#ff8a3d;box-shadow:none}
+
+/* ---- Nitro 2D: a sunset-arcade look over the same menus ---- */
+body.np2d #menu{--bg:#1c0a26;--ink:#fff3e6;--dim:#e2c3cf;--panel:rgba(52,18,56,.92);--line:rgba(255,170,110,.32);--blue:#22e0c6;--gold:#ffc24a;
+  --glass:rgba(52,18,56,.92);--glass2:rgba(62,21,64,.94);--sk:0deg;--usk:0deg;--n2o:#ff8a3d;--n2o2:#ff5f2e;--n2t:#22e0c6;--n2c:#ffeccc;--n2p:#2a0b2e;--n2s:0 5px 0 rgba(14,3,20,.6)}
+body.np2d #np2dTag{display:inline-flex}
+body.np2d #menu:not(.notop) #np2dScene{display:block}
+body.np2d #menu[data-scr="garage"] #np2dScene{display:none!important}
+#np2dScene{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+#np2dScene canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#np2dScene::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(28,10,38,.55),transparent 40%,transparent 62%,rgba(28,10,38,.5));transition:background .3s}
+body.np2d #menu.dim #np2dScene::after,body.np2d #menu.full #np2dScene::after{background:rgba(28,10,38,.74)}
+body.np2d #npQuickTools{border-radius:14px;background:linear-gradient(180deg,#4a1747,#30103b)!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.45),0 5px 0 rgba(14,3,20,.6);color:#ffeccc}
+body.np2d #menu #np-career-history{border-radius:12px;background:rgba(255,138,61,.16)!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.45);color:#ffeccc}
+body.np2d #menu #mBg{opacity:0}
+/* top bar */
+#np2dTag{position:absolute;top:-11px;right:18px;z-index:2;align-items:center;gap:6px;padding:3px 10px 2px 8px;font:12px var(--display);letter-spacing:.08em;color:#2a0b2e;background:linear-gradient(90deg,#ffb15e,#ff8a3d);border-radius:999px;box-shadow:0 3px 0 rgba(14,3,20,.6);pointer-events:none;white-space:nowrap}
+#np2dTag svg{width:22px;height:13px;display:block}
+body.np2d #menu #pcard{border-radius:18px;background:linear-gradient(180deg,#4a1747,#30103b)!important;box-shadow:inset 0 0 0 2px rgba(255,138,61,.6),var(--n2s)}
+body.np2d #menu #pcard::before{display:none}
+body.np2d #menu #pcard:hover,body.np2d #menu #pcard:focus-visible{box-shadow:inset 0 0 0 2px var(--n2t),var(--n2s)}
+body.np2d #menu .ibtn{border-radius:14px;background:linear-gradient(180deg,#4a1747,#30103b)!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.35),var(--n2s)}
+body.np2d #menu .ibtn:hover,body.np2d #menu .ibtn:focus-visible{background:var(--n2t)!important;color:var(--n2p)}
+body.np2d #menu .lvring{--rc:var(--n2o)}
+body.np2d #menu .bar{transform:none;border-radius:99px;background:rgba(255,255,255,.12)}
+body.np2d #menu .bar i{border-radius:99px;background:linear-gradient(90deg,var(--n2o),#ffd36b 55%,var(--n2t))!important}
+/* the main menu buttons: chunky rounded cards with thick outlines */
+body.np2d #menu .nb{transform:none;border-radius:18px;background:linear-gradient(180deg,#4a1747,#2e0f3a)!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.38),var(--n2s);transition:transform .18s cubic-bezier(.2,.8,.2,1),background .18s,box-shadow .18s}
+body.np2d #menu .nb::before{display:none}
+body.np2d #menu .nb>span{transform:none;padding:0 18px}
+body.np2d #menu .nb .ic{width:40px;height:40px;flex:0 0 40px;display:grid;place-items:center;border-radius:50%;background:rgba(34,224,198,.16);box-shadow:inset 0 0 0 2px rgba(34,224,198,.55);color:var(--n2t);font-size:20px}
+body.np2d #menu .nb b{color:var(--n2c)}
+body.np2d #menu .nb small{color:var(--dim)}
+body.np2d #menu .nb:hover,body.np2d #menu .nb:focus-visible{transform:translateY(-3px);background:linear-gradient(180deg,#ffa057,var(--n2o2))!important;box-shadow:inset 0 0 0 2px #ffd9b0,0 8px 0 rgba(14,3,20,.6)}
+body.np2d #menu .nb:hover b,body.np2d #menu .nb:focus-visible b,body.np2d #menu .nb:hover small,body.np2d #menu .nb:focus-visible small{color:var(--n2p)}
+body.np2d #menu .nb:hover .ic,body.np2d #menu .nb:focus-visible .ic{background:var(--n2p);color:var(--n2o);box-shadow:none}
+body.np2d #menu .nb:active{transform:translateY(1px)}
+body.np2d #menu .nb.big{background:linear-gradient(180deg,#ffa057,var(--n2o2))!important;box-shadow:inset 0 0 0 2px #ffd9b0,0 6px 0 #8a2a12,0 14px 30px rgba(255,95,46,.35)}
+body.np2d #menu .nb.big b,body.np2d #menu .nb.big small{color:var(--n2p)}
+body.np2d #menu .nb.big .ic{background:var(--n2p);color:var(--n2o);box-shadow:none}
+body.np2d #menu .nb.big:hover,body.np2d #menu .nb.big:focus-visible{background:linear-gradient(180deg,#5ff3df,#15b9a4)!important;box-shadow:inset 0 0 0 2px #d6fff8,0 8px 0 #0b5c52}
+body.np2d #menu .nb.big:hover .ic,body.np2d #menu .nb.big:focus-visible .ic{color:var(--n2t)}
+body.np2d #menu .nb.np2d-switch{background:linear-gradient(180deg,#123247,#0d2134)!important;box-shadow:inset 0 0 0 2px rgba(120,190,255,.55),var(--n2s)}
+body.np2d #menu .nb.np2d-switch .np2d-ic{width:40px;height:40px;border-radius:50%;background:rgba(46,139,255,.2);color:#9cc8ff}
+body.np2d #menu .nb.np2d-switch .np2d-ic svg{width:22px;height:22px}
+body.np2d #menu .nb.np2d-switch b{color:#e4f0ff}
+body.np2d #menu .nb.np2d-switch:hover,body.np2d #menu .nb.np2d-switch:focus-visible{background:linear-gradient(180deg,#3d9bff,#1f6fe0)!important;box-shadow:inset 0 0 0 2px #cfe5ff,0 8px 0 #0d2f63}
+body.np2d #menu .nb.np2d-switch:hover b,body.np2d #menu .nb.np2d-switch:hover small{color:#fff}
+/* the wordmark */
+body.np2d .np2d-mark{display:flex;align-items:center;gap:12px;margin:0 0 6px 4px;pointer-events:none}
+.np2d-mark .np2d-word{display:flex;align-items:flex-end;gap:8px}
+.np2d-mark .np2d-word b{font:44px/.9 var(--display);letter-spacing:.04em;text-transform:uppercase;color:#ffeccc;-webkit-text-stroke:2px #2a0b2e;paint-order:stroke fill;text-shadow:0 3px 0 #ff5f2e,0 6px 0 #8a2a12,0 10px 18px rgba(0,0,0,.45)}
+.np2d-mark .np2d-word i{font:28px/1 var(--display);font-style:normal;padding:5px 9px 3px;color:#2a0b2e;background:#22e0c6;border-radius:10px;transform:rotate(-6deg) translateY(-6px);box-shadow:0 4px 0 #0b5c52}
+.np2d-mark small{display:block;margin-top:6px;font-size:11px;font-weight:700;letter-spacing:.26em;text-transform:uppercase;color:#ffc58f}
+.np2d-mark .np2d-ic{width:62px;height:38px;color:#ff9b52;filter:drop-shadow(0 3px 0 #2a0b2e)}
+.np2d-mark .np2d-ic svg{width:100%;height:100%;display:block}
+/* screen headers, back buttons, section labels */
+body.np2d #menu .stitle h1{color:var(--n2c);text-shadow:0 3px 0 var(--n2o2),0 6px 14px rgba(0,0,0,.4)}
+body.np2d #menu .stitle h1::after{content:"2D";display:inline-block;margin-left:12px;padding:5px 10px 3px;font-size:.42em;letter-spacing:.06em;vertical-align:.5em;color:var(--n2p);background:var(--n2t);border-radius:10px;transform:rotate(-6deg);text-shadow:none;box-shadow:0 3px 0 #0b5c52}
+body.np2d #menu .stitle small{color:#ffc58f}
+body.np2d #menu .back{border-radius:999px;background:linear-gradient(180deg,#4a1747,#30103b)!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.45),var(--n2s)}
+body.np2d #menu .back:hover,body.np2d #menu .back:focus-visible{background:var(--n2o)!important;color:var(--n2p);transform:translateX(-3px)}
+body.np2d #menu .psec span{color:var(--n2t)}
+body.np2d #menu .psec::after,body.np2d #menu .psec::before{background:linear-gradient(90deg,rgba(34,224,198,.5),transparent)}
+body.np2d #menu kbd{background:rgba(255,236,204,.12);color:var(--n2c)}
+/* panels, tabs, segmented controls, inputs */
+body.np2d #menu .panel{border-radius:18px;background:linear-gradient(180deg,rgba(62,21,64,.95),rgba(40,13,48,.95))!important;box-shadow:inset 0 0 0 2px var(--line),var(--n2s)}
+body.np2d #menu .ph{color:var(--n2c);background:linear-gradient(90deg,rgba(255,138,61,.3),rgba(255,138,61,0) 80%)!important;border-radius:16px 16px 0 0}
+body.np2d #menu .lvring::before{background:radial-gradient(circle at 50% 28%,#6a2160,#2a0b2e 70%)}
+body.np2d #menu .lvring{background:conic-gradient(var(--n2o) calc(var(--p)*1%),rgba(255,255,255,.12) 0)}
+body.np2d #menu .pm{border-bottom-color:rgba(255,170,110,.12)}
+body.np2d #menu .ph .ic{color:var(--n2o)}
+body.np2d #menu .ctab,body.np2d #menu .lbt,body.np2d #menu .lc-tab{border-radius:999px;background:rgba(42,11,46,.9)!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.35);color:var(--dim)}
+body.np2d #menu .ctab.on,body.np2d #menu .lbt.on,body.np2d #menu .lc-tab.on{background:var(--n2t)!important;color:var(--n2p);box-shadow:0 3px 0 #0b5c52}
+body.np2d #menu .tabs button,body.np2d #menu .seg button,body.np2d #menu .gteam button{transform:none;border-radius:999px;background:rgba(42,11,46,.9)!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.35)}
+body.np2d #menu .tabs button>span,body.np2d #menu .seg button>span,body.np2d #menu .gteam button>span{transform:none}
+body.np2d #menu .tabs button[aria-pressed="true"],body.np2d #menu .tabs button[aria-selected="true"],body.np2d #menu .seg button[aria-pressed="true"],body.np2d #menu .gteam button[aria-pressed="true"]{background:var(--n2t)!important;color:var(--n2p);box-shadow:0 3px 0 #0b5c52}
+body.np2d #menu .seg{gap:8px}
+body.np2d #menu .t{border-radius:12px;background:rgba(28,8,32,.85)!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.3)}
+body.np2d #menu .t:focus{box-shadow:inset 0 0 0 2px var(--n2t)}
+body.np2d #menu .sbtn{transform:none;border-radius:12px}
+body.np2d #menu .sbtn.pri{background:var(--n2o)!important;color:var(--n2p)}
+body.np2d #menu .bigbtn{transform:none;border-radius:18px;background:linear-gradient(180deg,#ffa057,var(--n2o2))!important;color:var(--n2p)!important;box-shadow:inset 0 0 0 2px #ffd9b0,0 6px 0 #8a2a12,0 14px 30px rgba(255,95,46,.35)}
+body.np2d #menu .bigbtn>span{transform:none}
+body.np2d #menu .bigbtn:hover:not(:disabled),body.np2d #menu .bigbtn:focus-visible{transform:translateY(-3px)}
+body.np2d #menu .bigbtn:disabled{filter:grayscale(.6) brightness(.7)}
+/* play tiles and playlist cards: flat chunky cards, no slant */
+body.np2d #menu .tile{transform:none;border-radius:22px;background:linear-gradient(160deg,var(--c2),rgba(40,12,46,.96) 62%)!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.4),0 6px 0 rgba(14,3,20,.6)}
+body.np2d #menu .tin{transform:none}
+body.np2d #menu .tile:hover:not(:disabled),body.np2d #menu .tile:focus-visible{transform:translateY(-4px);box-shadow:inset 0 0 0 3px var(--n2t),0 10px 0 rgba(14,3,20,.6)}
+body.np2d #menu .tile:active:not(:disabled){transform:translateY(1px)}
+body.np2d #menu .tile .tin b{color:var(--n2c)}
+body.np2d #menu .tile .ic.big{color:var(--n2p);background:var(--n2o);border-radius:50%}
+body.np2d #menu .tile .ic.wm{color:#ffb67a;opacity:.13}
+body.np2d #menu .tile::after{background:linear-gradient(90deg,var(--n2o),var(--n2t))!important;border-radius:4px}
+body.np2d #menu .tile.c-blue{--c2:rgba(255,138,61,.5)}
+body.np2d #menu .tile.c-gold{--c2:rgba(255,194,74,.45)}
+body.np2d #menu .tile.c-teal{--c2:rgba(34,224,198,.38)}
+body.np2d #menu .tile.c-slate{--c2:rgba(255,95,46,.32)}
+body.np2d #menu .tchip{color:var(--n2t)}
+body.np2d #play .tiles.on{grid-template-columns:repeat(3,minmax(0,1fr))}
+body.np2d #play .tiles.off{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+body.np2d #menu .plc{transform:none;border-radius:22px;background:linear-gradient(180deg,rgba(66,22,68,.96),rgba(34,10,40,.97))!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.38),0 6px 0 rgba(14,3,20,.6)}
+body.np2d #menu .plin,body.np2d #menu .plc .chk{transform:none}
+body.np2d #menu .plc .chk{border-radius:50%}
+body.np2d #menu .plc[aria-pressed="true"]{box-shadow:inset 0 0 0 3px var(--n2t),0 6px 0 #0b5c52,0 0 34px rgba(34,224,198,.25)}
+body.np2d #menu .plc[aria-pressed="true"] .chk{background:var(--n2t);color:var(--n2p)}
+body.np2d #menu .plc:hover:not(:disabled),body.np2d #menu .plc:focus-visible{transform:translateY(-4px)}
+body.np2d #menu .pl-teams .t i{transform:none;border-radius:6px;background:var(--n2t);box-shadow:0 0 14px rgba(34,224,198,.5)}
+body.np2d #menu .pl-teams .t.o i{background:var(--n2o);box-shadow:0 0 14px rgba(255,138,61,.5)}
+body.np2d #menu .pl-name{color:var(--n2c)}
+/* career and pass */
+body.np2d #menu .rcard{border-radius:20px}
+body.np2d #menu .stats>div{border-radius:12px;background:rgba(28,8,32,.6)!important;box-shadow:inset 0 0 0 2px rgba(255,170,110,.2)}
+body.np2d #menu .stats b{color:var(--n2c)}
+body.np2d #menu .gtab,body.np2d #menu .gtab>*{transform:none}
+body.np2d #menu .gtab{border-radius:14px}
+body.np2d #menu .gi{border-radius:14px}
+body.np2d #menu .np-card{border-radius:16px}
+/* little 2D chips and the notes on the 2D play screens */
+body.np2d #menu .np2d-chip{display:inline-block;margin-left:6px;padding:2px 7px 1px;font:10px var(--display);letter-spacing:.06em;color:var(--n2p);background:var(--n2t);border-radius:6px;vertical-align:2px}
+body.np2d #play .np2d-note{display:flex}
+.np2d-note{flex-direction:column;justify-content:center;gap:6px;padding:16px 22px;border-radius:18px;background:linear-gradient(120deg,rgba(255,138,61,.18),rgba(34,224,198,.08));box-shadow:inset 0 0 0 2px rgba(255,170,110,.3);color:var(--dim);font-size:13px;line-height:1.45}
+.np2d-note b{font:16px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--n2c)}
+body.np2d .np2d-rules{display:flex}
+.np2d-rules{flex-direction:column;justify-content:center;gap:6px;padding:18px 22px;border-radius:18px;background:linear-gradient(120deg,rgba(255,138,61,.2),rgba(34,224,198,.08) 70%);box-shadow:inset 0 0 0 2px rgba(255,170,110,.3);align-self:start}
+.np2d-rules b{font:56px/1 var(--display);letter-spacing:.04em;color:var(--n2c);text-shadow:0 3px 0 var(--n2o2)}
+.np2d-rules span{font:14px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--n2t)}
+.np2d-rules small{font-size:13px;line-height:1.45;color:var(--dim)}
+/* phones */
+.np-phone body.np2d #menu .np2d-mark{grid-column:1/-1;margin:0 0 2px 2px}
+.np-phone body.np2d #menu .np2d-mark .np2d-word b{font-size:32px}.np-phone body.np2d #menu .np2d-mark .np2d-word i{font-size:20px}.np-phone body.np2d #menu .np2d-mark .np2d-ic{width:46px;height:28px}
+.np-phone.np-landscape body.np2d #menu .np2d-mark{display:none}
+.np-phone #np2dTag{top:-9px;right:10px;font-size:10px}
+.np-phone body.np2d #menu .nb .ic{width:32px;height:32px;flex-basis:32px;font-size:17px}
+.np-phone body.np2d #play .tiles.on{grid-template-columns:repeat(2,minmax(0,1fr))}
+.np-phone body.np2d #play .tiles.on .tile:last-child{grid-column:1/-1}
+.np-phone body.np2d #play .tiles.off{grid-template-columns:1fr}
+.np-phone .np2d-note{padding:10px 14px;font-size:12px}
+.np-phone body.np2d #menu .pl-head .np2d-chip{display:none}
+.np-phone body.np2d #menu .actbar{background:linear-gradient(180deg,rgba(42,11,46,.94),rgba(28,8,32,.97))!important;box-shadow:0 -2px 0 rgba(255,170,110,.25)}
+.np-phone body.np2d #menu .shead{background:linear-gradient(180deg,rgba(28,10,38,.96),rgba(28,10,38,.85))!important}
+@media (max-width:760px){body.np2d #play .tiles.on{grid-template-columns:1fr 1fr}body.np2d #play .tiles.off{grid-template-columns:1fr}}
+`;
+  document.head.append(css);
+  // the switch on the main menu, right under Play
+  const sw = node("button", "nb np2d-switch"); sw.type = "button"; sw.id = "np2dSwitch";
+  const swIn = node("span"), swIc = node("span", "np2d-ic"), swTx = node("span"), swB = node("b"), swS = node("small");
+  swTx.append(swB, swS); swIn.append(swIc, swTx); sw.append(swIn);
+  $("navPlay").after(sw);
+  sw.onclick = () => {
+    if (leaderMode() !== null) { toast("Your party leader picks " + NAME() + " or Nitro Pitch 3D. Leave the party to switch on your own."); return; }
+    setMenu(!N.menu); sfx.init && sfx.init(); sfx.ready && sfx.ready(); toast(N.menu ? "Welcome to " + NAME() + ": side-view car soccer. Your garage, pass and level come with you." : "Back to Nitro Pitch 3D"); };
+  const tag = node("span"); tag.id = "np2dTag"; tag.innerHTML = CAR_SVG; tag.append(node("span", "", NAME())); $("pcard").append(tag);
+  // the 2D backdrop: a side-view sunset arena with your car (your decal), a rival and the ball, drawn on a canvas over
+  // the 3D stage while the 2D menus show (the garage keeps the 3D turntable)
+  const scene = node("div"); scene.id = "np2dScene"; scene.setAttribute("aria-hidden", "true");
+  const sceneCv = node("canvas"); scene.append(sceneCv); $("mBg").after(scene);
+  // the real cars, side-on: your equipped car and a rival, rendered once with the game's own car builder (an
+  // orthographic side camera in sunset light) and redrawn as images, so the menu stays light on phones
+  let snapR = null;
+  const snaps = new Map();
+  function snapshot(key, make, round) {
+    if (snaps.has(key)) return snaps.get(key);
+    let out = null;
+    try {
+      const W2 = innerWidth < 700 ? 320 : 512, H2 = W2 / 2;
+      if (!snapR) {
+        const cv = document.createElement("canvas"), r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, preserveDrawingBuffer: true });
+        r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.1;
+        const sc = new THREE.Scene();
+        sc.add(new THREE.HemisphereLight(0xffd6b8, 0x3a1040, 2.1));
+        const sun = new THREE.DirectionalLight(0xffb070, 3.2); sun.position.set(3, 5, 6); sc.add(sun);
+        const rim = new THREE.DirectionalLight(0x22e0c6, 2.4); rim.position.set(-5, 3, -4); sc.add(rim);
+        snapR = { r, sc };
+      }
+      snapR.r.setSize(W2, H2, false);
+      const obj = make(); snapR.sc.add(obj.g); obj.g.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(obj.g), c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+      const w = round ? Math.max(sz.x, sz.y * 2) * 1.06 : Math.max(sz.x * 1.03, sz.y * 2.1), h = w / 2, bottom = box.min.y - c.y - h * 0.04;
+      const cam = new THREE.OrthographicCamera(-w / 2, w / 2, bottom + h, bottom, 0.1, 100);
+      cam.position.set(c.x, c.y, c.z + 30); cam.lookAt(c.x, c.y, c.z);
+      snapR.r.setClearColor(0x000000, 0); snapR.r.render(snapR.sc, cam);
+      out = document.createElement("canvas"); out.width = W2; out.height = H2; out.getContext("2d").drawImage(snapR.r.domElement, 0, 0);
+      snapR.sc.remove(obj.g); obj.dispose();
+    } catch { out = null; }
+    snaps.set(key, out);
+    return out;
+  }
+  function carSnap(team, body, look, face) {
+    return snapshot(JSON.stringify(["car", team, body, look, face]), () => {
+      const m = buildCarMesh(team, body, look.trail | 0, null, look);
+      if (m.flame) m.flame.visible = false;
+      m.g.rotation.y = face * Math.PI / 2;
+      return { g: m.g, dispose: () => m.dispose() };
+    });
+  }
+  const ballSnap = () => snapshot("ball", () => {
+    const geo = new THREE.SphereGeometry(1, 40, 28), mesh = new THREE.Mesh(geo, ballMat), g = new THREE.Group(); g.add(mesh);
+    return { g, dispose: () => geo.dispose() };
+  }, true);
+  const myLook = () => ({ decal: profile.decal | 0, wheel: profile.wheel | 0, paint: okPaint(profile.paint), finish: okFinish(profile.finish), topper: profile.topper | 0, antenna: profile.antenna | 0, trail: profile.trail | 0 });
+  const hexOf = v => "#" + ((v >>> 0) & 0xffffff).toString(16).padStart(6, "0");
+  const sprites = new Map();
+  function carSprite(team, decal) {
+    const key = team + ":" + decal;
+    if (!sprites.has(key)) {
+      const c = document.createElement("canvas"); c.width = 240; c.height = 120;
+      try { drawDecal(c.getContext("2d"), 240, 120, decal, team); } catch {}
+      sprites.set(key, c);
+    }
+    return sprites.get(key);
+  }
+  let sceneRaf = 0, sceneLast = 0;
+  const sceneOn = () => !!N.menu && mode === "menu" && !$("menu").hidden && !$("menu").classList.contains("notop") && screen !== "garage";
+  function drawScene(now) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1), cw = sceneCv.clientWidth || innerWidth, ch = sceneCv.clientHeight || innerHeight;
+    if (sceneCv.width !== Math.round(cw * dpr) || sceneCv.height !== Math.round(ch * dpr)) { sceneCv.width = Math.round(cw * dpr); sceneCv.height = Math.round(ch * dpr); }
+    const g = sceneCv.getContext("2d"); if (!g) return;
+    const W = cw, H = ch, portrait = H > W * 1.1;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const G = portrait ? Math.min(H * 0.3, 222) : H * 0.8, hz = G - (portrait ? 46 : H * 0.1);
+    const sky = g.createLinearGradient(0, 0, 0, G);
+    sky.addColorStop(0, "#1d0a2b"); sky.addColorStop(0.45, "#4f1749"); sky.addColorStop(0.78, "#b23a4f"); sky.addColorStop(1, "#ff8a3d");
+    g.fillStyle = sky; g.fillRect(0, 0, W, G);
+    // stars
+    g.fillStyle = "rgba(255,236,204,.55)";
+    for (let k = 0; k < 40; k++) { const x = (k * 97.3 % 1) * W, y = ((k * 53.7 + 0.3) % 1) * hz * 0.55; g.fillRect(x, y, k % 3 ? 1 : 2, k % 3 ? 1 : 2); }
+    // a striped retro sun
+    const sr = Math.min(W, H) * (portrait ? 0.16 : 0.2), sx = W * (portrait ? 0.7 : 0.62), sy = hz - sr * 0.15;
+    const sun = g.createLinearGradient(0, sy - sr, 0, sy + sr); sun.addColorStop(0, "#ffe08a"); sun.addColorStop(0.6, "#ff8a3d"); sun.addColorStop(1, "#ff4f6d");
+    g.save(); g.shadowColor = "rgba(255,138,61,.6)"; g.shadowBlur = 40; g.fillStyle = sun; g.beginPath(); g.arc(sx, sy, sr, 0, Math.PI * 2); g.fill(); g.restore();
+    g.fillStyle = sky; for (let k = 0; k < 6; k++) { const y = sy + sr * (0.1 + k * 0.17), hgt = 2 + k * 1.6; g.fillRect(sx - sr - 2, y, sr * 2 + 4, hgt); }
+    // the stadium skyline
+    g.fillStyle = "#2a0b2e";
+    g.beginPath(); g.moveTo(0, G);
+    const steps = 14; for (let k = 0; k <= steps; k++) { const x = W * k / steps, hgt = (k % 2 ? 0.55 : 0.8) * (G - hz) + (k % 3) * 6; g.lineTo(x, G - hgt); g.lineTo(x + W / steps * 0.6, G - hgt); }
+    g.lineTo(W, G); g.closePath(); g.fill();
+    for (const fx of [0.08, 0.3, 0.7, 0.92]) { const x = W * fx, top = hz - (portrait ? 30 : H * 0.12); g.fillStyle = "#2a0b2e"; g.fillRect(x - 2, top, 4, G - top); g.fillStyle = fx < 0.5 ? "#22e0c6" : "#ffb15e"; g.shadowColor = g.fillStyle; g.shadowBlur = 14; g.fillRect(x - 12, top - 6, 24, 8); g.shadowBlur = 0; }
+    // the pitch, seen from the side
+    const turf = g.createLinearGradient(0, G, 0, H); turf.addColorStop(0, "#14806f"); turf.addColorStop(0.25, "#0d4f48"); turf.addColorStop(1, "#14061c");
+    g.fillStyle = turf; g.fillRect(0, G, W, H - G);
+    g.fillStyle = "rgba(255,255,255,.06)"; for (let k = 0; k < 12; k += 2) g.fillRect(W * k / 12, G, W / 12, Math.min(28, (H - G) * 0.4));
+    g.fillStyle = "#ffeccc"; g.fillRect(0, G - 1.5, W, 3);
+    g.fillRect(W / 2 - 1.5, G, 3, 10);
+    // goals at both ends
+    const gw = Math.max(26, W * 0.045), gh = portrait ? 70 : Math.min(H * 0.22, 170);
+    for (const side of [0, 1]) {
+      const x0 = side ? W - gw : 0;
+      g.fillStyle = side ? "rgba(255,138,61,.16)" : "rgba(34,224,198,.16)"; g.fillRect(x0, G - gh, gw, gh);
+      g.strokeStyle = side ? "rgba(255,177,94,.35)" : "rgba(34,224,198,.35)"; g.lineWidth = 1;
+      g.beginPath(); for (let y = G - gh + 10; y < G; y += 10) { g.moveTo(x0, y); g.lineTo(x0 + gw, y); } g.stroke();
+      g.strokeStyle = "#ffeccc"; g.lineWidth = 4; g.beginPath(); g.moveTo(side ? x0 : x0 + gw, G); g.lineTo(side ? x0 : x0 + gw, G - gh); g.lineTo(side ? W : 0, G - gh); g.stroke();
+    }
+    // the play: the ball bounces between the two cars, and they chase it
+    const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const t = reduce ? 1.2 : now / 1000, ph = t * 0.9;
+    const cwid = portrait ? Math.min(W * 0.26, 110) : Math.max(110, Math.min(W * 0.125, 230)), chgt = cwid / 2;
+    const br = cwid * 0.16, mid = W * 0.5, span = portrait ? W * 0.14 : W * 0.07;
+    const bx = mid + Math.sin(ph) * span, by = G - br - Math.abs(Math.sin(ph * 2)) * (portrait ? 70 : H * 0.2);
+    const ax = Math.min(bx - br - cwid * 0.92, mid - cwid * 0.4) - (1 + Math.cos(ph)) * cwid * 0.25, ox = Math.max(bx + br + cwid * 0.02, mid + cwid * 0.4 - cwid) + (1 - Math.cos(ph)) * cwid * 0.25 + cwid * 0.1;
+    const cy = G - chgt * 0.89;
+    // ball arc guide
+    g.setLineDash([2, 9]); g.strokeStyle = "rgba(255,236,204,.35)"; g.lineWidth = 2; g.beginPath();
+    for (let k = -20; k <= 20; k++) { const p = ph + k * 0.03, x = mid + Math.sin(p) * span, y = G - br - Math.abs(Math.sin(p * 2)) * (portrait ? 70 : H * 0.2); if (k === -20) g.moveTo(x, y); else g.lineTo(x, y); }
+    g.stroke(); g.setLineDash([]);
+    // boost: particles in your equipped boost colour behind your car, the default boost behind the rival
+    const puff = (x, y, dir, col) => { for (let k = 0; k < 9; k++) { const a = (t * 2.4 + k / 9) % 1; g.globalAlpha = (1 - a) * 0.85; g.fillStyle = col; const r2 = 2 + (1 - a) * cwid * 0.035; g.beginPath(); g.arc(x - dir * a * cwid * 0.55, y + Math.sin(k * 7.1 + t * 9) * a * 6, r2, 0, Math.PI * 2); g.fill(); } g.globalAlpha = 1; };
+    const shadow = (x, w) => { g.fillStyle = "rgba(10,2,14,.45)"; g.beginPath(); g.ellipse(x, G + 4, w, 5, 0, 0, Math.PI * 2); g.fill(); };
+    shadow(ax + cwid / 2, cwid * 0.45); shadow(ox + cwid / 2, cwid * 0.45); shadow(bx, br * (1.2 - (G - br - by) / (H * 0.4)));
+    const rivalBody = (profile.body | 0) === 1 ? 2 : 1;
+    const mine = carSnap(0, profile.body | 0, myLook(), 1), rival = carSnap(1, rivalBody, { trail: 0 }, -1);
+    let col = "#ffb15e"; try { col = hexOf(trailColor(profile.trail | 0, t)); } catch {}
+    puff(ax + cwid * 0.04, G - chgt * 0.35, 1, col); puff(ox + cwid * 0.96, G - chgt * 0.35, -1, "#ffb15e");
+    if (mine) g.drawImage(mine, ax, G - chgt * 0.96, cwid, chgt);
+    else { g.save(); g.translate(ax + cwid, cy); g.scale(-1, 1); g.drawImage(carSprite(0, clamp(profile.decal | 0, 0, 999)), 0, 0, cwid, chgt); g.restore(); }
+    if (rival) g.drawImage(rival, ox, G - chgt * 0.96, cwid, chgt); else g.drawImage(carSprite(1, 0), ox, cy, cwid, chgt);
+    const bimg = ballSnap();
+    if (bimg) { g.save(); g.translate(bx, by); g.rotate(ph * 3); const bs = br * 2 / (1 / 2.12); g.drawImage(bimg, -bs / 2, -bs / 4, bs, bs / 2); g.restore(); }
+    else {
+    // the ball
+    g.save(); g.translate(bx, by); g.rotate(ph * 3);
+    const bg = g.createRadialGradient(-br * 0.3, -br * 0.3, br * 0.1, 0, 0, br); bg.addColorStop(0, "#ffffff"); bg.addColorStop(1, "#d9c9d6");
+    g.fillStyle = bg; g.beginPath(); g.arc(0, 0, br, 0, Math.PI * 2); g.fill();
+    g.lineWidth = 2; g.strokeStyle = "#2a0b2e"; g.stroke();
+    g.fillStyle = "#2a0b2e"; g.beginPath(); for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + k * Math.PI * 2 / 5; g.lineTo(Math.cos(a) * br * 0.38, Math.sin(a) * br * 0.38); } g.closePath(); g.fill();
+    g.restore();
+    }
+  }
+  function sceneLoop(now) {
+    sceneRaf = 0;
+    if (!sceneOn()) return;
+    if (now - sceneLast > 32) { sceneLast = now; try { drawScene(now); } catch {} }
+    sceneRaf = requestAnimationFrame(sceneLoop);
+  }
+  function wakeScene() { if (!sceneRaf && typeof requestAnimationFrame === "function" && sceneOn()) sceneRaf = requestAnimationFrame(sceneLoop); }
+  if (typeof setInterval === "function") setInterval(wakeScene, 500);
+  const mark = node("div", "np2d-mark"); mark.setAttribute("aria-hidden", "true");
+  const markIc = node("span", "np2d-ic"); markIc.innerHTML = CAR_SVG; const markTx = node("span"), word = node("span", "np2d-word"), nm = NAME(), m2 = / 2D$/.test(nm);
+  word.append(node("b", "", m2 ? nm.slice(0, -3) : nm)); if (m2) word.append(node("i", "", "2D"));
+  markTx.append(word, node("small", "", "Side-view car soccer"));
+  mark.append(markIc, markTx); $("navPlay").before(mark);
+  // the 2D play screen: casual, ranked and private online; offline: an exhibition against bots
+  const note = node("div", "np2d-note"); note.append(node("b", "", "Side view, same garage"), node("span", "", "Two-minute matches in 1v1, 2v2 and 3v3. Your cars, decals, goal explosions, level, Nitro Pass and quests all carry over. Ranks are separate."));
+  $("pExhib").parentElement.append(note);
+  for (const form of ["exForm", "privCreate"]) {
+    const muts = $(form).querySelector(".muts"), card = node("div", "np2d-rules");
+    card.append(node("b", "", "2:00"), node("span", "", "Side-view match · standard rules"), node("small", "", "Normal boost, gravity and ball. Your garage loadout and goal explosion come with you."));
+    if (muts) muts.after(card); else $(form).append(card);
+  }
+  const TEXT3 = {}, TEXT2 = {
+    "#navPlay small": "Side view · 1v1, 2v2 & 3v3", "#navCareer small": "2D ranks, stats & clan",
+    "#pCasual small": "Unranked 1v1, 2v2 & 3v3 in side view. Two-minute matches.",
+    "#pRanked small": "Ranked 2D playlists with their own ranks, Bronze I to Legend. 3 placement matches.",
+    "#pPrivate small": "A side-view match with friends: share a name and password.",
+    "#pExhib small": "A side-view match against bots. Two minutes, half XP.",
+    "#play .stitle small": NAME(), "#exhibition .stitle small": NAME() + " · Offline", "#private .stitle small": NAME() + " · Play", "#playlists .stitle small": NAME() + " · Play",
+    "#career .stitle small": NAME() + " · Main menu"
+  };
+  for (const sel of Object.keys(TEXT2)) { const el = document.querySelector(sel); if (el) TEXT3[sel] = el.textContent; }
+  function paintTexts() { for (const sel of Object.keys(TEXT2)) { const el = document.querySelector(sel); if (el) el.textContent = N.menu ? TEXT2[sel] : TEXT3[sel]; } }
+  function paintSwitch() {
+    swIc.innerHTML = N.menu ? CUBE_SVG : CAR_SVG;
+    swB.textContent = N.menu ? "Nitro Pitch 3D" : NAME();
+    if (!N.menu) swB.append(node("em", "", "NEW"));
+    swS.textContent = N.menu ? "Back to the full 3D game" : "Side-view car soccer · switch";
+    sw.setAttribute("aria-label", N.menu ? "Switch back to Nitro Pitch 3D" : "Switch to " + NAME() + ", side-view car soccer");
+    sw.setAttribute("aria-pressed", String(!!N.menu));
+  }
+  // switch the menus between 3D and 2D (also when a match of the other kind ends)
+  function setMenu(on) {
+    on = !!on;
+    const changed = on !== !!N.menu;
+    N.menu = on;
+    try { localStorage.setItem(KEY, on ? "1" : "0"); } catch {}
+    document.body.classList.toggle("np2d", on);
+    paintSwitch(); paintTexts(); wakeScene();
+    if (!changed) return;
+    if (search && !search.mirror && is2DQ(search) !== on && mode === "menu") { cancelSearch(true); toast("Search cancelled: you switched to " + (on ? NAME() : "Nitro Pitch 3D")); }
+    partyKey = "";
+    renderMenuChrome();
+    if (mode === "menu" && screen !== "none" && !$("menu").hidden) {
+      if (["playlists", "private", "exhibition", "practice", "replays"].includes(screen)) showScreen("play"); else rerenderScreen();
+    }
+    lobbyPresence();
+  }
+  N.setMenu = setMenu;
+  let saved = false; try { saved = localStorage.getItem(KEY) === "1"; } catch {}
+  N.menu = saved; document.body.classList.toggle("np2d", saved); paintSwitch(); paintTexts();
+
+  const play0 = renderPlay;
+  renderPlay = function () {
+    const r = play0.apply(this, arguments);
+    for (const id of ["pExtra", "freeBtn", "pTrain"]) $(id).hidden = !!N.menu;
+    const on = !!roomApi && onlineOk;
+    if (N.menu) { const c = count2(false), k = count2(true); setTxt("pCasualN", on && c ? c + " searching" : ""); setTxt("pRankedN", on && k ? k + " searching" : ""); }
+    else if (on) { let n = 0; for (const p of roomApi.peers()) { const q = (p.presence || {}).q; if (q && typeof q === "object" && q.r === 2 && !is2DQ(q)) n += clamp(q.n | 0, 1, 3); } setTxt("pExtraN", n ? n + " searching" : ""); }
+    return r;
+  };
+  const pls0 = renderPlaylists;
+  renderPlaylists = function () {
+    const r = pls0.apply(this, arguments);
+    if (!N.menu || plKind === "extra") return r;
+    setTxt("plHint", "Pick one or more playlists · two-minute side-view matches");
+    const on = !!roomApi && onlineOk, ranked = plKind === "ranked";
+    for (const b of $("plCards").querySelectorAll(".plc")) {
+      const size = +b.dataset.pl, cnt = b.querySelector(".pl-cnt"), head = b.querySelector(".pl-head");
+      if (head && !head.querySelector(".np2d-chip")) head.append(node("span", "np2d-chip", "2D"));
+      if (cnt) { const n = on ? count2(ranked, size) : 0; cnt.textContent = on ? (n ? n + (n === 1 ? " player" : " players") + " searching" : "No one searching") : ""; cnt.classList.toggle("zero", !n); }
+      if (!ranked) continue;
+      const rv = view2(size + 3), e = rv.e, tc = rv.idx >= 0 ? RK.TIER_COLORS[RK.RANKS[rv.idx].tier] : "#8d9bbd";
+      const art = b.querySelector(".pl-art"), inf = b.querySelector(".pl-info");
+      if (art) { art.innerHTML = ""; const im = node("img"); im.alt = rv.name; im.src = RK.emblemURL(rv.idx); art.append(im); }
+      b.style.setProperty("--pc", tc + "40");
+      if (inf) {
+        const keep = inf.querySelector(".pl-cnt"); inf.innerHTML = "";
+        const rn = node("span", "pl-rank", rv.name); if (rv.idx >= 0) rn.style.color = tc;
+        const wl = node("span", "pl-wl"); wl.append("W ", node("b", "", e[2]), " – L ", node("b", "", e[3]));
+        inf.append(rn, node("span", "pl-div", rv.placed ? "MMR " + Math.round(e[0]) : "Placement " + e[1] + " of " + RK.PLACEMENTS), wl);
+        if (keep) inf.append(keep);
+      }
+    }
+    return r;
+  };
+  // offline 2D: an exhibition against bots (arena, team size and bots; 2D matches keep default mutators)
+  const exr0 = renderExhibition;
+  renderExhibition = function () {
+    const r = exr0.apply(this, arguments);
+    const muts = $("exForm").querySelector(".muts"); if (muts) muts.hidden = !!N.menu;
+    const st = $("exForm").querySelector(".formfoot .status"); if (st) { if (!st.dataset.t3) st.dataset.t3 = st.textContent; st.textContent = N.menu ? "Two-minute side-view match. Exhibition matches earn half XP." : st.dataset.t3; }
+    return r;
+  };
+  const exs0 = startExhibition;
+  startExhibition = function () {
+    if (!N.menu) return exs0.apply(this, arguments);
+    if (loginGate()) return;
+    const size = clamp(exh.md | 0, 1, 3), arena = clamp(exh.arena | 0, 0, THEMES.length - 1), df = clamp(exh.df | 0, 0, 2);
+    if (typeof N.startOffline === "function") N.startOffline({ size, ranked: false, pl: 0, arena, df });
+    else startOfflineMatch({ md: size, bf: 1, df, mut: [0, 0, 0, 0, arena, 0, MODE()] }, 0);
+  };
+  const pvr0 = renderPrivate;
+  renderPrivate = function () {
+    const r = pvr0.apply(this, arguments);
+    const muts = $("privCreate").querySelector(".muts"); if (muts) muts.hidden = !!N.menu;
+    return r;
+  };
+  const pvc0 = createPrivate;
+  createPrivate = function (cfg) {
+    if (N.menu && cfg && Array.isArray(cfg.mut)) cfg = Object.assign({}, cfg, { mut: [0, 0, 0, 0, cfg.mut[4] | 0, 0, MODE()] });
+    return pvc0.call(this, cfg);
+  };
+
+  // ---------- ranks and stats on the menus while in 2D ----------
+  const chrome0 = renderMenuChrome;
+  renderMenuChrome = function () {
+    const r = chrome0.apply(this, arguments);
+    if (N.menu) { const b = best2(), emb = $("hEmb"), k = "2d:" + b; if (emb._k !== k) { emb._k = k; emb.src = RK.emblemURL(b); emb.alt = emb.title = b >= 0 ? "Best " + NAME() + " rank: " + RK.RANKS[b].name : NAME() + ": unranked"; } }
+    return r;
+  };
+  // which game each player is on: a small "Nitro Pitch" / "Nitro 2D" tag in the party and players-online lists
+  const gameOf = pr => !!(pr && pr.g2 === 1);
+  function gameTag(row, is2d) {
+    const nameEl = row && row.querySelector(".who b"); if (!nameEl) return;
+    let t = nameEl.querySelector(".np2d-game");
+    if (!t) { t = node("span", "np2d-game"); nameEl.append(t); }
+    t.textContent = is2d ? NAME() : "Nitro Pitch"; t.classList.toggle("on2d", is2d);
+  }
+  const party0 = renderParty;
+  renderParty = function () {
+    const r = party0.apply(this, arguments);
+    const ps = partyState(), players = lobbyPlayers(), mine = (mode !== "menu" ? is2DMatch() : !!N.menu);
+    const rows = [...$("partyList").children].filter(x => !x.classList.contains("empty"));
+    const ol = [...$("onlineList").querySelectorAll(".pm.ol")];
+    ps.members.forEach((m, i) => { const p = players.find(x => x.peer === m.peer); if (ps.size > 1) gameTag(rows[i], m.me ? mine : gameOf(p && p.pr)); });
+    players.forEach((p, i) => gameTag(ol[i], gameOf(p.pr)));
+    if (!N.menu) return r;
+    ps.members.forEach((m, i) => { const im = rows[i] && rows[i].querySelector("img"); if (!im) return; const p = players.find(x => x.peer === m.peer), idx = m.me ? best2() : rb2Of(p && p.pr); im.src = RK.emblemURL(idx); im.alt = idx >= 0 ? RK.RANKS[idx].name : "Unranked"; });
+    players.forEach((p, i) => { const im = ol[i] && ol[i].querySelector("img"); if (!im) return; const idx = rb2Of(p.pr); im.src = RK.emblemURL(idx); im.alt = idx >= 0 ? RK.RANKS[idx].name : "Unranked"; });
+    return r;
+  };
+  const stats0 = showStats;
+  showStats = function (e) {
+    if (!N.menu || !e) return stats0.apply(this, arguments);
+    const idx = e.me ? best2() : e.lb2 ? (fin(e.lb.rank) ? int(e.lb.rank, -1, RK.TOP) : -1) : rb2Of(e.pr);
+    const e2 = Object.assign({}, e, { rb: -1 });
+    if (e.pr) e2.pr = Object.assign({}, e.pr, { st: Array.isArray(e.pr.st2) ? e.pr.st2 : [0, 0, 0, 0, 0] });
+    if (e.lb && !e.lb2) e2.lb = { wins: 0, goals: 0, mmr: 0 };
+    let back = null;
+    if (e.me) { ensure(); back = STATS.map(k => profile[k]); STATS.forEach(k => { profile[k] = profile.s2[k] | 0; }); }
+    try { stats0.call(this, e2); } finally { if (back) STATS.forEach((k, i) => { profile[k] = back[i]; }); }
+    const t = $("spSub").firstChild;
+    if (t && t.nodeType === 3) t.textContent = t.textContent.replace("Unranked", NAME() + " " + (idx >= 0 ? RK.RANKS[idx].name : "Unranked"));
+  };
+  const sfu0 = statsForUid;
+  statsForUid = async function (uid, name) {
+    if (!N.menu) return sfu0.apply(this, arguments);
+    const p = lobbyPlayers().find(x => x.ui === uid);
+    if (p) { showStats({ ...memberOf(p), pr: p.pr, uid }); return; }
+    let row = null;
+    try { if (window.NPProgressAPI && window.npAccounts && window.npAccounts.user()) row = (await window.NPProgressAPI.call("leaderboard-get", { uid, board: "2d" })).row; } catch {}
+    if (!row) { showStats({ name: name || "Player", lv: 1, rb: -1, lb: { wins: 0, goals: 0, mmr: 0, rank: -1 }, lb2: true, uid }); return; }
+    vetLook(uid, Object.assign(row, { ti: okTitle(row.ti), bn: okBanner(row.bn) }));
+    showStats({ name: cleanName(row.name || name || "Player"), lv: clamp(row.level | 0, 1, MAXLV), rb: -1, lb: row, lb2: true, uid });
+  };
+  // the name banners over the cars on the main menu: 2D badges (rb 1001 + 2D rank; the 3D ladder's emblem() draws them)
+  const badgeImgs = new Map(), badgeImg = i => { if (!badgeImgs.has(i)) { const im = new Image(); im.src = RK.emblemURL(i); badgeImgs.set(i, im); } return badgeImgs.get(i); };
+  for (let i = -1; i <= RK.TOP; i++) badgeImg(i);
+  const emblem0 = Ranked.emblem;
+  Ranked.emblem = function (idx, size = 128) {
+    if (!(idx >= 1000)) return emblem0.apply(this, arguments);
+    const cv = document.createElement("canvas"), im = badgeImg(Math.min(idx - 1001, RK.TOP)); cv.width = cv.height = size;
+    try { if (im.complete && im.naturalWidth) cv.getContext("2d").drawImage(im, 0, 0, size, size); } catch {}
+    return cv;
+  };
+  const room0 = showroomEntries;
+  showroomEntries = function () {
+    const list = room0.apply(this, arguments);
+    if (!N.menu || !Array.isArray(list)) return list;
+    const players = lobbyPlayers();
+    return list.map(e => e.garage ? e : Object.assign({}, e, { rb: 1001 + (e.me ? best2() : rb2Of((players.find(p => p.peer === e.peer) || {}).pr)) }));
+  };
+  // career: 2D stats and the three 2D rank cards
+  const career0 = renderCareer;
+  renderCareer = function () {
+    const r = career0.apply(this, arguments);
+    if (!N.menu) return r;
+    ensure();
+    const st = $("cStats"), s = profile.s2, g = s.games | 0; st.innerHTML = "";
+    for (const [k, v] of [["2D matches", g], ["Wins", s.wins | 0], ["Win rate", g ? Math.round((s.wins | 0) / g * 100) + "%" : "–"], ["Goals", s.goals | 0], ["Saves", s.saves | 0], ["MVPs", s.mvps | 0]]) { const d = node("div"); d.append(node("b", "", v), node("small", "", k)); st.append(d); }
+    const rc = $("cRanks"); rc.innerHTML = "";
+    for (let pl = 4; pl <= 6; pl++) {
+      const rv = view2(pl), e = rv.e, inf = rv.inf, tc = rv.idx >= 0 ? RK.TIER_COLORS[RK.RANKS[rv.idx].tier] : "#8d9bbd";
+      const c = node("div", "panel rcard np2d-rcard"); c.style.setProperty("--tc", tc);
+      const hd = node("div", "rhead"), pn = node("div", "pn", PLAYLISTS[pl].name); pn.append(node("span", "np2d-chip", "2D"));
+      hd.append(pn, node("div", "pt", PLAYLISTS[pl].tag));
+      const im = node("img"); im.alt = rv.name; im.src = RK.emblemURL(rv.idx); im.width = im.height = 118; im.className = "np2d-emb";
+      c.append(hd, im);
+      const body = node("div", "rhead"), rn = node("div", "rn", rv.name); rn.style.color = rv.idx >= 0 ? tc : "var(--ink)";
+      body.append(rn, node("div", "rd", rv.placed ? inf.tierName + (inf.lvl ? " · rank " + RK.ROMAN[inf.lvl] : " · top rank") : "Placement " + e[1] + " of " + RK.PLACEMENTS));
+      c.append(body);
+      const bar = node("div", "bar"), bi = node("i"); bi.style.width = (rv.placed ? inf.frac * 100 : e[1] / RK.PLACEMENTS * 100) + "%"; bar.append(bi); c.append(bar);
+      const mm = node("div", "mmr");
+      if (rv.placed) mm.append(node("span", "", inf.min + ""), node("span", "", "MMR " + Math.round(e[0])), node("span", "", inf.idx >= RK.TOP ? "" : inf.max + 1 + ""));
+      else mm.append(node("span", "", "Play " + (RK.PLACEMENTS - e[1]) + " more to get ranked"));
+      c.append(mm);
+      const wl = node("div", "wl"); wl.append("W ", node("b", "", e[2]), " – L ", node("b", "", e[3]), e[4] >= 0 ? " · Peak " + RK.RANKS[Math.min(e[4], RK.TOP)].name : ""); c.append(wl);
+      rc.append(c);
+    }
+    return r;
+  };
+  // leaderboards: the 2D boards (best 2D MMR, 2D wins, 2D goals) from the progress service
+  const board0 = renderLeaderboard;
+  renderLeaderboard = async function () {
+    if (!N.menu || !["mmr", "wins", "goals"].includes(lbKind)) return board0.apply(this, arguments);
+    const k = lbKind, list = $("lbList"), msg = $("lbMsg"), A = window.npAccounts, api = window.NPProgressAPI;
+    document.querySelectorAll(".lbt").forEach(b => b.classList.toggle("on", b.dataset.lb === k));
+    list.innerHTML = "";
+    if (!A || !api) { msg.textContent = "Leaderboards are on the website version of the game, for players with an account."; return; }
+    if (!A.user()) { msg.textContent = "Log in to see the " + NAME() + " leaderboards."; return; }
+    msg.textContent = "Loading…";
+    let rows;
+    try { rows = (await api.call("leaderboard", { field: k, limit: 40, board: "2d" })).rows || []; }
+    catch (e) { if (k === lbKind && N.menu) msg.textContent = (e && e.message) || "Couldn't load the leaderboard."; return; }
+    if (k !== lbKind || !N.menu) return;
+    const u = A.user();
+    rows = rows.filter(r => r && typeof r.name === "string" && cleanName(r.name) !== "Driver" && cleanName(r.name).replace(/[\s_.\-()]/g, "").length >= 2
+      && !(r.wins > 20000 || r.goals > 100000 || r.mmr > 3000 || (r.wins > 0 && r.goals > r.wins * 60))).slice(0, 25);
+    let clans = {}; try { if (A.clans) clans = await A.clans.getMany(rows.map(r => r.clanId).filter(x => typeof x === "string" && x)); } catch {}
+    if (k !== lbKind || !N.menu) return;
+    list.innerHTML = "";
+    rows.forEach((r, i) => {
+      const li = node("li"); if (u && r.uid === u.uid) li.className = "me";
+      const n = node("span", "n", "#" + (i + 1)), nm = node("span", "nm", cleanName(r.name) + (u && r.uid === u.uid ? " (you)" : ""));
+      { const v = vetLook(r.uid, { ti: okTitle(r.ti), bn: okBanner(r.bn) }); namePlate(nm, v.ti, v.bn); }
+      if (r.clanId && clans[r.clanId]) { const c = clans[r.clanId]; nm.prepend(tagEl(c.tag, clanLevel(c.xp).lv >= 2 && /^#[0-9a-f]{6}$/i.test(c.color || "") ? c.color : "")); }
+      if (typeof r.uid === "string" && r.uid) { li.classList.add("click"); li.title = "See " + cleanName(r.name) + "'s " + NAME() + " stats"; li.onclick = () => { if (u && r.uid === u.uid) showStats({ ...selfMember(), me: true }); else statsForUid(r.uid, r.name); }; }
+      const v = node("span", "v");
+      if (k === "mmr") {
+        const idx = fin(r.rank) && r.mmr > 0 ? int(r.rank, -1, RK.TOP) : -1, img = node("img"); img.alt = ""; img.src = RK.emblemURL(idx);
+        li.append(n, img, nm); v.textContent = idx >= 0 ? RK.RANKS[idx].name + " · " + Math.round(r.mmr) : "Unranked";
+      } else { li.append(n, nm); v.textContent = (fin(r[k]) ? r[k] : 0) + (k === "wins" ? " wins" : " goals"); }
+      li.append(v); list.append(li);
+    });
+    msg.textContent = !rows.length ? "Nobody is on the " + NAME() + " leaderboard yet. Play a 2D match while logged in to get on it." : NAME() + " leaderboards: 2D ranks and 2D match stats.";
+  };
+  // after a 2D ranked match: the rank panel on the 2D ladder (rank.ladder '2d', or a 2D playlist)
+  const anim0 = animateRank;
+  animateRank = function (rk) {
+    if (!rk || !(rk.ladder === "2d" || (rk.pl | 0) >= 4)) return anim0.apply(this, arguments);
+    rankAnimT.forEach(clearTimeout); rankAnimT = [];
+    const P = RK.PLACEMENTS, bm = rk.before.mmr, am = rk.after.mmr, bp = rk.before.played, ap = rk.after.played, bi = RK.info(bm), ai = RK.info(am);
+    const bar = $("prBar"), emb = $("prEmb"), fl = $("prFlash"), e = rk2(rk.pl);
+    const at = (ms, f) => rankAnimT.push(setTimeout(f, ms));
+    const setBar = (pct, instant) => { if (instant) { bar.style.transition = "none"; bar.style.width = pct + "%"; void bar.offsetWidth; bar.style.transition = ""; } else bar.style.width = pct + "%"; };
+    const show = (idx, name, sub) => { const tc = idx >= 0 ? RK.TIER_COLORS[RK.RANKS[idx].tier] : null; emb.src = RK.emblemURL(idx); $("prName").textContent = name; $("prDiv").textContent = sub; $("prName").style.color = tc || "var(--ink)"; $("postRank").style.setProperty("--rkc", (tc || "#8d9bbd") + "66"); };
+    const mmrRow = (inf, mmr, placing) => {
+      const row = $("prMmr"); row.innerHTML = "";
+      const wl = node("span"); wl.append("W ", node("b", "", e[2]), " – L ", node("b", "", e[3]));
+      if (placing) { row.append(wl, node("span", "", Math.max(0, P - ap) + " to go")); return; }
+      const mid = node("span"); mid.append("MMR ", node("b", "", Math.round(mmr)));
+      row.append(node("span", "", inf.min + ""), mid, node("span", "", inf.idx >= RK.TOP ? "" : inf.max + 1 + ""));
+    };
+    const flash = (text, up) => { fl.className = "pr-flash"; void fl.offsetWidth; fl.textContent = text; fl.className = "pr-flash on " + (up ? "up" : "down"); emb.classList.add("bump"); at(450, () => emb.classList.remove("bump")); };
+    $("prTitle").textContent = NAME() + " · Competitive " + (PLAYLISTS[rk.pl] || PLAYLISTS[4]).name;
+    $("prDelta").textContent = (rk.d >= 0 ? "+" : "") + rk.d + " MMR"; $("prDelta").style.color = rk.d >= 0 ? "var(--good)" : "var(--danger)";
+    fl.className = "pr-flash"; fl.textContent = "";
+    const pips = $("prPips"); pips.innerHTML = "";
+    if (ap <= P) for (let i = 0; i < P; i++) pips.append(node("i", i < Math.min(e[2], ap) ? "w" : i < Math.min(e[2] + e[3], ap) ? "l" : ""));
+    pips.hidden = ap > P;
+    const sub = inf => inf.tierName + (inf.lvl ? " · rank " + RK.ROMAN[inf.lvl] : " · top rank");
+    if (ap < P) { show(-1, "Unranked", "Placement " + ap + " of " + P); mmrRow(null, 0, true); setBar(bp / P * 100, true); at(500, () => setBar(ap / P * 100)); return; }
+    if (bp < P) { show(-1, "Unranked", "Placement " + ap + " of " + P); mmrRow(null, 0, true); setBar(90, true); at(400, () => setBar(100)); at(1300, () => { show(ai.idx, ai.name, sub(ai)); mmrRow(ai, am); setBar(ai.frac * 100, true); flash("Ranked!", true); sfx.levelUp(); }); return; }
+    show(bi.idx, bi.name, sub(bi)); mmrRow(bi, bm); setBar(bi.frac * 100, true);
+    if (ai.idx === bi.idx) { at(500, () => { setBar(ai.frac * 100); mmrRow(ai, am); }); return; }
+    const up = ai.idx > bi.idx;
+    at(450, () => setBar(up ? 100 : 0));
+    at(1350, () => { show(ai.idx, ai.name, sub(ai)); mmrRow(ai, am); setBar(up ? 0 : 100, true); flash(up ? "Rank up" : "Rank down", up); if (up) sfx.levelUp(); at(120, () => setBar(ai.frac * 100)); });
+  };
+
+  renderMenuChrome();
+  if (mode === "menu" && screen !== "none") rerenderScreen();
+  return { setMenu, is2DMatch, best2, view2, start2D, X_CASUAL, X_RANKED };
+})();
