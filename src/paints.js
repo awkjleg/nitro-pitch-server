@@ -1,5 +1,6 @@
-// Painted cars from drops. The server owns which painted cars a player has.
-// Painted items are stored on the profile as "kind:index:paint" strings in p.pp (only cars for now).
+// Painted cars from drops. A painted car is its own car body (Titanium White Octane is a different car from the
+// Octane): extra entries appended to catalog.body, built from their base car with the paint on the trim.
+// Index of base car B in paint P: BASE + (P - 1) * BASE + B, where BASE is the number of real bodies.
 
 // paint id -> name, colour, drop weight (in % of painted drops), tier (0 common .. 4 rarest)
 export const PAINTS = [null,
@@ -21,47 +22,47 @@ export const PAINTS = [null,
 export const PAINT_IDS = PAINTS.map((p, i) => p ? i : 0).filter(Boolean);
 export const PAINTED_DROP_CHANCE = 0.25;
 
-const key = (kind, i, paint) => kind + ':' + i + ':' + paint;
-export const ownsPaint = (p, kind, i, paint) => Array.isArray(p.pp) && p.pp.includes(key(kind, i, paint));
-// cars that can come painted: everything but ADMIN and event-only cars
-export const paintableCars = catalog => catalog.body.map((c, i) => c && !c.admin && !c.ev ? i : -1).filter(i => i >= 0);
-// the paint colours a profile may show on its current car (team colour, -1, is always allowed)
-export function allowedPaint(p, colour) {
-  if (colour === -1) return true;
-  const id = PAINTS.findIndex(x => x && x.hex === colour);
-  return id > 0 && ownsPaint(p, 'body', p.body | 0, id);
-}
-export function cleanPainted(raw, catalog) {
-  if (!Array.isArray(raw)) return [];
-  const out = new Set();
-  for (const s of raw) {
-    if (typeof s !== 'string') continue;
-    const [kind, a, b] = s.split(':'), i = Number(a), paint = Number(b);
-    if (kind === 'body' && Number.isInteger(i) && catalog.body[i] && !catalog.body[i].admin && Number.isInteger(paint) && PAINTS[paint]) out.add(key(kind, i, paint));
-    if (out.size >= 2000) break;
+// add the painted cars to a catalog (once); placeholders for ADMIN / event cars keep the index maths simple
+export function addPaintedCars(catalog) {
+  if (catalog.paintedBase) return catalog;
+  const base = catalog.body.length;
+  for (let P = 1; P < PAINTS.length; P++) for (let B = 0; B < base; B++) {
+    const c = catalog.body[B];
+    catalog.body.push(c.admin || c.ev ? { name: 'ADMIN', lv: 1, rar: 7, admin: true } : { name: PAINTS[P].name + ' ' + c.name, lv: 999, rar: c.rar, painted: [B, P] });
   }
-  return [...out];
+  Object.defineProperty(catalog, 'paintedBase', { value: base });
+  return catalog;
 }
-function rollPaint(random, exclude = []) {
-  const ids = PAINT_IDS.filter(id => !exclude.includes(id)), total = ids.reduce((s, id) => s + PAINTS[id].w, 0);
+export const paintedIndex = (catalog, B, P) => catalog.paintedBase + (P - 1) * catalog.paintedBase + B;
+const paintableCars = catalog => catalog.body.slice(0, catalog.paintedBase).map((c, i) => c && !c.admin && !c.ev ? i : -1).filter(i => i >= 0);
+function rollPaint(random) {
+  const total = PAINT_IDS.reduce((s, id) => s + PAINTS[id].w, 0);
   let r = random() * total;
-  for (const id of ids) { r -= PAINTS[id].w; if (r < 0) return id; }
-  return ids[ids.length - 1];
+  for (const id of PAINT_IDS) { r -= PAINTS[id].w; if (r < 0) return id; }
+  return PAINT_IDS[PAINT_IDS.length - 1];
 }
-// give a painted car (and the car itself, so it can be driven)
-export function grantPainted(p, catalog, i, paint) {
-  if (!Array.isArray(p.pp)) p.pp = [];
-  if (!ownsPaint(p, 'body', i, paint)) p.pp.push(key('body', i, paint));
-  if (!p.own.body) p.own.body = [];
-  if (!p.own.body.includes(i)) p.own.body.push(i);
-}
-// a painted car from a drop: a weighted paint on a random car, one the player doesn't have in that colour yet
+// a painted car from a drop: a weighted paint on a random car, one the player doesn't have yet
 export function paintedDrop(p, catalog, random) {
   const cars = paintableCars(catalog);
+  if (!p.own.body) p.own.body = [];
   for (let t = 0; t < 40; t++) {
-    const i = cars[Math.floor(random() * cars.length)], paint = rollPaint(random);
-    if (!ownsPaint(p, 'body', i, paint)) { grantPainted(p, catalog, i, paint); return { kind: 'body', i, name: catalog.body[i].name, rar: catalog.body[i].rar, paint, paintName: PAINTS[paint].name }; }
+    const B = cars[Math.floor(random() * cars.length)], P = rollPaint(random), i = paintedIndex(catalog, B, P);
+    if (!p.own.body.includes(i)) { p.own.body.push(i); return { kind: 'body', i, name: catalog.body[i].name, rar: catalog.body[i].rar }; }
   }
   return null;
 }
-
+// update 5.35/5.36 kept painted cars as "body:B:P" strings in p.pp and the trim paint in p.paint: turn them into
+// painted car bodies (and give the body back its free colour)
+export function migratePainted(p, catalog) {
+  if (!Array.isArray(p.pp) || !p.pp.length) { delete p.pp; return false; }
+  if (!p.own.body) p.own.body = [];
+  for (const s of p.pp) {
+    const [kind, a, b] = String(s).split(':'), B = Number(a), P = Number(b);
+    if (kind !== 'body' || !Number.isInteger(B) || B < 0 || B >= catalog.paintedBase || !PAINTS[P]) continue;
+    const i = paintedIndex(catalog, B, P);
+    if (catalog.body[i] && !catalog.body[i].admin && !p.own.body.includes(i)) p.own.body.push(i);
+    if (p.body === B && p.paint === PAINTS[P].hex) { p.body = i; p.paint = -1; }
+  }
+  delete p.pp;
+  return true;
+}

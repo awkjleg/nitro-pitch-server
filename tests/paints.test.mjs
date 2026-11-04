@@ -10,4 +10,5 @@ test('the game and the server agree on every paint colour; painted cars ship, th
  assert(html.includes('const NPPaints = (() => {'));
  assert(!html.includes('id="navShop"')&&!html.includes('id="shop"')&&!/admin-credits|shop-buy/.test(html));
  assert(Math.abs(PAINTS.slice(1).reduce((s,p)=>s+p.w,0)-100)<1e-9);
+ assert(src.includes('const BASE = CARS.length;'));   // painted bodies are numbered after the real cars, like catalog.body
 });

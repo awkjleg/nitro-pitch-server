@@ -146,16 +146,17 @@ test('a bot-filled ranked match ended by the 5-goal mercy rule is saved (it used
  f.advance(30000);await f.call('session-start',{id:'s-close',mid:'close',mut:[0,0,0,0,0,0,0],rk:1,pl:1});for(let i=0;i<9;i++){f.advance(10000);await f.call('session-tick',{id:'tc'+i,mid:'close'});}
  assert.equal((await f.call('match',{id:'pay-close',mid:'close',score:[4,0],st:[400,4,0,0,4,0]})).status,422);
 });
-test('painted car colours: a painted car you own shows its paint, anything else is team colour',async()=>{
- const f=await fixture({dlv:1,pp:['body:0:14']});await f.call('load');
- let v=await f.call('save',{profile:{body:0,paint:0xf4f6f8}});assert.equal(v.profile.paint,0xf4f6f8);
- v=await f.call('save',{profile:{body:0,paint:0x123456}});assert.equal(v.profile.paint,0xf4f6f8);       // a free pick is ignored
- v=await f.call('save',{profile:{body:0,paint:0xc8202f}});assert.equal(v.profile.paint,0xf4f6f8);       // Crimson Octane isn't owned
- v=await f.call('save',{profile:{body:0,paint:-1}});assert.equal(v.profile.paint,-1);                     // team colour is always fine
- assert.equal((await f.call('shop')).status,400);                                                          // no shop any more
+test('painted cars are their own bodies; old painted cars move over; any body colour can be picked',async()=>{
+ const tw=catalog.paintedBase+13*catalog.paintedBase+0;assert.equal(catalog.body[tw].name,'Titanium White Octane');
+ // a 5.35/5.36 profile: painted as "body:0:14" with the white kept in paint
+ const f=await fixture({dlv:1,pp:['body:0:14'],body:0,paint:0xf4f6f8});const a=await f.call('load');
+ assert(a.profile.own.body.includes(tw));assert.equal(a.profile.body,tw);assert.equal(a.profile.paint,-1);assert.equal(a.profile.pp,undefined);
+ let v=await f.call('save',{profile:{body:tw,paint:0x123456}});assert.equal(v.profile.body,tw);assert.equal(v.profile.paint,0x123456);   // any colour again
+ v=await f.call('save',{profile:{body:tw+1}});assert.equal(v.profile.body,tw);                                                     // a painted car you don't own
+ assert.equal((await f.call('shop')).status,400);                                                                                  // no shop
 });
-test('drops: about one in four opens as a painted car and never repeats a paint you own',async()=>{
+test('drops: about one in four opens as a painted car and never repeats one you own',async()=>{
  const f=await fixture({drops:Array(60).fill(3),dlv:1});let r=await f.call('load');let painted=0;
- for(let k=0;k<60;k++){r=await f.call('drop',{id:'d'+k,index:0,rev:r.rev});assert.equal(r.status,200);if(r.got.paint){painted++;assert.equal(r.got.kind,'body');assert(r.profile.own.body.includes(r.got.i));}}
- const pp=r.profile.pp;assert.equal(new Set(pp).size,pp.length);assert(painted>=4&&painted<=30,'painted '+painted);
+ for(let k=0;k<60;k++){r=await f.call('drop',{id:'d'+k,index:0,rev:r.rev});assert.equal(r.status,200);if(r.got.kind==='body'&&r.got.i>=catalog.paintedBase){painted++;assert(catalog.body[r.got.i].painted);assert(r.profile.own.body.includes(r.got.i));}}
+ const own=r.profile.own.body;assert.equal(new Set(own).size,own.length);assert(painted>=4&&painted<=30,'painted '+painted);
 });

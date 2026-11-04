@@ -2,14 +2,14 @@ import {DurableObject} from 'cloudflare:workers';
 import {ApiError,reply,identify,readJson,firebaseDoc,ADMIN_UID} from './firebase-auth.js';
 import {catalog,Ranked,economy,levelInfo} from './reward-rules.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent} from './snowdrift.js';
-import {cleanPainted,allowedPaint,paintedDrop,PAINTED_DROP_CHANCE} from './paints.js';
+import {paintedDrop,PAINTED_DROP_CHANCE,migratePainted} from './paints.js';
 import {MATCH_SECONDS} from './room-guard.js';
 const ID=/^[A-Za-z0-9_-]{1,128}$/, midOK=/^[A-Za-z0-9_-]{1,80}$/;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const n=(v,max=1e9)=>Number.isFinite(v)?clamp(Math.trunc(v),0,max):0;
 const cosmetics={body:'body',decal:'decal',wheel:'wheel',trail:'boost',boom:'boom',finish:'paint',topper:'topper',antenna:'antenna',title:'title',banner:'banner'};
 export function cleanProfile(raw={}){
- const p={xp:0,pxp:0,pxc:0,qn:0,games:0,wins:0,goals:0,saves:0,mvps:0,dlv:0,cm:500,rt:-1,rk:[0,1,2].map(()=>[500,0,0,0,-1]),own:{},drops:[],qs:null,ab:null,cv:2,paint:-1,name:'',fr:[],pp:[]};
+ const p={xp:0,pxp:0,pxc:0,qn:0,games:0,wins:0,goals:0,saves:0,mvps:0,dlv:0,cm:500,rt:-1,rk:[0,1,2].map(()=>[500,0,0,0,-1]),own:{},drops:[],qs:null,ab:null,cv:2,paint:-1,name:'',fr:[]};
  for(const key of ['xp','pxp','pxc','qn','games','wins','goals','saves','mvps','dlv'])p[key]=n(raw[key]);
  p.cm=Number.isFinite(raw.cm)?n(raw.cm,4000):500;p.rt=Number.isFinite(raw.rt)?clamp(Math.trunc(raw.rt),-1,7):-1;
  p.rk=[0,1,2].map(i=>{let r=raw.rk?.[i];if(r&&!Array.isArray(r))r=[r.m,r.p,r.w,r.l,r.pk];return Array.isArray(r)?[n(r[0],4000),n(r[1]),n(r[2]),n(r[3]),clamp(Number.isFinite(r[4])?Math.trunc(r[4]):-1,-1,21)]:[500,0,0,0,-1];});
@@ -21,7 +21,7 @@ export function cleanProfile(raw={}){
  if(Number.isInteger(raw.paint))p.paint=clamp(raw.paint,-1,0xffffff);
  p.fr=Array.isArray(raw.fr)?raw.fr.filter(x=>typeof x==='string').slice(0,50):[];
  p.ev=cleanEv(raw.ev);
- p.pp=cleanPainted(raw.pp,catalog);if(!allowedPaint(p,p.paint))p.paint=-1;
+ if(Array.isArray(raw.pp)){p.pp=raw.pp;migratePainted(p,catalog);}
  return p;
 }
 function cloud(p){return {...p,rk:p.rk.map(([m,p,w,l,pk])=>({m,p,w,l,pk})),level:levelInfo(p.xp).lv};}
@@ -65,6 +65,7 @@ export class Progress extends DurableObject{
   const {uid}=user,key='p:'+uid;
   const until=this.banCache.get(uid)||0;if(until<Date.now()){if(await firebaseDoc('bans/'+uid,token))throw new ApiError('This account is banned',403);this.banCache.set(uid,Date.now()+60000);}
   let p=await this.ctx.storage.get(key);
+  if(p&&migratePainted(p,catalog))await this.ctx.storage.put(key,p);
   if(!p){const raw=await firebaseDoc('players/'+uid,token);p=cleanProfile(raw||{});p.username=user.username;p.rev=1;p.migratedAt=Date.now();p.imported=!!raw;p.adminItems=(await firebaseDoc('adminItems/'+uid,token))?.items||[];const E=economy(p);E.ensureQuests();E.payPassXp();E.grantLevelDrops();await this.ctx.storage.put(key,p);await this.ctx.storage.put('lb:'+uid,publicRow(p,uid));}
   if(!p.clanChecked||Date.now()-p.clanChecked>60000){const membership=await firebaseDoc('clanMembers/'+uid,token);p.clanId=membership?.clanId||'';p.clanRole=membership?.role||'';p.clanChecked=Date.now();await this.ctx.storage.put(key,p);}
   return p;
@@ -83,9 +84,7 @@ export class Progress extends DurableObject{
   if(b.action==='load'){const E=economy(p);if(E.ensureQuests())await this.save(uid,p);return response();}
   if(b.action==='save'){
    const d=b.profile||{};for(const[field,k]of Object.entries(cosmetics))if(Number.isInteger(d[field])&&permission(p,k,d[field],uid))p[field]=d[field];
-   // the car colour is a painted car you own (Titanium White Octane, ...) or your team colour
-   if(Number.isInteger(d.paint)&&allowedPaint(p,d.paint))p.paint=d.paint;
-   if(!allowedPaint(p,p.paint))p.paint=-1;
+   if(Number.isInteger(d.paint))p.paint=clamp(d.paint,-1,0xffffff);
    if(typeof d.name==='string')p.name=d.name.replace(/[^\p{L}\p{N} _.\-]/gu,'').slice(0,14);
    if(typeof d.settings==='string'&&d.settings.length<=20000){try{const v=JSON.parse(d.settings);if(v&&typeof v==='object'&&!Array.isArray(v))p.settings=d.settings;}catch{}}
    await this.save(uid,p);return response();
