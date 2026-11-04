@@ -24,6 +24,30 @@ import sideswipeMenu from "./sideswipe-menu.txt";
 // whenever replacing public/index.html with a new game build.
 const patches = [
   {
+    "before": "\"You have nothing to trade yet. Drop items (from drops) can be traded.\"",
+    "after": "\"You have nothing to trade yet. Drop items, painted cars and items the admin gave you can be traded.\""
+  },
+  {
+    "before": "const tradeable = () => { const out = []; for (const [kind, list] of DROP_KINDS) list.forEach((it, i) => it.drop && owns(kind, i) && out.push([kind, i])); return out; };",
+    "after": "// tradeable: drop items, painted cars and anything you own only because it was given to you (the server checks the same:\n// not admin designs, event or clan items, or items your level / rank would unlock anyway)\nfunction npTradeOK(kind, i) {\n  const it = listOf(kind)[i];\n  if (!it || it.admin || it.ev || it.clan || it.lead || it.none || !owns(kind, i)) return false;\n  if (it.drop || it.painted) return true;\n  const own = profile.own[kind]; profile.own[kind] = own.filter(v => v !== i);\n  try { return lockOf(kind, i) !== \"\"; } finally { profile.own[kind] = own; }\n}\nconst tradeable = () => { const out = []; for (const [kind] of GKINDS) (listOf(kind) || []).forEach((it, i) => npTradeOK(kind, i) && out.push([kind, i])); return out; };"
+  },
+  {
+    "before": "  for (const [l, rr] of r.drops || []) out.push(\"Level \" + l + \" drop! Unlocked a \" + RARITIES[rr][0] + \" Drop: open it in Nitro Pass > Drops.\");",
+    "after": "  for (const [l, rr] of r.drops || []) out.push(\"Level \" + l + \" drop! Unlocked a \" + RARITIES[rr][0] + \" Drop: open it in Nitro Pass > Drops.\");\n  for (const [why, rr] of r.extraDrops || []) out.push(why + \" You got a \" + RARITIES[rr][0] + \" Drop: open it in Nitro Pass > Drops.\");"
+  },
+  {
+    "before": "      info.append(h(\"b\", \"\", questText(x)), h(\"small\", \"\", \"+\" + x.xp + \" XP \u00b7 +\" + x.px + \" pass XP\"));",
+    "after": "      info.append(h(\"b\", \"\", questText(x)), h(\"small\", \"\", \"+\" + x.xp + \" XP \u00b7 +\" + x.px + \" pass XP \u00b7 \" + RARITIES[npQuestDrop(x, weekly)][0] + \" Drop\"));"
+  },
+  {
+    "before": "const questText = q => QUEST_KINDS[q.k].t(q.t);",
+    "after": "const questText = q => QUEST_KINDS[q.k].t(q.t);\n// the drop a quest gives (the server works it out the same way, src/quest-drops.js): harder quests give better drops\nfunction npQuestDrop(q, weekly) { const K = QUEST_KINDS[q.k]; if (!K) return 2; const [a, b] = weekly ? K.w : K.d, f = b > a ? (q.t - a) / (b - a) : 0.5; return weekly ? (f < 0.34 ? 3 : f < 0.67 ? 4 : 5) : (f < 0.5 ? 2 : 3); }"
+  },
+  {
+    "before": "    h(\"div\", \"note\", \"Quests count in online matches and matches against bots (not free play or training). Every quest also gives pass XP, and you can reroll one daily quest a day.\"));",
+    "after": "    h(\"div\", \"note\", \"Quests count in online matches and matches against bots (not free play or training). Every quest gives pass XP and a drop (harder quests give better drops), and you can reroll one daily quest a day. Any match can also give a lucky drop.\"));"
+  },
+  {
     "before": "        uv.push(side ? 1 - u : u, v);",
     "after": "        uv.push(side && key === \"np\" ? 1 - u : u, v);   // real flags: the stars / emblem stay by the pole on both sides (only the text flag reads the other way)"
   },
@@ -33,7 +57,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111045;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111046;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -105,7 +129,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.47\",\n  \"title\": \"Update 5.47: Car trims fixed\",\n  \"notes\": [\n    \"Fixed normal cars getting gold (or other colour) trim and rims after a painted car showed up in the match.\",\n    \"Players online has a search box to find someone fast.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.48\",\n  \"title\": \"Update 5.48: Drops from quests and matches\",\n  \"notes\": [\n    \"Every quest now gives a drop. Harder quests give better drops: daily quests give Rare or Very Rare, weekly quests give Very Rare, Import or Exotic.\",\n    \"Any match can give you a lucky bonus drop.\",\n    \"Items the admin gave you can now be traded, as well as drop items and painted cars.\",\n    \"Announcements now show up right away and are bigger.\",\n    \"Fixed normal cars getting gold trim after a painted car showed up.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",

@@ -1,6 +1,7 @@
 import {DurableObject} from 'cloudflare:workers';
 import {ApiError,reply,identify,readJson,firebaseDoc,ADMIN_UID} from './firebase-auth.js';
 import {catalog,Ranked,economy,levelInfo} from './reward-rules.js';
+import {questDropRar,MATCH_DROP_CHANCE,matchDropRar} from './quest-drops.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent} from './snowdrift.js';
 import {paintedDrop,PAINTED_DROP_CHANCE,migratePainted} from './paints.js';
 import {badName,safeName} from './moderation.js';
@@ -29,13 +30,21 @@ function cloud(p){return {...p,rk:p.rk.map(([m,p,w,l,pk])=>({m,p,w,l,pk})),level
 function publicRow(p,uid){const best=p.rk.filter(r=>r[1]>=5).sort((a,b)=>b[0]-a[0])[0];return {uid,name:p.name||p.username||'Player',mmr:best?.[0]??0,rank:best?Ranked.info(best[0]).idx:-1,wins:p.wins,goals:p.goals,level:levelInfo(p.xp).lv,ti:p.title,bn:p.banner,clanId:p.clanId||''};}
 function permission(p,k,i,uid){const it=catalog[k]?.[i];if(!it)return false;if(it.admin)return uid===ADMIN_UID||(p.adminItems||[]).includes(k+':'+i);if(p.own[k]?.includes(i))return true;if(it.ev)return false;if(it.lead)return !!p.clanId&&p.clanRole==='owner';if(it.clan)return !!p.clanId; // Clan level visuals are additionally vetted by the Firebase clan client.
  if(it.tier>=0)return p.rt>=it.tier;if(it.qn)return p.qn>=it.qn;if(it.pass)return economy(p).passTier()>=it.pass;if(it.drop)return false;return levelInfo(p.xp).lv>=(it.lv||1);}
-export function awardMatch(p,e,now=Date.now(),averages=[500,500]){
- const E=economy(p,now);E.ensureQuests();const before=levelInfo(p.xp),passFrom=E.passTier(),st=e.st;
+// trading: drop items, painted cars, and anything else you own only because it was given to you (an admin gift).
+// Not admin designs, event or clan items, or items your level / rank / quests / pass would unlock anyway (trading
+// those away would copy them).
+function tradeOK(p,k,i){const it=catalog[k]?.[i];if(!it||it.admin||it.ev||it.clan||it.lead||!p.own[k]?.includes(i))return false;if(it.drop||it.painted)return true;
+ if(it.tier>=0)return !(p.rt>=it.tier);if(it.qn)return !((p.qn|0)>=it.qn);if(it.pass)return !(economy(p).passTier()>=it.pass);return levelInfo(p.xp).lv<(it.lv||1);}
+export function awardMatch(p,e,now=Date.now(),averages=[500,500],random=Math.random){
+ const E=economy(p,now);E.ensureQuests();const qBefore=[...p.qs.dq,...p.qs.wq].map(q=>q.d);const before=levelInfo(p.xp),passFrom=E.passTier(),st=e.st;
  const k=e.online?1:.5,part=Math.round(150*k),wb=e.won?Math.round(200*k):0,perf=Math.round(st[0]*k),mv=e.mvp?Math.round(100*k):0;
  const tier=p.rk.filter(r=>r[1]>=5).reduce((a,r)=>Math.max(a,Ranked.info(r[0]).tier),-1),mult=Ranked.xpMult(tier),base=part+wb+perf+mv,bonus=Math.round(base*(mult-1));
  const lines=[['Match played',part],['Win bonus',wb],['Performance',perf]];if(mv)lines.push(['MVP',mv]);if(bonus)lines.push(['Rank bonus ×'+mult,bonus,true]);
  p.xp+=base+bonus;p.games++;if(e.won)p.wins++;p.goals+=st[1];p.saves+=st[3];if(mv)p.mvps++;
  const quests=E.advanceQuests({...e,mvp:!!mv});for(const q of quests){p.xp+=q.xp;lines.push([q.text,q.xp,true]);}
+ // a drop for every quest finished in this match (harder quests: better drops), and sometimes a bonus drop
+ const extraDrops=[];[...p.qs.dq.map(q=>[q,false]),...p.qs.wq.map(q=>[q,true])].forEach(([q,weekly],n)=>{if(q.d&&!qBefore[n]){const rar=questDropRar(q.k,q.t,weekly);E.addDrop(rar);extraDrops.push([(weekly?'Weekly':'Daily')+' quest reward!',rar]);}});
+ if(random()<MATCH_DROP_CHANCE){const rar=matchDropRar(random);E.addDrop(rar);extraDrops.push(['Lucky drop from this match!',rar]);}
  const xp0=p.xp,px=base+bonus+quests.reduce((s,q)=>s+q.px,0),tiers=E.addPassXp(px);if(p.xp>xp0)lines.push(['Nitro Pass rewards',p.xp-xp0,true]);
  const snow=snowQuests(p,now,quests.length);
  let rank=null;
@@ -48,7 +57,7 @@ export function awardMatch(p,e,now=Date.now(),averages=[500,500]){
   for(const t of rank.newTiers)E.addDrop([2,2,3,3,4,4,5,6][t]??2);
  }else if(e.online&&e.kind==='casual')p.cm=clamp(p.cm+Math.round(15*((e.won?1:0)-1/(1+10**((averages[1-e.team]-averages[e.team])/400)))),0,4000);
  p.ab=null;const drops=E.grantLevelDrops();
- return {snow,before,after:levelInfo(p.xp),xpGain:lines.reduce((s,l)=>s+l[1],0),lines,kind:e.kind,rank,mid:e.mid,pass:{from:passFrom,tiers,px},quests,drops,clanContribution:{xp:(e.won?100:0)+20*st[1],wins:e.won?1:0,goals:st[1],cvw:0,cvl:0}};
+ return {snow,before,after:levelInfo(p.xp),xpGain:lines.reduce((s,l)=>s+l[1],0),lines,kind:e.kind,rank,mid:e.mid,pass:{from:passFrom,tiers,px},quests,drops,extraDrops,clanContribution:{xp:(e.won?100:0)+20*st[1],wins:e.won?1:0,goals:st[1],cvw:0,cvl:0}};
 }
 export async function progressFetch(req,env){
  const url=new URL(req.url);if(!url.pathname.startsWith('/api/progress'))return null;
@@ -196,15 +205,15 @@ export class Progress extends DurableObject{
    if(!existing?.done)await this.ctx.storage.put(key,{cancelled:true,at:now});return response({cancelled:!existing?.done});
   }else if(b.action==='trade'){
    const other=b.other;if(!ID.test(other||'')||other===uid||!midOK.test(b.trade||''))throw new ApiError('Invalid trade');
-   const offer=list=>{if(!Array.isArray(list)||list.length>8)throw new ApiError('Invalid offer');const keys=list.map(x=>Array.isArray(x)&&x.length===2?x[0]+':'+x[1]:'');if(new Set(keys).size!==keys.length||keys.some(k=>!k))throw new ApiError('Invalid offer');for(const [k,i]of list)if(!Number.isInteger(i)||!catalog[k]?.[i]?.drop||catalog[k][i].admin)throw new ApiError('Only drop items can be traded');return list;};
+   const offer=list=>{if(!Array.isArray(list)||list.length>8)throw new ApiError('Invalid offer');const keys=list.map(x=>Array.isArray(x)&&x.length===2?x[0]+':'+x[1]:'');if(new Set(keys).size!==keys.length||keys.some(k=>!k))throw new ApiError('Invalid offer');for(const [k,i]of list){const it=Number.isInteger(i)&&catalog[k]?.[i];if(!it||it.admin||it.ev||it.clan||it.lead)throw new ApiError("That item can't be traded");}return list;};
    const mine=offer(b.mine),theirs=offer(b.theirs),pair=[uid,other].sort(),key='trade:'+pair.join(':')+':'+b.trade,existing=await this.ctx.storage.get(key),want=JSON.stringify(uid===pair[0]?[mine,theirs]:[theirs,mine]);
    if(existing?.done)return response({traded:true});if(existing?.cancelled)throw new ApiError('This trade was cancelled',409);
    if(existing&&existing.want!==want)throw new ApiError('The trade offer changed. Confirm it again.',409);
    const tr=existing&&now-existing.at<120000?existing:{at:now,want,approvals:[]};if(!tr.approvals.includes(uid))tr.approvals.push(uid);
    if(tr.approvals.length<2){await this.ctx.storage.put(key,tr);return response({waiting:true});}
    const q=await this.ctx.storage.get('p:'+other);if(!q)throw new ApiError('Other player needs to refresh their inventory',409);
-   const owns=(p,list)=>list.every(([k,i])=>p.own[k]?.includes(i));if(!owns(p,mine)||!owns(q,theirs))throw new ApiError('An offered item is no longer owned',409);
-   for(const [from,to,list]of [[p,q,mine],[q,p,theirs]])for(const[k,i]of list){from.own[k]=from.own[k].filter(v=>v!==i);if(!to.own[k].includes(i))to.own[k].push(i);}
+   const owns=(p,list)=>list.every(([k,i])=>p.own[k]?.includes(i));if(!owns(p,mine)||!owns(q,theirs))throw new ApiError('An offered item is no longer owned',409);if(!mine.every(([k,i])=>tradeOK(p,k,i))||!theirs.every(([k,i])=>tradeOK(q,k,i)))throw new ApiError("That item can't be traded: it's unlocked by level or rank",409);
+   for(const [from,to,list]of [[p,q,mine],[q,p,theirs]])for(const[k,i]of list){from.own[k]=from.own[k].filter(v=>v!==i);if(!Array.isArray(to.own[k]))to.own[k]=[];if(!to.own[k].includes(i))to.own[k].push(i);}
    p.rev++;q.rev++;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+uid,p);await tx.put('p:'+other,q);await tx.put(key,{done:true,at:now});});return response({traded:true});
   }else throw new ApiError('Unknown progress action');
   // Write the state and the receipt atomically: a dropped response cannot duplicate a reward.

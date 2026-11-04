@@ -106,4 +106,18 @@
       new MutationObserver(() => { if (olQ) apply(); }).observe(ol, { childList: true });
     } }
   { const st = document.createElement("style"); st.textContent = ".np-hide{display:none!important}.np-find{display:block;width:100%;box-sizing:border-box;margin:4px 0 8px;padding:8px 10px;border-radius:8px;border:1px solid rgba(150,180,255,.35);background:rgba(0,0,0,.35);color:#fff;font:inherit}"; document.head.append(st); }
+  // ---------- announcements: on everyone's screen the moment the admin publishes (the page listens to it), and bigger ----------
+  { const st = document.createElement("style");
+    st.textContent = "#annBar{font-size:clamp(17px,2.2vw,22px);line-height:1.35;padding:14px 12px 14px 22px;gap:16px;border-width:2px;border-radius:14px;width:max-content;max-width:min(920px,calc(100% - 32px));box-shadow:0 0 0 4px rgba(255,212,81,.14),0 16px 40px rgba(0,0,0,.55)}#annBar #annText{overflow-wrap:anywhere}";
+    document.head.append(st);
+    const show = x => {
+      const text = x && typeof x.text === "string" ? x.text.trim() : "";
+      let seen = ""; try { seen = localStorage.getItem("np-ann-closed") || ""; } catch {}
+      if (text && seen !== text) { $("annText").textContent = text; $("annBar").hidden = false; } else if (!text || $("annText").textContent === text) $("annBar").hidden = true;
+    };
+    const A = window.npAccounts;
+    Promise.resolve(A && A.ready).catch(() => {}).then(() => {
+      try { firebase.firestore().collection("config").doc("announce").onSnapshot(d => show(d && d.exists ? d.data() : null), () => {}); } catch {}
+    });
+  }
 })();

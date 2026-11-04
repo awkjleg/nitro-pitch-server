@@ -7,6 +7,7 @@ import {cleanEv,snowQuests,openChristmasDrop,claimAdvent,SNOW_START,ADVENT} from
 import {ApiError,reply} from '../src/firebase-auth.js';
 import * as Paints from '../src/paints.js';
 import {badName,safeName} from '../src/moderation.js';
+import * as QuestDrops from '../src/quest-drops.js';
 import {validCar,validGame,validHit,resultEvidence,MATCH_SECONDS} from '../src/room-guard.js';
 import {readFileSync} from 'node:fs';
 const source=(await readFile(new URL('../src/progress.js',import.meta.url),'utf8')).replace(/^import .*;$/gm,'').replaceAll('export ','');
@@ -15,7 +16,7 @@ async function fixture(raw={}){
  const clone=v=>v===undefined?undefined:structuredClone(v);
  const storage={get:async k=>clone(data.get(k)),put:async(k,v)=>data.set(k,clone(v)),list:async({prefix})=>new Map([...data].filter(([k])=>k.startsWith(prefix))),transaction:async fn=>{const snapshot=clone(data);try{return await fn(storage);}catch(e){data.clear();for(const[k,v]of snapshot)data.set(k,v);throw e;}}};
  const ctx={storage},env={ROOMS:{idFromName:x=>x,get:()=>({fetch:async()=>Response.json({mid:'online1',st:[200,1,0,0,1,0],score:[1,0],won:true,mvp:true,online:true,ranked:true,playlist:1,team:0,kind:'ranked',roster:[{uid:'a',team:0},{uid:'b',team:1}],elapsed:300})})}};
- const c=vm.createContext({MATCH_SECONDS,...Paints,badName,safeName,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
+ const c=vm.createContext({MATCH_SECONDS,...Paints,...QuestDrops,badName,safeName,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
  vm.runInContext(source+'\nglobalThis.Progress=Progress;globalThis.cleanProfile=cleanProfile;',c);const ledger=new c.Progress(ctx,env);
  return {data,docs,env,ledger,advance:ms=>now+=ms,clean:c.cleanProfile,async call(action,b={},uid='a'){const response=await ledger.fetch(new Request('https://progress/action',{method:'POST',body:JSON.stringify({body:{action,...b},user:{uid,username:uid},token:'test'})}));return {status:response.status,...await response.json()};}};
 }
@@ -181,4 +182,10 @@ test('moderation: ban reasons reach the banned player, admin names lock, offensi
  let v=await f.call('save',{profile:{name:'Other'}});assert.equal(v.profile.name,'Cool Kid');assert.equal(v.profile.nameLock,'Cool Kid');
  await f.call('admin-name',{id:'n2',uid:'a',name:null},'admin');v=await f.call('save',{profile:{name:'Sh1thead'}});assert.equal(v.profile.name,'Cool Kid');   // offensive: kept the old one
  v=await f.call('save',{profile:{name:'Classic Ace'}});assert.equal(v.profile.name,'Classic Ace');
+});
+test('admin-given items trade, but items your level would unlock anyway do not',async()=>{
+ const f=await fixture({dlv:1,own:{body:[0,20]}});await f.call('load');await f.call('load',{},'b');
+ await f.call('trade',{id:'tx',trade:'lv1',other:'b',mine:[['body',0]],theirs:[]});const no=await f.call('trade',{id:'ty',trade:'lv1',other:'a',mine:[],theirs:[['body',0]]},'b');assert.equal(no.status,409);assert((await f.call('load')).profile.own.body.includes(0));
+ await f.call('trade',{id:'tg1',trade:'gift1',other:'b',mine:[['body',20]],theirs:[]});const ok=await f.call('trade',{id:'tg2',trade:'gift1',other:'a',mine:[],theirs:[['body',20]]},'b');assert(ok.traded);
+ assert((await f.call('load',{},'b')).profile.own.body.includes(20));
 });

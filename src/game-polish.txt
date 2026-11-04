@@ -55,7 +55,7 @@ const NPPolish = (() => {
  }
  function equip(kind,i){if(lockOf(kind,i))return;profile[gField(kind)]=i;applyProfileToMe();saveProfile();lobbyPresence();renderMenuChrome();if(screen==='garage')renderGarage();sfx.ready();toast(listOf(kind)[i].name+' equipped');}
  showUnlockPop=function(r){
-  if(!r||unlockShownFor===r.mid)return;const items=itemsFor(r),drops=r.drops||[],tiers=r.pass?.tiers||[],levelled=r.after.lv>r.before.lv;
+  if(!r||unlockShownFor===r.mid)return;const items=itemsFor(r),drops=(r.drops||[]).map(([l,rr])=>[rr,'Level '+l+' reward']).concat((r.extraDrops||[]).map(([t,rr])=>[rr,String(t).replace(/!$/,'')])),tiers=r.pass?.tiers||[],levelled=r.after.lv>r.before.lv;
   if(!items.length&&!drops.length&&!tiers.length&&!levelled)return;unlockShownFor=r.mid;clearTimeout(rewardTimer);const sequence=++rewardSequence;
   rewardTimer=setTimeout(()=>{
    if(sequence!==rewardSequence||mode!=='menu'&&match.ph!=='over')return;
@@ -63,7 +63,7 @@ const NPPolish = (() => {
    $('unlockT').textContent=items.length?'New unlock'+(items.length===1?'!':'s!'):levelled?'Level '+r.after.lv+'!':'Nitro Pass advanced';
    copy.textContent=levelled?'Level '+r.before.lv+' → '+r.after.lv+' · '+rankOf(r.after.lv):'Your rewards are ready for the next kickoff.';
    for(const it of items){const card=node('li'),art=node('div','np-reward-art');card.style.setProperty('--rar',RARITIES[it.rar][1]);art.append(itemThumb(it.kind,it.i));card.append(art,node('b','',it.name),node('small','',RARITIES[it.rar][0]+' · '+kindName(it.kind)));const action=sbtn('Equip now','xs pri',()=>{equip(it.kind,it.i);action.disabled=true;action.querySelector('span').textContent='Equipped';});card.append(action);list.append(card);}
-   for(const [lv,rar]of drops){const card=node('li');card.style.setProperty('--rar',RARITIES[rar][1]);const art=node('div','np-reward-art');art.append(dropThumb(rar));card.append(art,node('b','',RARITIES[rar][0]+' Drop'),node('small','','Level '+lv+' reward'));list.append(card);}
+   for(const [rar,why]of drops){const card=node('li');card.style.setProperty('--rar',RARITIES[rar][1]);const art=node('div','np-reward-art');art.append(dropThumb(rar));card.append(art,node('b','',RARITIES[rar][0]+' Drop'),node('small','',why));list.append(card);}
    if(!items.length&&!drops.length)list.append(node('li','np-reward-note',levelled?'Keep playing to reach your next unlock.':'Tier '+passTier()+' of '+PASS_TIERS+' · Keep the momentum going.'));
    returnFocus=document.activeElement;$('unlockPop').hidden=false;if(!reduced())sfx.levelUp();$('unlockOk').focus();
   },reduced()?0:900);
