@@ -189,6 +189,16 @@ export class Progress extends DurableObject{
    q.mmrGift={amount,pl,mmr:r[0],note:String(b.note||'').slice(0,120),at:now};
    if(q!==p){q.rev=(q.rev||0)+1;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+to,q);await tx.put('lb:'+to,publicRow(q,to));await tx.put(receiptKey,{action:b.action,result:{mmr:r[0]},at:now});});return response({mmr:r[0]});}
    result={mmr:r[0]};
+  }else if(b.action==='admin-inventory'||b.action==='admin-take'){
+   // the admin looks at a player's items (admin-inventory) and takes one away (admin-take {uid, kind, i})
+   if(uid!==ADMIN_UID)throw new ApiError('Only the admin can do that',403);
+   const to=String(b.uid||'');if(!ID.test(to))throw new ApiError('Invalid player');
+   const q=to===uid?p:await this.ctx.storage.get('p:'+to);if(!q)throw new ApiError("That player hasn't opened the game since accounts moved to the new server",404);
+   if(b.action==='admin-inventory')return response({own:q.own,drops:q.drops});
+   const k=String(b.kind||''),i=Number(b.i);if(!catalog[k]?.[i]||!Array.isArray(q.own[k])||!q.own[k].includes(i))throw new ApiError("They don't have that item",409);
+   q.own[k]=q.own[k].filter(v=>v!==i);q.itemTaken={kind:k,i,at:now};
+   if(q!==p){q.rev=(q.rev||0)+1;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+to,q);await tx.put('lb:'+to,publicRow(q,to));await tx.put(receiptKey,{action:b.action,result:{taken:true},at:now});});return response({taken:true,own:q.own});}
+   result={taken:true,own:q.own};
   }else if(b.action==='holiday-drop'){const got=openChristmasDrop(p,catalog,()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296,now);if(!got)throw new ApiError('You have no Christmas Drops to open',409);result={got};
   }else if(b.action==='advent'){const got=claimAdvent(p,catalog,now,b.day);if(!got)throw new ApiError('That door can\u2019t be opened',409);result=got;
   }else if(b.action==='reroll'){if(!economy(p,now).rerollQuest(b.index))throw new ApiError('You have used today’s reroll',409);

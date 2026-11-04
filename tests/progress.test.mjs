@@ -189,3 +189,11 @@ test('admin-given items trade, but items your level would unlock anyway do not',
  await f.call('trade',{id:'tg1',trade:'gift1',other:'b',mine:[['body',20]],theirs:[]});const ok=await f.call('trade',{id:'tg2',trade:'gift1',other:'a',mine:[],theirs:[['body',20]]},'b');assert(ok.traded);
  assert((await f.call('load',{},'b')).profile.own.body.includes(20));
 });
+test('the admin can see a player\'s items and take one away; nobody else can',async()=>{
+ const f=await fixture({dlv:1,own:{body:[9,10]}});await f.call('load',{},'b');await f.call('load',{},'admin');
+ assert.equal((await f.call('admin-take',{id:'x1',uid:'b',kind:'body',i:9})).status,403);
+ const inv=await f.call('admin-inventory',{id:'i1',uid:'b'},'admin');assert.deepEqual(inv.own.body,[9,10]);
+ const t=await f.call('admin-take',{id:'t1',uid:'b',kind:'body',i:9},'admin');assert(t.taken);
+ assert.deepEqual((await f.call('load',{},'b')).profile.own.body,[10]);
+ assert.equal((await f.call('admin-take',{id:'t2',uid:'b',kind:'body',i:9},'admin')).status,409);
+});

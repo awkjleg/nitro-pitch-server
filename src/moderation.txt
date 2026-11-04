@@ -117,6 +117,49 @@ body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed #a
     $("npPickIn").value = ""; setTxt("npPickErr", ""); pick.hidden = false; setTimeout(() => $("npPickIn").focus(), 50);
   }, 1000);
 
+  // ---------- admin name changes land at once: the server saves the name, and the admin also writes it to the player's
+  // adminItems/{uid} entry (only the admin can write there), which the player's game listens to ----------
+  function npLiveName(uid, name) { try { firebase.firestore().collection("adminItems").doc(String(uid)).set({ nameLock: String(name || ""), nameAt: Date.now() }, { merge: true }).catch(() => {}); } catch {} }
+  // a "poke" makes that player's game reload its account from the server at once (after the admin changes MMR, or sends
+  // XP or an item), instead of the next time it loads
+  window.npPoke = uid => { try { firebase.firestore().collection("adminItems").doc(String(uid)).set({ poke: Date.now() }, { merge: true }).catch(() => {}); } catch {} };
+  try { const A0 = window.npAccounts && window.npAccounts.admin;
+    if (A0) for (const k of ["giveXp", "giftItem"]) { const f = A0[k]; if (typeof f === "function") A0[k] = async function (uid) { const r = await f.apply(this, arguments); window.npPoke(uid); return r; }; } } catch {}
+  let nlOff = null, nlUid = "", nlLast, pokeLast;
+  const reloadMe = async () => {
+    try { if (typeof NPSecure === "object" && NPSecure.active()) NPSecure.apply((await NPSecure.api.call("load")).profile); } catch {}
+    try { claimGifts(); } catch {}
+    try { renderMenuChrome(); } catch {}
+  };
+  const applyLock = (lock, live) => {
+    const was = profile.nameLock || "";
+    profile.nameLock = lock;
+    if (lock && me.name !== lock) {
+      me.name = lock; profile.name = lock; const n = $("nick"); if (n) n.value = lock;
+      try { if (game) game.presence({ nm: lock }).catch(() => {}); } catch {}
+      try { lobbyPresence(); partyKey = ""; renderMenuChrome(); } catch {}
+      if (live) toast("The admin changed your name to " + lock);
+    } else if (!lock && was && live) toast("You can change your name again");
+  };
+  setInterval(() => {
+    let id = ""; try { const u = window.npAccounts && window.npAccounts.user(); id = u && u.uid ? String(u.uid) : ""; } catch {}
+    if (id === nlUid) return;
+    if (nlOff) { try { nlOff(); } catch {} nlOff = null; }
+    nlUid = id; nlLast = undefined; pokeLast = undefined; if (!id) return;
+    try {
+      nlOff = firebase.firestore().collection("adminItems").doc(id).onSnapshot(d => {
+        const x = d && d.exists ? d.data() : null; if (!x) return;
+        if (x.poke) { if (pokeLast !== undefined && x.poke !== pokeLast) reloadMe(); pokeLast = x.poke; } else if (pokeLast === undefined) pokeLast = 0;
+        if (typeof x.nameLock !== "string") return;
+        const lock = x.nameLock.slice(0, 24), first = nlLast === undefined, changed = lock !== nlLast; nlLast = lock;
+        // the first read (page load) only fills in a lock this page doesn't know about yet; after that, only a change counts
+        // (the same entry also carries pokes, which don't touch the name)
+        if (first ? !lock || lock === (profile.nameLock || "") : !changed) return;
+        applyLock(lock, !first);
+      }, () => {});
+    } catch {}
+  }, 1000);
+
   // ---------- admin: Ban (with a reason) and Set name, next to Give XP ----------
   // messages show as a toast (the player popup has no admin message line) and in the admin panel
   const npSay = t => { try { toast(t); } catch {} try { adMsg(t); } catch {} };
@@ -148,9 +191,9 @@ body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed #a
     const setName = adBtn("Set name", async () => {
       const v = nm.value.trim(); if (!v) { adMsg("Type the new name."); return; }
       if (!confirm("Change " + name + "'s name to \"" + v + "\" for good? They won't be able to change it back.")) return;
-      try { const r = await api.call("admin-name", { id: crypto.randomUUID(), uid, name: v }); toast("Name set to " + r.name); adMsg(name + " is now " + r.name + " (locked)."); nm.value = ""; } catch (e) { adMsg((e && e.message) || "Couldn't change the name"); }
+      try { const r = await api.call("admin-name", { id: crypto.randomUUID(), uid, name: v }); npLiveName(uid, r.name); npSay(name + " is now " + r.name + " (locked)."); nm.value = ""; } catch (e) { npSay((e && e.message) || "Couldn't change the name"); }
     }, true);
-    const unlock = adBtn("Unlock name", async () => { try { await api.call("admin-name", { id: crypto.randomUUID(), uid, name: null }); toast("Name unlocked"); adMsg(name + " can change their name again."); } catch (e) { adMsg((e && e.message) || "Couldn't unlock the name"); } });
+    const unlock = adBtn("Unlock name", async () => { try { await api.call("admin-name", { id: crypto.randomUUID(), uid, name: null }); npLiveName(uid, ""); npSay(name + " can change their name again."); } catch (e) { npSay((e && e.message) || "Couldn't unlock the name"); } });
     row.append(h("b", "", "Moderate:"), reason, ban, unban, nm, setName, unlock);
     const wrap = h("div", ""); wrap.append(box, row); wrap.npUid = uid; wrap.npName = name;
     Object.defineProperty(wrap, "hidden", { get: () => box.hidden, set: v => { box.hidden = v; row.hidden = v; } });

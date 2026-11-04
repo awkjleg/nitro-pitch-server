@@ -15,6 +15,7 @@
       if (!confirm((sign > 0 ? "Give +" : "Remove ") + n + " MMR " + (sign > 0 ? "to " : "from ") + name + " in " + p[1] + "?")) return;
       try {
         const r = await api.call("admin-mmr", { id: crypto.randomUUID(), uid, pl: p[0], amount: n * sign, note: note.value.trim() });
+        try { window.npPoke && window.npPoke(uid); } catch {}
         const t = name + " is now at " + r.mmr + " MMR in " + p[1]; toast(t); adMsg(t + "."); amt.value = ""; note.value = "";
       } catch (e) { adMsg((e && e.message) || "Couldn't change the MMR"); }
     };
@@ -120,4 +121,41 @@
       try { firebase.firestore().collection("config").doc("announce").onSnapshot(d => show(d && d.exists ? d.data() : null), () => {}); } catch {}
     });
   }
+  // ---------- admin: see a player's items and click one to take it away (in the same panel as Give XP) ----------
+  const xg2 = xpGiver;
+  xpGiver = function (uid, name) {
+    const box = xg2(uid, name), row = h("div", "xp-give inv-take"), grid = h("div", "np-inv");
+    grid.hidden = true;
+    const load = async () => {
+      grid.hidden = false; grid.innerHTML = ""; grid.append(h("small", "", "Loading " + name + "'s items…"));
+      let inv, adminList = [];
+      try { inv = await api.call("admin-inventory", { id: crypto.randomUUID(), uid }); } catch (e) { grid.innerHTML = ""; grid.append(h("small", "", (e && e.message) || "Couldn't load their items")); return; }
+      try { const A = window.npAccounts; if (A && A.adminItems) adminList = await A.adminItems(uid); } catch {}
+      grid.innerHTML = "";
+      const items = [];
+      for (const [kind] of GKINDS) for (const i of (inv.own && inv.own[kind]) || []) if (listOf(kind)[i]) items.push([kind, i, false]);
+      for (const key of adminList) { const m = /^([a-z]+):(\d+)$/.exec(key); if (m && listOf(m[1]) && listOf(m[1])[+m[2]]) items.push([m[1], +m[2], true]); }
+      const head = h("small", "", items.length ? name + " has " + items.length + " item" + (items.length === 1 ? "" : "s") + " (and " + ((inv.drops || []).length) + " unopened drops). Click one to take it away." : name + " has no items from drops, gifts or trades.");
+      grid.append(head);
+      for (const [kind, i, adm] of items) {
+        const it = listOf(kind)[i];
+        const t = tradeTile(kind, i, async () => {
+          if (!confirm("Take " + it.name + " (" + kindName(kind) + ") away from " + name + "?")) return;
+          try {
+            if (adm) await firebase.firestore().collection("adminItems").doc(String(uid)).set({ items: firebase.firestore.FieldValue.arrayRemove(kind + ":" + i) }, { merge: true });
+            else await api.call("admin-take", { id: crypto.randomUUID(), uid, kind, i });
+            t.remove(); try { window.npPoke && window.npPoke(uid); } catch {}
+            toast("Took " + it.name + " from " + name); adMsg("Took " + it.name + " from " + name + ".");
+          } catch (e) { toast((e && e.message) || "Couldn't take it away"); }
+        });
+        if (adm) t.title = "ADMIN design item"; grid.append(t);
+      }
+      try { (function pump() { if (grid.isConnected && !grid.hidden) { try { if (thumbs.pending) thumbs.pump(); } catch {} requestAnimationFrame(pump); } })(); } catch {}
+    };
+    row.append(h("b", "", "Items:"), adBtn("Show items", () => { if (!grid.hidden) { grid.hidden = true; return; } load(); }), adBtn("Refresh", load));
+    const wrap = h("div", ""); wrap.append(box, row, grid);
+    Object.defineProperty(wrap, "hidden", { get: () => box.hidden, set: v => { box.hidden = v; row.hidden = v; if (v) grid.hidden = true; } });
+    return wrap;
+  };
+  { const st = document.createElement("style"); st.textContent = ".np-inv{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin:6px 0 10px;max-height:340px;overflow-y:auto}.np-inv>small{grid-column:1/-1;color:#9fb0d4}.np-inv .tr-it:hover{outline:2px solid #e74c3c}"; document.head.append(st); }
 })();
