@@ -34,4 +34,36 @@
     const p = PL.find(x => x[0] === g.pl);
     toast((g.amount > 0 ? "+" + g.amount : String(g.amount)) + " MMR in " + (p ? p[1] : "ranked") + " from the admin" + (g.note ? ": " + g.note : ""));
   }, 3000);
+  // Give items: a search box that finds any item by name across every type (cars, decals, wheels...); clicking a
+  // result picks its type and item in the menus below
+  const ra = renderAdmin;
+  renderAdmin = async function () {
+    const r = await ra.apply(this, arguments);
+    try {
+      const box = adTab === "give" && document.querySelector("#adminPop .ad-give");
+      if (!box || box.querySelector(".np-isearch")) return r;
+      const [, kindSel, itemSel] = box.querySelectorAll("select"); if (!kindSel || !itemSel) return r;
+      const wrap = h("div", "np-isearch"), q = document.createElement("input"), res = h("div", "np-ires");
+      q.type = "search"; q.className = "t"; q.placeholder = "Search items (e.g. titanium, octane, flag)"; q.autocomplete = "off"; q.setAttribute("aria-label", "Search items");
+      const NOSTART = ["wheel", "topper", "antenna", "title", "banner"];
+      const show = () => {
+        res.innerHTML = ""; const t = q.value.trim().toLowerCase(); if (!t) return;
+        const hits = [];
+        for (const [k, kn] of GKINDS) listOf(k).forEach((it, i) => { if (NOSTART.includes(k) && i === 0) return; if (it && !it.none && String(it.name || "").toLowerCase().includes(t)) hits.push([k, kn, i, it]); });
+        if (!hits.length) { res.append(h("small", "", "No items match \"" + q.value.trim() + "\".")); return; }
+        for (const [k, kn, i, it] of hits.slice(0, 40)) {
+          const b = document.createElement("button"); b.type = "button"; b.className = "np-ihit";
+          b.append(h("b", "", it.name), h("small", "", kn + " · " + rarName(it) + (it.admin ? " · admin design" : "")));
+          b.onclick = () => { kindSel.value = k; if (kindSel.onchange) kindSel.onchange(); itemSel.value = String(i); res.innerHTML = ""; q.value = it.name; adMsg("Picked " + it.name + " (" + kn + "). Choose the player and press Give item."); };
+          res.append(b);
+        }
+        if (hits.length > 40) res.append(h("small", "", (hits.length - 40) + " more: type more of the name."));
+      };
+      q.addEventListener("input", show);
+      wrap.append(q, res);
+      const typeRow = kindSel.closest("label") || kindSel; box.insertBefore(wrap, typeRow);
+    } catch {}
+    return r;
+  };
+  { const st = document.createElement("style"); st.textContent = ".np-isearch{display:grid;gap:6px;margin:6px 0}.np-ires{display:grid;gap:4px;max-height:240px;overflow-y:auto}.np-ihit{display:flex;justify-content:space-between;gap:10px;align-items:baseline;text-align:left;padding:7px 10px;border-radius:8px;border:1px solid rgba(150,180,255,.25);background:rgba(0,0,0,.3);color:#e8eeff;font:inherit;cursor:pointer}.np-ihit:hover,.np-ihit:focus{background:rgba(90,140,255,.22)}.np-ihit small{color:#9fb0d4;font-size:12px}.np-ires>small{color:#9fb0d4}"; document.head.append(st); }
 })();
