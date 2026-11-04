@@ -1,0 +1,223 @@
+// Credits shop and painted cars. Runs inside the game closure, after secure-progress (which applies server profiles).
+// The server owns credits (profile.cr), painted cars (profile.pp, "body:<car>:<paint>") and the daily listing.
+const NPShop = (() => {
+  // must match src/shop.js PAINTS (a test checks)
+  const PAINTS = [null,
+    { name: "Crimson", hex: 0xc8202f, tier: 0 }, { name: "Sky Blue", hex: 0x5fc3f2, tier: 0 }, { name: "Lime", hex: 0x93e23a, tier: 0 },
+    { name: "Orange", hex: 0xff8a1e, tier: 0 }, { name: "Grey", hex: 0x8f98a8, tier: 0 }, { name: "Cobalt", hex: 0x2a4fd6, tier: 0 },
+    { name: "Forest Green", hex: 0x2f7d3b, tier: 0 }, { name: "Burnt Sienna", hex: 0x9a4a24, tier: 1 }, { name: "Saffron", hex: 0xf2c321, tier: 1 },
+    { name: "Pink", hex: 0xff6fb5, tier: 1 }, { name: "Purple", hex: 0x7b3fd1, tier: 2 }, { name: "Gold", hex: 0xd9a520, tier: 3 },
+    { name: "Black", hex: 0x15161a, tier: 3 }, { name: "Titanium White", hex: 0xf4f6f8, tier: 4 }];
+  const TIER = [["Common", "#9fd0ff"], ["Uncommon", "#78b4ff"], ["Rare", "#b48cff"], ["Very rare", "#ffd451"], ["Rarest", "#ff6fe0"]];
+  const api = window.NPProgressAPI, signedIn = () => !!window.npAccounts?.user();
+  const enabled = () => !!window.npAccounts;               // the website (the CrazyGames copy has no accounts)
+  const paintOf = hex => PAINTS.findIndex(p => p && p.hex === hex);
+  const ownedPaints = body => (profile.pp || []).map(s => s.split(":")).filter(([k, i]) => k === "body" && +i === body).map(x => +x[2]).filter(id => PAINTS[id]).sort((a, b) => PAINTS[b].tier - PAINTS[a].tier || a - b);
+  const allowed = (body, hex) => hex === -1 || ownedPaints(body).includes(paintOf(hex));
+
+  // ---- keep the shop fields when the server's profile is applied
+  const sp = sanitizeProfile;
+  sanitizeProfile = function (s) {
+    const o = sp(s);
+    if (s && typeof s === "object") {
+      if (Number.isFinite(s.cr)) o.cr = Math.max(0, Math.floor(s.cr));
+      if (Array.isArray(s.pp)) o.pp = s.pp.filter(x => typeof x === "string" && /^body:\d+:\d+$/.test(x)).slice(0, 2000);
+      if (s.crGift && typeof s.crGift === "object") o.crGift = { amount: s.crGift.amount | 0, note: String(s.crGift.note || "").slice(0, 120), at: +s.crGift.at || 0 };
+    }
+    return o;
+  };
+  // ---- the car colour is a painted car you own, or your team colour
+  function fixPaint() {
+    if (!allowed(profile.body | 0, okPaint(profile.paint))) { profile.paint = -1; me.paint = -1; if (typeof gPrev === "object") gPrev.paint = -1; }
+  }
+  const save = saveProfile;
+  saveProfile = function (...a) { fixPaint(); return save(...a); };
+  const ap = applyProfileToMe;
+  applyProfileToMe = function (...a) { fixPaint(); return ap(...a); };
+  renderPaintBar = function () {
+    const box = $("gPaint"); box.hidden = gTab !== "paint"; if (box.hidden) return;
+    const body = profile.body | 0, cur = okPaint(profile.paint), mine = ownedPaints(body);
+    box.innerHTML = "";
+    const tb = h("button", "gp-team", "Team colour"); tb.type = "button"; tb.title = "Blue or orange, whichever team you're on"; tb.onclick = () => setPaint(-1, true);
+    tb.setAttribute("aria-pressed", String(cur < 0)); box.append(tb);
+    const sw = h("div", "gp-sw");
+    for (const id of mine) {
+      const P = PAINTS[id], b = h("button", "gp-c shp-sw"); b.type = "button"; b.style.background = hex(P.hex); b.title = P.name + " " + (CARS[body] ? CARS[body].name : "");
+      b.setAttribute("aria-label", "Paint: " + P.name); b.setAttribute("aria-pressed", String(P.hex === cur)); b.onclick = () => setPaint(P.hex, true); sw.append(b);
+    }
+    box.append(sw, h("span", "shp-note", mine.length ? "Painted " + (CARS[body] ? CARS[body].name : "car") + " colours you own" : "Get painted cars from drops and the Shop to change this car's colour"));
+  };
+
+  // ---- painted drops: show the colour when the drop opens, and equip it in that colour
+  const odu = openDropUI;
+  openDropUI = async function (k) {
+    await odu(k);
+    const g = dpGot;
+    if (g && g.paint && PAINTS[g.paint]) setTimeout(() => {
+      if (dpGot !== g) return;
+      const P = PAINTS[g.paint], th = $("dpTh");
+      th.innerHTML = ""; th.append(thumbs.car(g.i, 0, { paint: P.hex }));
+      setTxt("dpName", P.name + " " + (CARS[g.i] ? CARS[g.i].name : g.name)); setTxt("dpRar", "Painted · " + TIER[P.tier][0]);
+      $("dpCard").style.setProperty("--rar", TIER[P.tier][1]);
+    }, 1160);
+  };
+  const de = $("dpEquip").onclick;
+  $("dpEquip").onclick = () => {
+    const g = dpGot;
+    if (g && g.paint && PAINTS[g.paint]) { profile.body = g.i; profile.paint = PAINTS[g.paint].hex; applyProfileToMe(); saveProfile(); }
+    de();
+  };
+
+  // ---- the shop screen
+  const css = document.createElement("style");
+  css.textContent = `
+  #shop .shp-top{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  #shop .shp-cr{display:flex;align-items:center;gap:8px;background:rgba(17,29,54,.92);border:1px solid #24345a;padding:8px 14px;font-family:'Russo One',sans-serif;font-size:18px}
+  #shop .shp-cr i{width:18px;height:18px;border-radius:50%;background:#ffd451;box-shadow:inset 0 0 0 2px #a87a00;display:inline-block}
+  #shop .shp-cr small{font-family:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9fb0d4}
+  #shop .shp-t{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#9fb0d4;margin:16px 0 8px}
+  #shop .shp-feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:14px}
+  #shop .shp-day{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  #shop .shp-card{display:flex;flex-direction:column;gap:6px;background:rgba(17,29,54,.92);border:1px solid #24345a;border-top:3px solid var(--rar,#78b4ff);padding:12px;min-width:0}
+  #shop .shp-card.big{flex-direction:row;align-items:center;gap:14px}
+  #shop .shp-card .th{background:#0a1222;display:flex;align-items:center;justify-content:center;min-height:96px}
+  #shop .shp-card.big .th{width:210px;flex-shrink:0;min-height:120px}
+  #shop .shp-card .th canvas,#shop .shp-card .th img{max-width:100%;height:auto}
+  #shop .shp-k{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--rar,#78b4ff)}
+  #shop .shp-n{font-family:'Russo One',sans-serif;font-size:16px;line-height:1.15}
+  #shop .shp-card.big .shp-n{font-size:22px}
+  #shop .shp-own{font-size:12px;font-weight:700;color:#2fbb66;text-transform:uppercase;letter-spacing:.1em}
+  #shop .shp-packs{display:flex;flex-wrap:wrap;gap:10px;align-items:center;color:#9fb0d4;font-size:13px}
+  #shop .shp-msg{padding:24px;text-align:center;color:#b9c6e4}
+  .shp-note{font-size:12px;color:#9fb0d4;margin-left:8px}
+  .gp-c.shp-sw[aria-pressed="true"]{outline:3px solid #fff;outline-offset:2px}
+  #navShop small b{color:#ffd451}
+  `;
+  document.head.append(css);
+  const sec = document.createElement("section");
+  sec.className = "scr"; sec.id = "shop"; sec.hidden = true; sec.setAttribute("aria-label", "Item shop");
+  sec.innerHTML = '<div class="shead"><button class="back" type="button" data-back><span><i class="ic" data-ic="left"></i>Back<kbd>Esc</kbd></span></button><div class="stitle"><small>Main menu</small><h1>Item Shop</h1></div><div class="shint" id="shopEnds"></div></div><div class="shp-body" id="shopBody"></div>';
+  $("pass").after(sec);
+  sec.querySelector("[data-back]").onclick = () => goBack();
+  ALL_SCREENS.push("shop"); MAIN_SCREENS.add("shop"); DEPTH.shop = 1;
+  const nav = document.createElement("button");
+  nav.className = "nb"; nav.id = "navShop"; nav.type = "button";
+  nav.innerHTML = '<span><i class="ic" data-ic="star"></i><span><b>Shop</b><small id="navShopSub">Painted cars &amp; more</small></span></span>';
+  $("navGarage").after(nav);
+  nav.onclick = () => showScreen("shop");
+  paintIcons(sec); paintIcons(nav);
+  const gb = goBack;
+  goBack = function (...a) { if (screen === "shop" && !topPopup() && !$("menu").hidden) { showScreen("home"); return true; } return gb(...a); };
+  const rs = rerenderScreen;
+  rerenderScreen = function (...a) { rs(...a); if (screen === "shop") renderShop(); };
+  const chrome = renderMenuChrome;
+  renderMenuChrome = function (...a) {
+    chrome(...a);
+    nav.hidden = !enabled();
+    const sub = $("navShopSub"); if (sub) sub.innerHTML = signedIn() ? "<b>" + (profile.cr | 0).toLocaleString() + "</b> credits" : "Painted cars &amp; more";
+  };
+
+  let listing = null, loading = false, busy = false, endsT = 0;
+  const fmt = n => (n | 0).toLocaleString();
+  function thumbFor(s) {
+    if (s.kind === "body") return thumbs.car(s.i, 0, s.paint && PAINTS[s.paint] ? { paint: PAINTS[s.paint].hex } : undefined);
+    return itemThumb(s.kind, s.i);
+  }
+  function card(s, big) {
+    const P = s.paint && PAINTS[s.paint], it = listOf(s.kind)[s.i];
+    const c = h("div", "shp-card" + (big ? " big" : "")); c.style.setProperty("--rar", P ? TIER[P.tier][1] : rarCol(it));
+    const th = h("div", "th"); try { th.append(thumbFor(s)); } catch {}
+    const info = h("div", "shp-i"); info.style.cssText = "display:flex;flex-direction:column;gap:6px;min-width:0";
+    info.append(h("span", "shp-k", (big ? "Featured · " : "") + (P ? "Painted " + TIER[P.tier][0] : rarName(it)) + " · " + kindName(s.kind)), h("span", "shp-n", s.name));
+    if (s.owned) info.append(h("span", "shp-own", "Owned"));
+    else {
+      const b = sbtn("Buy · " + fmt(s.price) + " credits", "sm" + (big ? " pri" : ""), () => buy(s));
+      if ((profile.cr | 0) < s.price) b.title = "You need " + fmt(s.price - (profile.cr | 0)) + " more credits";
+      info.append(b);
+    }
+    c.append(th, info);
+    return c;
+  }
+  function draw() {
+    const box = $("shopBody"); if (!box) return;
+    box.innerHTML = "";
+    if (!signedIn()) {
+      const m = h("div", "shp-msg panel"); m.append(h("p", "", "Log in to use the shop. Credits and items are saved to your account."));
+      m.append(sbtn("Log in / Sign up", "sm pri", () => { if (typeof loginGate === "function" && loginGate()) return; showScreen("account"); }));
+      box.append(m); $("shopEnds").textContent = ""; return;
+    }
+    if (!listing) { box.append(h("div", "shp-msg", loading ? "Loading the shop…" : "Couldn't load the shop. Try again in a moment.")); return; }
+    const top = h("div", "shp-top"), cr = h("div", "shp-cr");
+    cr.append(h("i"), h("span", "", fmt(profile.cr)), h("small", "", "credits"));
+    top.append(cr); box.append(top);
+    box.append(h("div", "shp-t", "Featured"));
+    const fe = h("div", "shp-feat"); for (const s of listing.featured) fe.append(card(s, true)); box.append(fe);
+    box.append(h("div", "shp-t", "Daily items"));
+    const dy = h("div", "shp-day"); for (const s of listing.daily) dy.append(card(s, false)); box.append(dy);
+    box.append(h("div", "shp-t", "Credits"));
+    box.append(h("div", "shp-packs", "Credit packs are coming soon. Shop items are cosmetic only; no random boxes are sold."));
+    tick();
+  }
+  function tick() {
+    if (!listing || screen !== "shop") return;
+    const left = Math.max(0, listing.ends - Date.now()), hh = Math.floor(left / 3600000), mm = Math.floor(left / 60000) % 60, ss = Math.floor(left / 1000) % 60;
+    $("shopEnds").textContent = "New daily items in " + hh + ":" + String(mm).padStart(2, "0") + ":" + String(ss).padStart(2, "0");
+    if (left <= 0) { listing = null; renderShop(); }
+  }
+  setInterval(tick, 1000);
+  // car pictures are drawn a couple per frame, normally only in the garage: draw them in the shop and the drop reveal too
+  (function pump() { try { if (mode === "menu" && (screen === "shop" || !$("dropPop").hidden) && thumbs.pending) thumbs.pump(); } catch {} requestAnimationFrame(pump); })();
+  async function renderShop() {
+    draw();
+    if (!signedIn() || loading) return;
+    if (listing && Date.now() < listing.ends && Date.now() - (listing.got || 0) < 60000) return;
+    loading = true; draw();
+    try { const r = await api.call("shop"); listing = { ...r.shop, got: Date.now() }; } catch (e) { listing = null; toast(e.message || "Couldn't load the shop"); }
+    finally { loading = false; draw(); renderMenuChrome(); }
+  }
+  function buy(s) {
+    if (busy) return;
+    if ((profile.cr | 0) < s.price) { toast("You need " + fmt(s.price - (profile.cr | 0)) + " more credits for " + s.name); return; }
+    confirmBox("Buy " + s.name + "?", fmt(s.price) + " credits. You have " + fmt(profile.cr) + ".", "Buy", async () => {
+      busy = true;
+      try {
+        const r = await api.call("shop-buy", { id: crypto.randomUUID(), slot: s.slot, day: listing.day });
+        listing = { ...r.shop, got: Date.now() };
+        toast("Bought " + s.name + "!");
+        try { sfx.levelUp(); } catch {}
+        if (s.kind === "body" && s.paint && PAINTS[s.paint]) { profile.body = s.i; profile.paint = PAINTS[s.paint].hex; applyProfileToMe(); saveProfile(); }
+      } catch (e) { toast(e.message || "Couldn't buy that"); listing = null; }
+      finally { busy = false; renderShop(); renderMenuChrome(); }
+    }, "Cancel");
+  }
+
+  // ---- credits from the admin: show them once
+  setInterval(() => {
+    const g = profile.crGift; if (!g || !g.at) return;
+    let seen = 0; try { seen = +localStorage.getItem("np-cr-seen") || 0; } catch {}
+    if (g.at <= seen) return;
+    try { localStorage.setItem("np-cr-seen", String(g.at)); } catch {}
+    toast((g.amount > 0 ? "+" + fmt(g.amount) + " credits from the admin" : fmt(-g.amount) + " credits removed by the admin") + (g.note ? ": " + g.note : ""));
+    renderMenuChrome();
+  }, 3000);
+
+  // ---- admin: give credits from the same panel as XP
+  const xg = xpGiver;
+  xpGiver = function (uid, name) {
+    const box = xg(uid, name);
+    const row = h("div", "xp-give shp-admin");
+    const amt = document.createElement("input"); amt.type = "number"; amt.min = "1"; amt.max = "1000000"; amt.step = "1"; amt.placeholder = "Credits"; amt.className = "t";
+    const note = document.createElement("input"); note.type = "text"; note.maxLength = 120; note.placeholder = "Message (optional)"; note.className = "t note";
+    const give = async (v, sign) => {
+      const n = Math.floor(Math.abs(+v)); if (!(n >= 1 && n <= 1000000)) { adMsg("Pick an amount from 1 to 1,000,000 credits."); return; }
+      if (!confirm((sign > 0 ? "Give " : "Remove ") + fmt(n) + " credits " + (sign > 0 ? "to " : "from ") + name + "?")) return;
+      try { const r = await api.call("admin-credits", { id: crypto.randomUUID(), uid, amount: n * sign, note: note.value.trim() }); const t = name + " now has " + fmt(r.credits) + " credits"; toast(t); adMsg(t + "."); amt.value = ""; note.value = ""; }
+      catch (e) { adMsg((e && e.message) || "Couldn't change the credits"); }
+    };
+    row.append(h("b", "", "Credits:"), adBtn("+500", () => give(500, 1), true), adBtn("+2,500", () => give(2500, 1), true), amt, adBtn("Give", () => give(amt.value, 1), true), adBtn("Remove", () => give(amt.value, -1)), note);
+    const wrap = h("div", ""); wrap.append(box, row);
+    Object.defineProperty(wrap, "hidden", { get: () => box.hidden, set: v => { box.hidden = v; row.hidden = v; } });
+    return wrap;
+  };
+  return { PAINTS, renderShop, ownedPaints };
+})();
