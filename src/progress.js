@@ -122,7 +122,9 @@ export class Progress extends DurableObject{
     const s=p.session;if(!s||s.mid!==b.mid||now-s.started>7200000)throw new ApiError('Practice session was not registered',409);
     const elapsed=(s.active+Math.min(20000,now-s.last))/1000,score=b.score,st=b.st;
     if(elapsed<20||!Array.isArray(score)||score.length!==2||!score.every(x=>Number.isInteger(x)&&x>=0&&x<=99)||!Array.isArray(st)||st.length!==6||!st.every(x=>Number.isInteger(x)&&x>=0)||st[0]>elapsed*25+500||st[1]>Math.max(...score)||st.slice(1).some(x=>x>elapsed/2+10))throw new ApiError('Practice result failed validation',422);
-    const length=MATCH_SECONDS[s.mut[0]];if(!length||elapsed+20<length)throw new ApiError('Finish the practice match to earn rewards',422);
+    // a ranked match ends early when a team leads by 5 (the mercy rule): every goal takes a kickoff, the goal and its replay
+    const mercy=!!s.rk&&Math.abs(score[0]-score[1])>=5&&elapsed>=20+6*(score[0]+score[1]);
+    const length=MATCH_SECONDS[s.mut[0]];if(!length||elapsed+20<length&&!mercy)throw new ApiError('Finish the practice match to earn rewards',422);
     // a ranked match filled with bots (not enough players online) still counts for rank, against bots at your own MMR
     e={mid:b.mid,st,score,won:score[0]>score[1],mvp:!!b.mvp,online:false,extra:!!s.mut[6],kind:s.rk?'ranked':'exhibition',ranked:!!s.rk,playlist:s.rk||0,team:0,elapsed};p.session=null;
    }

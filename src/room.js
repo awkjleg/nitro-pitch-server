@@ -89,14 +89,23 @@ export class Room extends DurableObject {
     const ids=r.roster.map(x=>x.uid).filter(Boolean);if(new Set(ids).size!==ids.length)r.invalid=true;
     r.lastGame={rk:g.rk,mm:g.mm,pl:g.pl,mut:g.mut};
     const changed=JSON.stringify(r.score)!==JSON.stringify(g.s);r.score=g.s.slice();r.last=now;
-    if(g.ph==='over'){r.final=structuredClone(g);r.ended=now;}
+    if(g.ph==='over'){
+      r.final=structuredClone(g);r.ended=now;
+      // the host's final state is its own confirmation, and confirmations that arrived just before it (the host's
+      // client acknowledges in the same frame the match ends) count once the score matches
+      const host=r.roster.find(x=>x.id===id),keys=(r.early||[]).filter(a=>JSON.stringify(a.score)===JSON.stringify(g.s)).map(a=>a.key);
+      if(host)keys.push(host.uid||'g:'+host.id);
+      for(const key of keys)if(r.roster.some(x=>(x.uid||'g:'+x.id)===key)&&!r.acks.includes(key))r.acks.push(key);
+      delete r.early;
+    }
     if(fresh||changed||r.final||now-(r.saved||0)>5000){r.saved=now;await this.ctx.storage.put('match:'+g.mid,r);}
   }
   async markDeparture(id){
     for(const r of this.matchRecords.values()){
       const member=r.roster.find(x=>x.id===id);if(!member||r.final||!r.lastGame)continue;
       const key=member.uid||'g:'+member.id;r.departed=r.departed||[];if(r.departed.includes(key))continue;r.departed.push(key);await this.ctx.storage.put('match:'+r.mid,r);
-      if(member.uid&&rankedRules(r.lastGame,this.name)&&[0,1].every(t=>r.roster.some(x=>x.team===t))&&this.env.PROGRESS)await this.env.PROGRESS.get(this.env.PROGRESS.idFromName('accounts-v1')).fetch(new Request('https://progress/forfeit',{method:'POST',body:JSON.stringify({uid:member.uid,room:this.name,mid:r.mid,playlist:r.lastGame.pl})}));
+      // leaving a ranked match early is a loss, against players or bots (bot-filled matches count for rank too)
+      if(member.uid&&rankedRules(r.lastGame,this.name)&&this.env.PROGRESS)await this.env.PROGRESS.get(this.env.PROGRESS.idFromName('accounts-v1')).fetch(new Request('https://progress/forfeit',{method:'POST',body:JSON.stringify({uid:member.uid,room:this.name,mid:r.mid,playlist:r.lastGame.pl})}));
     }
   }
   async fetch(request){
@@ -125,7 +134,12 @@ export class Room extends DurableObject {
     if(message.t==='result-ack'){
       // account players confirm by account; guests (the CrazyGames version) by their place in the match
       const r=this.matchRecords.get(message.mid),uid=info.uid,key=uid||'g:'+id;
-      if(r?.final&&r.roster.some(x=>uid?x.uid===uid:x.id===id&&!x.uid)&&JSON.stringify(r.final.s)===JSON.stringify(message.score)){
+      if(!r||!r.roster.some(x=>uid?x.uid===uid:x.id===id&&!x.uid)||!Array.isArray(message.score))return;
+      if(!r.final){
+        // sent before the host's final state reached the room: kept until the match ends, checked against its score
+        r.early=(r.early||[]).filter(a=>a.key!==key).concat({key,score:message.score.slice(0,2)}).slice(-12);return;
+      }
+      if(JSON.stringify(r.final.s)===JSON.stringify(message.score)){
         if(!r.acks.includes(key)){r.acks.push(key);await this.ctx.storage.put('match:'+r.mid,r);}this.bcast({t:'result-ready',mid:r.mid});
       }return;
     }

@@ -133,3 +133,15 @@ test('online: a normal 3-minute match passes the clock check',()=>{
  const r={room:'np-m-x',mid:'m',started:1000,ended:181000,roster:[{id:'a',uid:'ua',team:0},{id:'b',uid:'ub',team:1}],acks:['ua','ub'],final:{s:[2,1],st:{a:[150,1,0,0,1,0]},mut:[0,0,0,0,0,0,0],rk:1,pl:1,mm:1,tl:0,ot:false}};
  assert(resultEvidence(r,'ua',182000).ranked);
 });
+test('a bot-filled ranked match ended by the 5-goal mercy rule is saved (it used to be rejected as unfinished)',async()=>{
+ const f=await fixture({dlv:1});await f.call('load');
+ await f.call('session-start',{id:'s-mercy',mid:'mercy',mut:[0,0,0,0,0,0,0],rk:1,pl:1});
+ for(let i=0;i<9;i++){f.advance(10000);await f.call('session-tick',{id:'tm'+i,mid:'mercy'});}
+ const lost=await f.call('match',{id:'pay-mercy',mid:'mercy',score:[1,6],st:[150,1,0,0,2,0],mvp:false});
+ assert.equal(lost.status,200);assert(lost.result.rank.d<0);assert.equal(lost.profile.games,1);assert.equal(lost.profile.goals,1);
+ // too quick for that many goals, or no 5-goal lead: the full match length is still required
+ f.advance(30000);await f.call('session-start',{id:'s-fast',mid:'fast',mut:[0,0,0,0,0,0,0],rk:1,pl:1});f.advance(15000);await f.call('session-tick',{id:'tf',mid:'fast'});f.advance(10000);
+ assert.equal((await f.call('match',{id:'pay-fast',mid:'fast',score:[5,0],st:[500,5,0,0,5,0]})).status,422);
+ f.advance(30000);await f.call('session-start',{id:'s-close',mid:'close',mut:[0,0,0,0,0,0,0],rk:1,pl:1});for(let i=0;i<9;i++){f.advance(10000);await f.call('session-tick',{id:'tc'+i,mid:'close'});}
+ assert.equal((await f.call('match',{id:'pay-close',mid:'close',score:[4,0],st:[400,4,0,0,4,0]})).status,422);
+});
