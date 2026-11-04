@@ -2,14 +2,14 @@ import {DurableObject} from 'cloudflare:workers';
 import {ApiError,reply,identify,readJson,firebaseDoc,ADMIN_UID} from './firebase-auth.js';
 import {catalog,Ranked,economy,levelInfo} from './reward-rules.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent} from './snowdrift.js';
-import {cleanPainted,allowedPaint,paintedDrop,PAINTED_DROP_CHANCE,shopFor,buySlot,CREDITS_MAX} from './shop.js';
+import {cleanPainted,allowedPaint,paintedDrop,PAINTED_DROP_CHANCE} from './paints.js';
 import {MATCH_SECONDS} from './room-guard.js';
 const ID=/^[A-Za-z0-9_-]{1,128}$/, midOK=/^[A-Za-z0-9_-]{1,80}$/;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const n=(v,max=1e9)=>Number.isFinite(v)?clamp(Math.trunc(v),0,max):0;
 const cosmetics={body:'body',decal:'decal',wheel:'wheel',trail:'boost',boom:'boom',finish:'paint',topper:'topper',antenna:'antenna',title:'title',banner:'banner'};
 export function cleanProfile(raw={}){
- const p={xp:0,pxp:0,pxc:0,qn:0,games:0,wins:0,goals:0,saves:0,mvps:0,dlv:0,cm:500,rt:-1,rk:[0,1,2].map(()=>[500,0,0,0,-1]),own:{},drops:[],qs:null,ab:null,cv:2,paint:-1,name:'',fr:[],cr:0,pp:[]};
+ const p={xp:0,pxp:0,pxc:0,qn:0,games:0,wins:0,goals:0,saves:0,mvps:0,dlv:0,cm:500,rt:-1,rk:[0,1,2].map(()=>[500,0,0,0,-1]),own:{},drops:[],qs:null,ab:null,cv:2,paint:-1,name:'',fr:[],pp:[]};
  for(const key of ['xp','pxp','pxc','qn','games','wins','goals','saves','mvps','dlv'])p[key]=n(raw[key]);
  p.cm=Number.isFinite(raw.cm)?n(raw.cm,4000):500;p.rt=Number.isFinite(raw.rt)?clamp(Math.trunc(raw.rt),-1,7):-1;
  p.rk=[0,1,2].map(i=>{let r=raw.rk?.[i];if(r&&!Array.isArray(r))r=[r.m,r.p,r.w,r.l,r.pk];return Array.isArray(r)?[n(r[0],4000),n(r[1]),n(r[2]),n(r[3]),clamp(Number.isFinite(r[4])?Math.trunc(r[4]):-1,-1,21)]:[500,0,0,0,-1];});
@@ -21,7 +21,7 @@ export function cleanProfile(raw={}){
  if(Number.isInteger(raw.paint))p.paint=clamp(raw.paint,-1,0xffffff);
  p.fr=Array.isArray(raw.fr)?raw.fr.filter(x=>typeof x==='string').slice(0,50):[];
  p.ev=cleanEv(raw.ev);
- p.cr=n(raw.cr,CREDITS_MAX);p.pp=cleanPainted(raw.pp,catalog);if(!allowedPaint(p,p.paint))p.paint=-1;
+ p.pp=cleanPainted(raw.pp,catalog);if(!allowedPaint(p,p.paint))p.paint=-1;
  return p;
 }
 function cloud(p){return {...p,rk:p.rk.map(([m,p,w,l,pk])=>({m,p,w,l,pk})),level:levelInfo(p.xp).lv};}
@@ -104,7 +104,6 @@ export class Progress extends DurableObject{
    do{const page=await this.ctx.storage.list({prefix:'lb:',limit:1000,...(after?{startAfter:after}:{})});for(const[key,row]of page){rows.set(row.uid,row);after=key;}if(page.size<1000)break;}while(true);
    return reply({rows:[...rows.values()].filter(row=>field!=='level'||Number.isInteger(row.level)&&row.level>=1&&row.level<=100).sort((a,b)=>b[field]-a[field]||a.uid.localeCompare(b.uid)).slice(0,clamp(n(b.limit,100),1,100))});
   }
-  if(b.action==='shop')return reply({shop:shopFor(p,catalog,now),profile:cloud(p),rev:p.rev});
   if(b.action==='leaderboard-get'){if(!ID.test(b.uid||''))throw new ApiError('Invalid player');return reply({row:await this.ctx.storage.get('lb:'+b.uid)||null});}
   // Idempotency keys survive refreshes and retrying a lost response.
   if(!midOK.test(b.id||''))throw new ApiError('Missing action ID');
@@ -154,17 +153,6 @@ export class Progress extends DurableObject{
     for(const x of picked.filter(x=>!x.drop))p.own[x.kind]=p.own[x.kind].filter(i=>i!==x.i);
     const pool=E.dropPool(r+1);let got;if(pool.length){got={...pool[crypto.getRandomValues(new Uint32Array(1))[0]%pool.length],rar:r+1};p.own[got.kind].push(got.i);}else{E.addDrop(r+1);got={drop:r+1};}result={got,picked};
    }
-  }else if(b.action==='shop-buy'){
-   let s;try{s=buySlot(p,catalog,now,String(b.slot||''),b.day);}catch(e){throw new ApiError(e.message,409);}
-   result={bought:s,shop:shopFor(p,catalog,now)};
-  }else if(b.action==='admin-credits'){
-   // the admin gives (or takes away) credits; it lands in that player's account straight away
-   if(uid!==ADMIN_UID)throw new ApiError('Only the admin can give credits',403);
-   const to=String(b.uid||''),amount=Math.trunc(Number(b.amount));if(!ID.test(to)||!Number.isFinite(amount)||!amount||Math.abs(amount)>1000000)throw new ApiError('Pick an amount from 1 to 1,000,000 credits');
-   const q=to===uid?p:await this.ctx.storage.get('p:'+to);if(!q)throw new ApiError("That player hasn't opened the game since accounts moved to the new server",404);
-   q.cr=clamp((q.cr|0)+amount,0,CREDITS_MAX);q.crGift={amount,note:String(b.note||'').slice(0,120),at:now};
-   if(q!==p){q.rev=(q.rev||0)+1;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+to,q);await tx.put(receiptKey,{action:b.action,result:{credits:q.cr},at:now});});return response({credits:q.cr});}
-   result={credits:q.cr};
   }else if(b.action==='holiday-drop'){const got=openChristmasDrop(p,catalog,()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296,now);if(!got)throw new ApiError('You have no Christmas Drops to open',409);result={got};
   }else if(b.action==='advent'){const got=claimAdvent(p,catalog,now,b.day);if(!got)throw new ApiError('That door can\u2019t be opened',409);result=got;
   }else if(b.action==='reroll'){if(!economy(p,now).rerollQuest(b.index))throw new ApiError('You have used today’s reroll',409);
