@@ -51,6 +51,25 @@ body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed #a
     showJail(info);
   }
   setInterval(checkBan, 2000);
+  // the ban lands at once: the page listens to this account's entry in Firebase's bans list, so when the admin bans
+  // them they leave the match (or search) straight away and get the jail screen; an unban lets them out the same way
+  let banUnsub = null, banUid = "";
+  setInterval(() => {
+    let id = ""; try { const u = window.npAccounts && window.npAccounts.user(); id = u && u.uid ? String(u.uid) : ""; } catch {}
+    if (id === banUid) return;
+    if (banUnsub) { try { banUnsub(); } catch {} banUnsub = null; }
+    banUid = id; if (!id) return;
+    try {
+      banUnsub = firebase.firestore().collection("bans").doc(id).onSnapshot(d => {
+        if (!d || !d.exists) { if (isBanned) { isBanned = false; checkBan(); } return; }
+        isBanned = true;
+        try { cancelSearch(true); } catch {}
+        try { if (mode !== "menu") leaveToMenu(true); } catch {}
+        const x = d.data() || {}; checked = id;
+        showJail({ reason: x.reason || "", at: x.at && x.at.toMillis ? x.at.toMillis() : Date.now() });
+      }, () => {});
+    } catch {}
+  }, 1000);
 
   // ---------- names: offensive names refused, admin-locked names can't be changed ----------
   const np = nameProblem;
