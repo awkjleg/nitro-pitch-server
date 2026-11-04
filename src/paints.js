@@ -30,6 +30,7 @@ export function addPaintedCars(catalog) {
     const c = catalog.body[B];
     catalog.body.push(c.admin || c.ev ? { name: 'ADMIN', lv: 1, rar: 7, admin: true } : { name: PAINTS[P].name + ' ' + c.name, lv: 999, rar: c.rar, painted: [B, P] });
   }
+  catalog.body.push({ name: 'Tung Tung Sahur', lv: 1, rar: 7, admin: true });   // ADMIN design car (src/paints.txt builds it)
   Object.defineProperty(catalog, 'paintedBase', { value: base });
   return catalog;
 }
