@@ -72,16 +72,50 @@ body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed #a
   }, 1000);
 
   // ---------- names: offensive names refused, admin-locked names can't be changed ----------
+  const npStarterName = n => /^\s*driver[\s_.\-]*\d*\s*$/i.test(String(n || ""));
   const np = nameProblem;
   nameProblem = function (raw) {
     if (profile.nameLock) return [profile.nameLock, "Your name was set by the admin and can't be changed."];
     const r = np(raw);
     if (!r[1] && M && M.badName(r[0])) return [r[0], "That name isn't allowed. Pick a different one."];
+    if (!r[1] && npStarterName(r[0])) return [r[0], "Driver is the starter name. Pick your own username."];
     return r;
   };
   const sp = sanitizeProfile;
   sanitizeProfile = function (s) { const o = sp(s); if (s && typeof s === "object") { if (typeof s.nameLock === "string" && s.nameLock) o.nameLock = s.nameLock.slice(0, 24); else if ("name" in s) o.nameLock = ""; } return o; };
   setInterval(() => { const n = $("nick"); if (!n) return; const lock = !!profile.nameLock; n.readOnly = lock; n.classList.toggle("np-locked", lock); n.title = lock ? "Your name was set by the admin" : ""; }, 1500);
+
+  // ---------- no more "Driver 42": everyone still on the starter name has to pick their own ----------
+  // (the box can't be closed; it waits until no other pop-up is open and the account has had a few seconds to load)
+  const pick = document.createElement("div"); pick.id = "npPickName"; pick.hidden = true; pick.setAttribute("role", "dialog"); pick.setAttribute("aria-modal", "true"); pick.setAttribute("aria-labelledby", "npPickT");
+  pick.innerHTML = '<div class="pk"><b id="npPickT">Pick your username</b><p>Driver is the starter name everyone gets. Choose your own so people can tell you apart.</p><input id="npPickIn" maxlength="14" placeholder="Your username" autocomplete="off" spellcheck="false" aria-label="Username"><div class="pe" id="npPickErr" role="alert"></div><button class="sbtn pri" id="npPickOk" type="button"><span>Save username</span></button></div>';
+  css.textContent += "\n#npPickName{position:fixed;inset:0;z-index:8000;display:grid;place-items:center;background:rgba(3,6,14,.72);padding:16px}#npPickName[hidden]{display:none}"
+    + "\n#npPickName .pk{width:min(400px,100%);background:rgba(9,15,32,.97);border:1px solid rgba(150,180,255,.3);border-radius:14px;padding:20px;display:grid;gap:10px;color:#e8eeff}"
+    + "\n#npPickName b{font-family:'Russo One',Impact,sans-serif;font-size:24px;font-weight:400}#npPickName p{margin:0;color:#9fb0d4;font-size:14px;line-height:1.4}"
+    + "\n#npPickName input{font:inherit;font-size:17px;padding:10px 12px;border-radius:8px;border:1px solid rgba(150,180,255,.35);background:rgba(0,0,0,.35);color:#fff}"
+    + "\n#npPickName .pe{min-height:18px;color:#ff8a7a;font-size:13px}";
+  document.body.append(pick);
+  const pickSave = () => {
+    const v = $("npPickIn").value, [, err] = nameProblem(v);
+    if (err) { setTxt("npPickErr", err); $("npPickIn").focus(); return; }
+    if (commitName(v)) { pick.hidden = true; setTxt("npPickErr", ""); }
+  };
+  $("npPickOk").onclick = pickSave;
+  $("npPickIn").addEventListener("keydown", e => { if (e.key === "Enter") pickSave(); });
+  // while it's up, keys only go to the box (the menu's Enter / Esc shortcuts don't fire behind it)
+  addEventListener("keydown", e => { if (!pick.hidden && (!pick.contains(e.target) || e.key === "Escape")) { e.stopImmediatePropagation(); if (e.key !== "Tab") e.preventDefault(); if (!pick.contains(e.target)) $("npPickIn").focus(); } }, true);
+  // the menu treats it as the top pop-up, so its focus handling keeps the cursor in the box
+  try { POPUPS.unshift("npPickName"); } catch {}
+  let pickWait = 0;
+  setInterval(() => {
+    const need = !profile.nameLock && npStarterName(me.name) && mode === "menu" && !isBanned;
+    if (!need) { pickWait = 0; if (!pick.hidden && !npStarterName(me.name)) pick.hidden = true; return; }
+    if (!pick.hidden) return;
+    const other = [...document.querySelectorAll('[aria-modal="true"], #nitropitch-terms-modal')].some(el => el !== pick && !el.hidden && el.getClientRects().length);
+    if (other) return;
+    if (++pickWait < 5) return;
+    $("npPickIn").value = ""; setTxt("npPickErr", ""); pick.hidden = false; setTimeout(() => $("npPickIn").focus(), 50);
+  }, 1000);
 
   // ---------- admin: Ban (with a reason) and Set name, next to Give XP ----------
   // messages show as a toast (the player popup has no admin message line) and in the admin panel
