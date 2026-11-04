@@ -66,4 +66,44 @@
     return r;
   };
   { const st = document.createElement("style"); st.textContent = ".np-isearch{display:grid;gap:6px;margin:6px 0}.np-ires{display:grid;gap:4px;max-height:240px;overflow-y:auto}.np-ihit{display:flex;justify-content:space-between;gap:10px;align-items:baseline;text-align:left;padding:7px 10px;border-radius:8px;border:1px solid rgba(150,180,255,.25);background:rgba(0,0,0,.3);color:#e8eeff;font:inherit;cursor:pointer}.np-ihit:hover,.np-ihit:focus{background:rgba(90,140,255,.22)}.np-ihit small{color:#9fb0d4;font-size:12px}.np-ires>small{color:#9fb0d4}"; document.head.append(st); }
+  // ---------- search boxes: players in Give items, the Players online list, and the admin's Players / Online now tabs ----------
+  const npFind = (ph, onIn) => { const q = document.createElement("input"); q.type = "search"; q.className = "t np-find"; q.placeholder = ph; q.autocomplete = "off"; q.spellcheck = false; q.setAttribute("aria-label", ph); q.addEventListener("input", () => onIn(q.value.trim().toLowerCase())); return q; };
+  const hasTxt = (el, t) => !t || String(el && el.textContent || "").toLowerCase().includes(t);
+  const adQ = { players: "", online: "" };
+  const ra2 = renderAdmin;
+  renderAdmin = async function () {
+    const r = await ra2.apply(this, arguments);
+    try {
+      const body = $("adBody"); if (!body || body.querySelector(".np-find")) return r;
+      if (adTab === "give") {
+        // the player menu: typing narrows it to matching names and picks the first one
+        const who = body.querySelector(".ad-give select"); if (!who) return r;
+        const q = npFind("Search players", t => {
+          let first = null;
+          for (const o of who.options) { if (!o.value) continue; const ok = hasTxt(o, t); o.hidden = !ok; if (ok && !first) first = o; }
+          if (t && first) who.value = first.value; else if (t) who.value = "";
+        });
+        const lab = who.closest("label") || who; lab.parentNode.insertBefore(q, lab);
+      } else if (adTab === "players") {
+        const t = body.querySelector("table"); if (!t) return r;
+        const apply = x => { adQ.players = x; for (const tr of t.rows) { if (!tr.cells.length || tr.cells[0].tagName === "TH" || tr.cells[0].colSpan === 7) continue; const ok = hasTxt(tr.cells[0], x), g = tr.nextElementSibling; tr.classList.toggle("np-hide", !ok); if (g && g.cells[0] && g.cells[0].colSpan === 7 && !ok) g.hidden = true; } };
+        const q = npFind("Search players by name", apply); q.value = adQ.players; body.insertBefore(q, t); if (adQ.players) apply(adQ.players);
+      } else if (adTab === "online") {
+        const apply = x => { adQ.online = x; for (const d of body.querySelectorAll(":scope > .pm")) { const ok = hasTxt(d.querySelector(".who"), x), g = d.nextElementSibling; d.classList.toggle("np-hide", !ok); if (g && g.npUid && !ok) g.hidden = true; } };
+        const q = npFind("Search online players", apply); q.value = adQ.online; body.prepend(q); if (adQ.online) apply(adQ.online);
+      }
+    } catch {}
+    return r;
+  };
+  // the Players online list re-draws whenever someone comes or goes, so the search is applied again after each re-draw
+  { const ol = $("onlineList");
+    if (ol) {
+      let olQ = "";
+      const apply = () => { for (const row of ol.querySelectorAll(".pm.ol")) row.classList.toggle("np-hide", !hasTxt(row.querySelector(".who b") || row.querySelector(".who"), olQ)); };
+      const q = npFind("Search players", x => { olQ = x; apply(); });
+      q.style.cssText = "margin:8px 10px 4px;width:calc(100% - 20px);box-sizing:border-box";
+      ol.parentNode.insertBefore(q, ol);
+      new MutationObserver(() => { if (olQ) apply(); }).observe(ol, { childList: true });
+    } }
+  { const st = document.createElement("style"); st.textContent = ".np-hide{display:none!important}.np-find{display:block;width:100%;box-sizing:border-box;margin:4px 0 8px;padding:8px 10px;border-radius:8px;border:1px solid rgba(150,180,255,.35);background:rgba(0,0,0,.35);color:#fff;font:inherit}"; document.head.append(st); }
 })();
