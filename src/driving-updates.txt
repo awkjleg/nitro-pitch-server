@@ -109,7 +109,8 @@ const NPDrive = (() => {
     // Orbit in elevation as well as azimuth: the car stays between the
     // camera and an aerial ball instead of falling beneath the screen.
     const elevation=rear?0:Math.atan2(b.y-c.y,Math.max(flat,0.001));
-    const targetPitch=clamp(elevation,-1.05,1.25);
+    // Rocket League style: the rig tilts with the ball, but never so far that your car leaves the screen.
+    const targetPitch=clamp(elevation,-0.6,0.72);
     if(!active)orbitPitch=targetPitch;
     else orbitPitch+=(targetPitch-orbitPitch)*(1-Math.exp(-12*dt));
     const distance=frame.dist*UU*pull;
@@ -131,10 +132,25 @@ const NPDrive = (() => {
       if(delta.lengthSq()<1e-8)delta.copy(behind);camPos.copy(b).addScaledVector(delta.normalize(),clearance);constrain(camPos,c,onWall);
     }
     const fov=frame.fov;
-    const direction=aim(b,c,rigUp,fov,innerWidth/Math.max(1,innerHeight));
-    // Respect the saved angle, while retaining the ball inside the safe frame.
+    // Ball cam like Rocket League: the camera is a rig fixed behind your car that swings round (and tilts) to face the
+    // ball. It looks along the rig, at a point a little past your car, so your car keeps the same spot on screen (low
+    // centre) and the ball shows up beyond it; it no longer swings its aim onto the ball, which slid your car off screen.
+    const direction=view.copy(behind).multiplyScalar(-Math.cos(orbitPitch)).addScaledVector(UP,Math.sin(orbitPitch));
+    probeN.copy(c).addScaledVector(direction,distance*0.9).addScaledVector(UP,frame.height*UU*(0.35-0.45*Math.max(0,orbitPitch)));
+    direction.subVectors(probeN,camPos);if(direction.lengthSq()<1e-8)direction.copy(behind).negate();direction.normalize();
     axis.crossVectors(direction,UP);
-    if(axis.lengthSq()>1e-8){direction.applyAxisAngle(axis.normalize(),clamp(settings.angle,-15,0)*Math.PI/180);camLook.copy(camPos).addScaledVector(direction,Math.max(10,camPos.distanceTo(b)));}
+    if(axis.lengthSq()>1e-8)direction.applyAxisAngle(axis.normalize(),clamp(settings.angle,-15,0)*Math.PI/180);
+    // The ball never leaves the screen: if it would (high overhead), turn the view only as far as needed to keep it in.
+    ballDir.subVectors(b,camPos);const ballDist=ballDir.length();
+    if(ballDist>1e-6){
+      ballDir.divideScalar(ballDist);
+      const halfV=fov*Math.PI/360,halfH=Math.atan(Math.tan(halfV)*Math.max(0.1,innerWidth/Math.max(1,innerHeight)));
+      const allowed=Math.max(0.05,Math.min(halfV,halfH)*0.7-Math.asin(clamp(BR/Math.max(BR+0.01,ballDist),0,0.99)));
+      const off=Math.acos(clamp(direction.dot(ballDir),-1,1));
+      axis.crossVectors(direction,ballDir);
+      if(off>allowed&&axis.lengthSq()>1e-10)direction.applyAxisAngle(axis.normalize(),off-allowed);
+    }
+    camLook.copy(camPos).addScaledVector(direction,10);
     screenUp(direction,rigUp,dt,!active||!ride);active=true;
     camera.position.copy(camPos);camera.lookAt(camLook);
     // Shake is optional, but must never undo wall collision avoidance.

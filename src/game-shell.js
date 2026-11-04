@@ -24,7 +24,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111031;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111032;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -96,7 +96,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.33\",\n  \"title\": \"Update 5.33: Ranked saves every match\",\n  \"notes\": [\n    \"Fixed: ranked matches against bots now count for your rank and MMR, online and offline.\",\n    \"Fixed: match results (goals, wins, XP) no longer get lost while waiting for the other team. If a match ever can't be saved, you'll now see why.\",\n    \"Fixed: in private matches, rejoining no longer makes the ball snap back or goals not count.\",\n    \"Fixed: clan member lists load again.\",\n    \"Free play starts right away, with no 3-2-1 countdown.\",\n    \"Leaving an online ranked match early counts as a loss, also when the other team is bots.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.34\",\n  \"title\": \"Update 5.34: Ball cam fixed\",\n  \"notes\": [\n    \"Ball cam works like you expect again: your car stays in the same spot on screen and the camera swings behind it to face the ball.\",\n    \"High balls no longer push your car off the bottom of the screen, and the ball always stays in view.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
