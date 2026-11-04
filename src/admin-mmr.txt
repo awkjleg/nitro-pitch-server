@@ -1,0 +1,37 @@
+// Admin: give or take away MMR, in the same panel as Give XP. The server (/api/progress admin-mmr, admin account
+// only) changes the player's rating at once; their game shows "+50 MMR in Doubles from the admin" next time it loads.
+(() => {
+  const api = window.NPProgressAPI, PL = [[1, "Duel 1v1"], [2, "Doubles 2v2"], [3, "Standard 3v3"]];
+  const xg = xpGiver;
+  xpGiver = function (uid, name) {
+    const box = xg(uid, name);
+    const row = h("div", "xp-give mmr-give");
+    const pl = document.createElement("select"); pl.className = "t"; for (const [n, t] of PL) pl.append(new Option(t, n));
+    const amt = document.createElement("input"); amt.type = "number"; amt.min = "1"; amt.max = "4000"; amt.step = "1"; amt.placeholder = "MMR"; amt.className = "t";
+    const note = document.createElement("input"); note.type = "text"; note.maxLength = 120; note.placeholder = "Message (optional)"; note.className = "t note";
+    const give = async (v, sign) => {
+      const n = Math.floor(Math.abs(+v)), p = PL.find(x => x[0] === +pl.value);
+      if (!(n >= 1 && n <= 4000)) { adMsg("Pick an MMR amount from 1 to 4000."); return; }
+      if (!confirm((sign > 0 ? "Give +" : "Remove ") + n + " MMR " + (sign > 0 ? "to " : "from ") + name + " in " + p[1] + "?")) return;
+      try {
+        const r = await api.call("admin-mmr", { id: crypto.randomUUID(), uid, pl: p[0], amount: n * sign, note: note.value.trim() });
+        const t = name + " is now at " + r.mmr + " MMR in " + p[1]; toast(t); adMsg(t + "."); amt.value = ""; note.value = "";
+      } catch (e) { adMsg((e && e.message) || "Couldn't change the MMR"); }
+    };
+    row.append(h("b", "", "MMR:"), pl, adBtn("+50", () => give(50, 1), true), adBtn("+100", () => give(100, 1), true), adBtn("−50", () => give(50, -1)), amt, adBtn("Give", () => give(amt.value, 1), true), adBtn("Remove", () => give(amt.value, -1)), note);
+    const wrap = h("div", ""); wrap.append(box, row);
+    Object.defineProperty(wrap, "hidden", { get: () => box.hidden, set: v => { box.hidden = v; row.hidden = v; } });
+    return wrap;
+  };
+  // the player's side: show the admin's MMR change once
+  const sp = sanitizeProfile;
+  sanitizeProfile = function (s) { const o = sp(s); if (s && s.mmrGift && typeof s.mmrGift === "object") o.mmrGift = { amount: s.mmrGift.amount | 0, pl: s.mmrGift.pl | 0, note: String(s.mmrGift.note || "").slice(0, 120), at: +s.mmrGift.at || 0 }; return o; };
+  setInterval(() => {
+    const g = profile.mmrGift; if (!g || !g.at) return;
+    let seen = 0; try { seen = +localStorage.getItem("np-mmr-seen") || 0; } catch {}
+    if (g.at <= seen) return;
+    try { localStorage.setItem("np-mmr-seen", String(g.at)); } catch {}
+    const p = PL.find(x => x[0] === g.pl);
+    toast((g.amount > 0 ? "+" + g.amount : String(g.amount)) + " MMR in " + (p ? p[1] : "ranked") + " from the admin" + (g.note ? ": " + g.note : ""));
+  }, 3000);
+})();

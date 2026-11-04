@@ -160,3 +160,11 @@ test('drops: about one in four opens as a painted car and never repeats one you 
  for(let k=0;k<60;k++){r=await f.call('drop',{id:'d'+k,index:0,rev:r.rev});assert.equal(r.status,200);if(r.got.kind==='body'&&r.got.i>=catalog.paintedBase){painted++;assert(catalog.body[r.got.i].painted);assert(r.profile.own.body.includes(r.got.i));}}
  const own=r.profile.own.body;assert.equal(new Set(own).size,own.length);assert(painted>=4&&painted<=30,'painted '+painted);
 });
+test('admin MMR: only the admin can change it; it clamps and moves the peak once placed',async()=>{
+ const f=await fixture({dlv:1,rk:[{m:600,p:8,w:5,l:3,pk:5}]});await f.call('load');await f.call('load',{},'admin');
+ assert.equal((await f.call('admin-mmr',{id:'m0',uid:'a',pl:1,amount:100},'a')).status,403);
+ let r=await f.call('admin-mmr',{id:'m1',uid:'a',pl:1,amount:300,note:'gg'},'admin');assert.equal(r.status,200);assert.equal(r.mmr,900);
+ const a=await f.call('load');assert.equal(a.profile.rk[0].m,900);assert(a.profile.rk[0].pk>=Ranked.info(900).idx);assert.equal(a.profile.mmrGift.amount,300);
+ r=await f.call('admin-mmr',{id:'m2',uid:'a',pl:1,amount:-4000},'admin');assert.equal(r.mmr,0);
+ assert.equal((await f.call('admin-mmr',{id:'m3',uid:'a',pl:4,amount:10},'admin')).status,400);
+});

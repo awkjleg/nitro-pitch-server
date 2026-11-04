@@ -152,6 +152,16 @@ export class Progress extends DurableObject{
     for(const x of picked.filter(x=>!x.drop))p.own[x.kind]=p.own[x.kind].filter(i=>i!==x.i);
     const pool=E.dropPool(r+1);let got;if(pool.length){got={...pool[crypto.getRandomValues(new Uint32Array(1))[0]%pool.length],rar:r+1};p.own[got.kind].push(got.i);}else{E.addDrop(r+1);got={drop:r+1};}result={got,picked};
    }
+  }else if(b.action==='admin-mmr'){
+   // the admin gives (or takes away) MMR in one ranked playlist; it lands in that player's account straight away
+   if(uid!==ADMIN_UID)throw new ApiError('Only the admin can change MMR',403);
+   const to=String(b.uid||''),pl=Number(b.pl),amount=Math.trunc(Number(b.amount));
+   if(!ID.test(to)||![1,2,3].includes(pl)||!Number.isFinite(amount)||!amount||Math.abs(amount)>4000)throw new ApiError('Pick a playlist and an MMR amount from 1 to 4000');
+   const q=to===uid?p:await this.ctx.storage.get('p:'+to);if(!q)throw new ApiError("That player hasn't opened the game since accounts moved to the new server",404);
+   const r=q.rk[pl-1];r[0]=clamp(r[0]+amount,0,4000);if(r[1]>=5){r[4]=Math.max(r[4],Ranked.info(r[0]).idx);q.rt=Math.max(q.rt,Ranked.info(r[0]).tier);}
+   q.mmrGift={amount,pl,mmr:r[0],note:String(b.note||'').slice(0,120),at:now};
+   if(q!==p){q.rev=(q.rev||0)+1;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+to,q);await tx.put('lb:'+to,publicRow(q,to));await tx.put(receiptKey,{action:b.action,result:{mmr:r[0]},at:now});});return response({mmr:r[0]});}
+   result={mmr:r[0]};
   }else if(b.action==='holiday-drop'){const got=openChristmasDrop(p,catalog,()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296,now);if(!got)throw new ApiError('You have no Christmas Drops to open',409);result={got};
   }else if(b.action==='advent'){const got=claimAdvent(p,catalog,now,b.day);if(!got)throw new ApiError('That door can\u2019t be opened',409);result=got;
   }else if(b.action==='reroll'){if(!economy(p,now).rerollQuest(b.index))throw new ApiError('You have used today’s reroll',409);

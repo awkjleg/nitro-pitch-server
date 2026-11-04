@@ -1,0 +1,21 @@
+// Menu music: real songs (public/music/*.mp3) instead of the built-in synth loop. The game's sound engine calls
+// npMenuTracks from its music tick with its own music gain, so the Settings music volume, the mute button and the
+// fade-out during matches all still apply. If the songs can't load, the old synth loop plays instead.
+const NP_TRACKS = ["/music/nitro-pitch-1.mp3", "/music/nitro-pitch-2.mp3"];
+let npTrackEl = null, npTrackFailed = false, npTrackN = Math.floor(Math.random() * NP_TRACKS.length);
+function npMenuTracks(ctx, dest, playing) {
+  if (npTrackFailed) return false;
+  if (!npTrackEl) {
+    try {
+      const a = new Audio(); a.preload = "auto"; a.crossOrigin = "anonymous"; a.src = NP_TRACKS[npTrackN];
+      a.onended = () => { npTrackN = (npTrackN + 1) % NP_TRACKS.length; a.src = NP_TRACKS[npTrackN]; a.play().catch(() => {}); };
+      a.onerror = () => { npTrackFailed = true; try { a.pause(); } catch {} };
+      ctx.createMediaElementSource(a).connect(dest);
+      npTrackEl = a;
+    } catch { npTrackFailed = true; return false; }
+  }
+  // keep playing while the menus are open; pause (after the fade) when music is off or a match is on
+  if (playing) { if (npTrackEl.paused) npTrackEl.play().catch(() => {}); clearTimeout(npTrackEl.stopT); npTrackEl.stopT = 0; }
+  else if (!npTrackEl.paused && !npTrackEl.stopT) npTrackEl.stopT = setTimeout(() => { npTrackEl.pause(); npTrackEl.stopT = 0; }, 1500);
+  return true;
+}

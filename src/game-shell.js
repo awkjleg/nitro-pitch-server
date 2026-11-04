@@ -13,6 +13,8 @@ import seasonRewards from "./season-rewards.txt";
 import seasonTools from "./season-tools.txt";
 import snowdrift from "./snowdrift.txt";
 import paintsUi from "./paints.txt";
+import adminMmr from "./admin-mmr.txt";
+import menuMusic from "./menu-music.txt";
 import sideswipe from "./sideswipe.txt";
 import sideswipeMenu from "./sideswipe-menu.txt";
 // The original game is a single prebuilt HTML asset. Keep the small, reviewed
@@ -25,7 +27,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111036;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111037;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -97,7 +99,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.38\",\n  \"title\": \"Update 5.38: Painted cars are their own cars\",\n  \"notes\": [\n    \"Painted cars are now separate cars in the Garage: a Titanium White Octane is its own car, next to the normal Octane, with white trim.\",\n    \"Pick any colour for your car's body again in the Paint tab, on normal and painted cars alike.\",\n    \"Painted cars you already had are in your Body tab. One drop in four is a painted car.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.39\",\n  \"title\": \"Update 5.39: New menu music\",\n  \"notes\": [\n    \"New menu music: two original tracks play in the menus and fade out when a match starts.\",\n    \"Change the music volume in Settings, or mute it with the sound button.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -182,6 +184,10 @@ const patches = [
   {
     "before": "</head>",
     "after": "<script src=\"/progress-api.js\"></script>\n<link rel=\"stylesheet\" href=\"/game-polish.css\">\n<link rel=\"stylesheet\" href=\"/mobile.css\">\n</head>"
+  },
+  {
+    "before": "  function musicTick() {\n    if (!ctx || !musicOn || muted || musicVol <= 0 || ctx.state !== \"running\") { if (ctx) musicNext = ctx.currentTime + 0.05; return; }",
+    "after": "  function musicTick() {\n    if (typeof npMenuTracks === \"function\" && ctx && musicGain && npMenuTracks(ctx, musicGain, musicOn && !muted && musicVol > 0 && ctx.state === \"running\")) return;\n    if (!ctx || !musicOn || muted || musicVol <= 0 || ctx.state !== \"running\") { if (ctx) musicNext = ctx.currentTime + 0.05; return; }"
   },
   {
     "before": "function openDropUI(k) {",
@@ -449,5 +455,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools, snowdrift, paintsUi, "/* NP2D-START (website only: the CrazyGames build removes this block) */", sideswipe, sideswipeMenu, "/* NP2D-END */"].join("\n"));
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools, snowdrift, paintsUi, adminMmr, menuMusic, "/* NP2D-START (website only: the CrazyGames build removes this block) */", sideswipe, sideswipeMenu, "/* NP2D-END */"].join("\n"));
 }
