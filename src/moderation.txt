@@ -96,4 +96,20 @@ body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed #a
     Object.defineProperty(wrap, "hidden", { get: () => box.hidden, set: v => { box.hidden = v; row.hidden = v; } });
     return wrap;
   };
+  // a red "Ban" button right next to Give XP (player popup from a name click, and the admin panel's Online list):
+  // it opens the tools and puts the cursor in the ban reason box
+  const banBtn = wrap => { const b = adBtn("Ban", () => { wrap.hidden = false; const r = wrap.querySelector(".mod-give .note"); if (r) { r.scrollIntoView({ block: "nearest" }); r.focus(); } }); b.classList.add("np-ban-btn"); return b; };
+  css.textContent += "\n.np-ban-btn{background:#c0392b!important;color:#fff!important;border-color:#e74c3c!important}";
+  const ss = showStats;
+  showStats = function (e) {
+    const r = ss.apply(this, arguments);
+    try { const ad = $("spAdmin"), row = ad && ad.querySelector(".row"), m = ad && ad.querySelector(".mod-give"); if (row && m && !row.querySelector(".np-ban-btn")) row.append(banBtn(m.parentNode)); } catch {}
+    return r;
+  };
+  const ra = renderAdmin;
+  renderAdmin = async function () {
+    const r = await ra.apply(this, arguments);
+    try { for (const d of document.querySelectorAll("#adminPop .pm")) { const g = d.nextElementSibling; if (g && g.querySelector(":scope > .mod-give") && !d.querySelector(".np-ban-btn")) d.append(" ", banBtn(g)); } } catch {}
+    return r;
+  };
 })();
