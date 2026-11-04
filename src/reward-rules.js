@@ -77,6 +77,49 @@ export const Ranked = (() => {
 return {PLACEMENTS,START,TIERS,RANKS,info,delta,xpMult};
 })();
 
+// Nitro 2D's own ladder (ranked playlists 4, 5 and 6): six tiers of five ranks (Bronze I ... Champion V, 55 MMR each, no
+// divisions), then Legend from 1650 with a 200-MMR progress bar. Three placement matches (3D has five); otherwise the same
+// start, Elo change and XP table as Ranked.
+// For shared progression (p.rt, rank-tier drops, the XP multiplier) a 2D tier counts as 3D tier sharedTier(t):
+// Bronze..Champion = 0..5, Legend = 6.
+export const Ranked2D = (() => {
+  const PLACEMENTS = 3, START = Ranked.START, LEGEND_CAP = 200, STEP = 55, PER_TIER = 5;
+  const ROMAN = ["", "I", "II", "III", "IV", "V"];
+  const TIERS = [
+    { name: "Bronze", color: "#d9925a", dark: "#5a2c10" },
+    { name: "Silver", color: "#c9d2df", dark: "#3a4352" },
+    { name: "Gold", color: "#ffcf4a", dark: "#6a4504" },
+    { name: "Platinum", color: "#5fe3d8", dark: "#0d4a52" },
+    { name: "Diamond", color: "#5cb8ff", dark: "#123a8a" },
+    { name: "Champion", color: "#b77cff", dark: "#3a1478" },
+    { name: "Legend", color: "#f2f6ff", dark: "#5d6a86" },
+  ];
+  TIERS[-1] = { name: "Unranked", color: "#8d9bbd", dark: "#2a3142" };
+  const LEGEND = (TIERS.length - 1) * PER_TIER;           // idx 30
+  const MINS = Object.freeze(Array.from({ length: LEGEND + 1 }, (_, i) => i * STEP));   // ... 1595, Legend 1650
+  const TOP = MINS.length - 1;
+  const RANKS = MINS.map((min, i) => {
+    const tier = i === TOP ? TIERS.length - 1 : Math.floor(i / PER_TIER), lvl = i === TOP ? 0 : i % PER_TIER + 1;
+    return Object.freeze({ name: TIERS[tier].name + (lvl ? " " + ROMAN[lvl] : ""), tier, lvl, min });
+  });
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  const num = (v, d) => (typeof v === "number" || typeof v === "string") && v !== "" && Number.isFinite(+v) ? +v : d;
+  // lvl is 1-5 (0 for Legend); there are no divisions, so div is 0 and frac is the progress through the rank
+  function info(mmr) {
+    mmr = num(mmr, START);
+    let idx = 0;
+    while (idx < TOP && mmr >= MINS[idx + 1]) idx++;
+    const r = RANKS[idx], min = r.min, end = idx === TOP ? min + LEGEND_CAP : MINS[idx + 1];
+    return { idx, name: r.name, tier: r.tier, tierName: TIERS[r.tier].name, lvl: r.lvl, div: 0, divName: "",
+      frac: clamp((mmr - min) / (end - min), 0, 1), min, max: idx === TOP ? end : end - 1, dmin: min, dmax: end };
+  }
+  // Ranked.delta with 2D placements: K = 40 for the first PLACEMENTS matches, then 20
+  const delta = (teamAvg, oppAvg, won, placementsPlayed) =>
+    Ranked.delta(teamAvg, oppAvg, won, num(placementsPlayed, PLACEMENTS) < PLACEMENTS ? 0 : Ranked.PLACEMENTS);
+  const sharedTier = t => { t = Math.floor(num(t, -1)); return t < 0 ? -1 : Math.min(t, TIERS.length - 1); };
+  return { PLACEMENTS, START, TIERS, RANKS, MINS, info, delta, xpMult: Ranked.xpMult, sharedTier };
+})();
+
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const fin=Number.isFinite; const int=(v,a,b)=>clamp(Math.floor(v),a,b);
 const MAXLV=100;

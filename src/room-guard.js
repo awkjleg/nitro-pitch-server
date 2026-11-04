@@ -15,13 +15,21 @@ export function validGame(g){
  return Object.entries(g.st).every(([k,s])=>/^[A-Za-z0-9_-]{1,80}$/.test(k)&&Array.isArray(s)&&s.length===6&&s.every(x=>Number.isInteger(x)&&x>=0&&x<=100000))&&(!g.bt||Array.isArray(g.bt)&&g.bt.length<=6);
 }
 export function validHit(h){return h==null||(typeof h==='object'&&Number.isInteger(h.n)&&h.n>=0&&['p','v'].every(k=>Array.isArray(h[k])&&h[k].length===3&&h[k].every(x=>finite(x,k==='p'?350:180)))&&(!h.w||Array.isArray(h.w)&&h.w.length===3&&h.w.every(x=>finite(x,100))));}
-export function rankedRules(g,room){return /^np-m-/.test(room||'')&&g.rk===1&&g.mm===1&&[1,2,3].includes(g.pl)&&Array.isArray(g.mut)&&[0,1,2,3,5,6].every(i=>g.mut[i]===0);}
+// Nitro 2D (side-view) matches set the game-mode slot mut[6] to 6. Ranked playlists 1-3 (Duel/Doubles/Standard) are 3D
+// only (mut[6] 0); 4 (2D Duel, 1v1), 5 (2D Doubles, 2v2) and 6 (2D Standard, 3v3) are 2D only.
+export const MODE_2D=6,PLAYLISTS=[1,2,3,4,5,6],PLAYLIST_SIZE={1:1,2:2,3:3,4:1,5:2,6:3};
+export const is2D=mut=>Array.isArray(mut)&&mut[6]===MODE_2D;
+// expected match length in seconds: Nitro 2D matches are 2 minutes (their mut[0] stays 0); 3D uses MATCH_SECONDS[mut[0]]
+export const matchSeconds=mut=>is2D(mut)?120:Array.isArray(mut)?MATCH_SECONDS[mut[0]]:undefined;
+// the playlist matches the mode (and the team size, when the match reports it)
+export function playlistFits(pl,mut,md){return PLAYLISTS.includes(pl)&&Array.isArray(mut)&&mut[6]===(pl>=4?MODE_2D:0)&&(pl<=3||md==null||md===PLAYLIST_SIZE[pl]);}
+export function rankedRules(g,room){return /^np-m-/.test(room||'')&&g.rk===1&&g.mm===1&&playlistFits(g.pl,g.mut,g.md)&&[0,1,2,3,5].every(i=>g.mut[i]===0);}
 export function resultEvidence(record,uid,now=Date.now()){
  if(!record||!record.final||record.invalid||now-record.ended>86400000)throw new Error('Match result is not ready');
  const member=record.roster.find(x=>x.uid===uid);if(!member)throw new Error('You were not in this match');
  if(record.ended-record.started<20000)throw new Error('Match was too short for rewards');
  const g=record.final,elapsed=(record.ended-record.started)/1000;
- const limit=MATCH_SECONDS[g.mut[0]]??180;
+ const limit=matchSeconds(g.mut)??180;
  if(!g.ot&&g.tl>1&&!(g.rk&&Math.abs(g.s[0]-g.s[1])>=5)&&!record.forfeit)throw new Error('Match did not finish normally');
  if(!g.ot&&g.tl<=1&&elapsed+20<limit)throw new Error('Match clock did not match the server');
  const winner=g.s[0]===g.s[1]?-1:g.s[0]>g.s[1]?0:1;
@@ -33,5 +41,5 @@ export function resultEvidence(record,uid,now=Date.now()){
  const said=x=>{const k=x.uid||'g:'+x.id;return record.acks?.includes(k)||record.departed?.includes(k);};
  const confirmed=bothTeams&&[0,1].every(t=>record.roster.some(x=>x.team===t&&said(x)));
  if(rankedRules(g,record.room)&&bothTeams&&!confirmed&&now-record.ended<90000)throw new Error('Waiting for both teams to confirm the result');
- return {mid:record.mid,score:g.s,st:stats,won:winner===member.team,mvp:Object.entries(g.st).sort((a,b)=>b[1][0]-a[1][0]||a[0].localeCompare(b[0]))[0]?.[0]===member.id,kind:g.mm?(g.rk?'ranked':g.x>=0?'extra':'casual'):'private',ranked:rankedRules(g,record.room)&&confirmed,playlist:g.pl,roster:record.roster,team:member.team,extra:g.mut[6]>0,elapsed,online:true};
+ return {mid:record.mid,score:g.s,st:stats,won:winner===member.team,mvp:Object.entries(g.st).sort((a,b)=>b[1][0]-a[1][0]||a[0].localeCompare(b[0]))[0]?.[0]===member.id,kind:g.mm?(g.rk?'ranked':g.x>=0&&!is2D(g.mut)?'extra':'casual'):'private',ranked:rankedRules(g,record.room)&&confirmed,playlist:g.pl,roster:record.roster,team:member.team,extra:g.mut[6]>0&&!is2D(g.mut),d2:is2D(g.mut),elapsed,online:true};
 }
