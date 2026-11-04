@@ -30,7 +30,8 @@ const NPPaints = (() => {
     const cv = document.createElement("canvas"); cv.width = src.width; cv.height = src.height;
     const g = cv.getContext("2d"), s = src.width / 512; g.drawImage(src, 0, 0);
     for (const [i, f] of TRIM_CELLS) { g.fillStyle = "#" + new THREE.Color(colour).multiplyScalar(f).getHexString(); g.fillRect((i % 32) * 16 * s, Math.floor(i / 32) * 16 * s, 16 * s, 16 * s); }
-    const t = base.map.clone(); t.image = cv; t.needsUpdate = true;
+    // (a cloned texture shares its image "source" with the original: give the copy its own, or every car's trim changes)
+    const t = base.map.clone(); if (THREE.Source) t.source = new THREE.Source(cv); else t.image = cv; t.needsUpdate = true;
     const m = base.clone(); m.map = t; m.name = "carlib-multi-trim"; trimMats.set(k, m); return m;
   }
   const applyTrim = (group, colour) => group.traverse(o => { if (o.isMesh && o.material && o.material.name === "carlib-multi") o.material = trimMat(o.material, colour); });
