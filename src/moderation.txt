@@ -65,20 +65,27 @@ body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed #a
   setInterval(() => { const n = $("nick"); if (!n) return; const lock = !!profile.nameLock; n.readOnly = lock; n.classList.toggle("np-locked", lock); n.title = lock ? "Your name was set by the admin" : ""; }, 1500);
 
   // ---------- admin: Ban (with a reason) and Set name, next to Give XP ----------
+  // messages show as a toast (the player popup has no admin message line) and in the admin panel
+  const npSay = t => { try { toast(t); } catch {} try { adMsg(t); } catch {} };
+  // Firebase's bans list is what actually blocks the account, so that goes first; the reason for the jail screen is
+  // saved after, and a failure there doesn't undo the ban
+  async function npBan(uid, name, why) {
+    if (!confirm("Ban " + name + "? They'll see a jail screen with this reason:\n\n" + why)) return false;
+    const A = window.npAccounts;
+    try { await A.admin.ban(uid, name); } catch (e) { npSay("Couldn't ban " + name + ": " + ((e && e.message) || "error")); return false; }
+    try { await firebase.firestore().collection("bans").doc(String(uid)).set({ reason: why }, { merge: true }); } catch {}
+    try { await api.call("admin-ban", { id: crypto.randomUUID(), uid, on: true, reason: why }); } catch {}
+    npSay("Banned " + name + ": " + why);
+    return true;
+  }
   const xg = xpGiver;
   xpGiver = function (uid, name) {
     const box = xg(uid, name), A = adA();
     const row = h("div", "xp-give mod-give");
     const reason = document.createElement("input"); reason.type = "text"; reason.maxLength = 200; reason.placeholder = "Ban reason (shown to them)"; reason.className = "t note";
     const ban = adBtn("Ban", async () => {
-      const why = reason.value.trim(); if (!why) { adMsg("Write a reason for the ban."); return; }
-      if (!confirm("Ban " + name + "? They'll see a jail screen with this reason:\n\n" + why)) return;
-      try {
-        await api.call("admin-ban", { id: crypto.randomUUID(), uid, on: true, reason: why });
-        await A.admin.ban(uid, name);
-        try { await firebase.firestore().collection("bans").doc(String(uid)).set({ reason: why }, { merge: true }); } catch {}
-        toast("Banned " + name); adMsg("Banned " + name + ": " + why); reason.value = "";
-      } catch (e) { adMsg((e && e.message) || "Couldn't ban them"); }
+      const why = reason.value.trim(); if (!why) { npSay("Write a reason for the ban first."); reason.focus(); return; }
+      if (await npBan(uid, name, why)) reason.value = "";
     }, true);
     const unban = adBtn("Unban", async () => {
       if (!confirm("Unban " + name + "?")) return;
@@ -92,24 +99,35 @@ body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed #a
     }, true);
     const unlock = adBtn("Unlock name", async () => { try { await api.call("admin-name", { id: crypto.randomUUID(), uid, name: null }); toast("Name unlocked"); adMsg(name + " can change their name again."); } catch (e) { adMsg((e && e.message) || "Couldn't unlock the name"); } });
     row.append(h("b", "", "Moderate:"), reason, ban, unban, nm, setName, unlock);
-    const wrap = h("div", ""); wrap.append(box, row);
+    const wrap = h("div", ""); wrap.append(box, row); wrap.npUid = uid; wrap.npName = name;
     Object.defineProperty(wrap, "hidden", { get: () => box.hidden, set: v => { box.hidden = v; row.hidden = v; } });
     return wrap;
   };
   // a red "Ban" button right next to Give XP (player popup from a name click, and the admin panel's Online list):
   // it opens the tools and puts the cursor in the ban reason box
-  const banBtn = wrap => { const b = adBtn("Ban", () => { wrap.hidden = false; const r = wrap.querySelector(".mod-give .note"); if (r) { r.scrollIntoView({ block: "nearest" }); r.focus(); } }); b.classList.add("np-ban-btn"); return b; };
-  css.textContent += "\n.np-ban-btn{background:#c0392b!important;color:#fff!important;border-color:#e74c3c!important}";
+  const banBtn = (uid, name) => { const b = adBtn("Ban", async () => {
+    const why = (prompt("Why are you banning " + name + "? (they'll see this)") || "").trim();
+    if (!why) { if (why === "") npSay("Write a reason to ban " + name + "."); return; }
+    if (await npBan(uid, name, why)) { const sp = $("statsPop"); if (sp) sp.hidden = true; }
+  }); b.classList.add("np-ban-btn"); return b; };
+  css.textContent += "\n.np-ban-btn{background:#c0392b!important;color:#fff!important;border-color:#e74c3c!important}"
+    + "\n#statsPop .sp-card{position:relative;max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain}"
+    + "\n#statsPop .np-x{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(150,180,255,.35);background:rgba(0,0,0,.35);color:#e8eeff;font-size:20px;line-height:1;cursor:pointer;z-index:2}"
+    + "\n#statsPop .np-x:hover{background:rgba(255,255,255,.12)}";
+  // an X to close the player popup, and a click outside it closes it too
+  { const sp = $("statsPop"), card = sp && sp.querySelector(".sp-card");
+    if (card) { const x = document.createElement("button"); x.type = "button"; x.className = "np-x"; x.setAttribute("aria-label", "Close"); x.textContent = "×"; x.onclick = () => { sp.hidden = true; }; card.prepend(x);
+      sp.addEventListener("click", e => { if (e.target === sp) sp.hidden = true; }); } }
   const ss = showStats;
   showStats = function (e) {
     const r = ss.apply(this, arguments);
-    try { const ad = $("spAdmin"), row = ad && ad.querySelector(".row"), m = ad && ad.querySelector(".mod-give"); if (row && m && !row.querySelector(".np-ban-btn")) row.append(banBtn(m.parentNode)); } catch {}
+    try { const ad = $("spAdmin"), row = ad && ad.querySelector(".row"), m = ad && ad.querySelector(".mod-give"); if (row && m && !row.querySelector(".np-ban-btn")) row.append(banBtn(m.parentNode.npUid, m.parentNode.npName)); } catch {}
     return r;
   };
   const ra = renderAdmin;
   renderAdmin = async function () {
     const r = await ra.apply(this, arguments);
-    try { for (const d of document.querySelectorAll("#adminPop .pm")) { const g = d.nextElementSibling; if (g && g.querySelector(":scope > .mod-give") && !d.querySelector(".np-ban-btn")) d.append(" ", banBtn(g)); } } catch {}
+    try { for (const d of document.querySelectorAll("#adminPop .pm")) { const g = d.nextElementSibling; if (g && g.npUid && !d.querySelector(".np-ban-btn")) d.append(" ", banBtn(g.npUid, g.npName)); } } catch {}
     return r;
   };
 })();
