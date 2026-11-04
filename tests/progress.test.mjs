@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {catalog,Ranked,Ranked2D,economy,levelInfo} from '../src/reward-rules.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent,SNOW_START,ADVENT} from '../src/snowdrift.js';
 import {ApiError,reply} from '../src/firebase-auth.js';
+import * as Paints from '../src/paints.js';
 import {validCar,validGame,validHit,resultEvidence,MATCH_SECONDS,matchSeconds,PLAYLISTS,playlistFits,is2D} from '../src/room-guard.js';
 import {readFileSync} from 'node:fs';
 const source=(await readFile(new URL('../src/progress.js',import.meta.url),'utf8')).replace(/^import .*;$/gm,'').replaceAll('export ','');
@@ -13,7 +14,7 @@ async function fixture(raw={}){
  const clone=v=>v===undefined?undefined:structuredClone(v);
  const storage={get:async k=>clone(data.get(k)),put:async(k,v)=>data.set(k,clone(v)),list:async({prefix})=>new Map([...data].filter(([k])=>k.startsWith(prefix))),transaction:async fn=>{const snapshot=clone(data);try{return await fn(storage);}catch(e){data.clear();for(const[k,v]of snapshot)data.set(k,v);throw e;}}};
  const ctx={storage},env={ROOMS:{idFromName:x=>x,get:()=>({fetch:async()=>Response.json({mid:'online1',st:[200,1,0,0,1,0],score:[1,0],won:true,mvp:true,online:true,ranked:true,playlist:1,team:0,kind:'ranked',roster:[{uid:'a',team:0},{uid:'b',team:1}],elapsed:300})})}};
- const c=vm.createContext({MATCH_SECONDS,matchSeconds,PLAYLISTS,playlistFits,is2D,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,Ranked2D,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
+ const c=vm.createContext({MATCH_SECONDS,...Paints,matchSeconds,PLAYLISTS,playlistFits,is2D,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,Ranked2D,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
  vm.runInContext(source+'\nglobalThis.Progress=Progress;globalThis.cleanProfile=cleanProfile;',c);const ledger=new c.Progress(ctx,env);
  return {data,docs,env,ledger,advance:ms=>now+=ms,clean:c.cleanProfile,async call(action,b={},uid='a'){const response=await ledger.fetch(new Request('https://progress/action',{method:'POST',body:JSON.stringify({body:{action,...b},user:{uid,username:uid},token:'test'})}));return {status:response.status,...await response.json()};}};
 }
@@ -132,4 +133,29 @@ test('match lengths match the game: a 3-minute match counts, five ranked wins mo
 test('online: a normal 3-minute match passes the clock check',()=>{
  const r={room:'np-m-x',mid:'m',started:1000,ended:181000,roster:[{id:'a',uid:'ua',team:0},{id:'b',uid:'ub',team:1}],acks:['ua','ub'],final:{s:[2,1],st:{a:[150,1,0,0,1,0]},mut:[0,0,0,0,0,0,0],rk:1,pl:1,mm:1,tl:0,ot:false}};
  assert(resultEvidence(r,'ua',182000).ranked);
+});
+test('a bot-filled ranked match ended by the 5-goal mercy rule is saved (it used to be rejected as unfinished)',async()=>{
+ const f=await fixture({dlv:1});await f.call('load');
+ await f.call('session-start',{id:'s-mercy',mid:'mercy',mut:[0,0,0,0,0,0,0],rk:1,pl:1});
+ for(let i=0;i<9;i++){f.advance(10000);await f.call('session-tick',{id:'tm'+i,mid:'mercy'});}
+ const lost=await f.call('match',{id:'pay-mercy',mid:'mercy',score:[1,6],st:[150,1,0,0,2,0],mvp:false});
+ assert.equal(lost.status,200);assert(lost.result.rank.d<0);assert.equal(lost.profile.games,1);assert.equal(lost.profile.goals,1);
+ // too quick for that many goals, or no 5-goal lead: the full match length is still required
+ f.advance(30000);await f.call('session-start',{id:'s-fast',mid:'fast',mut:[0,0,0,0,0,0,0],rk:1,pl:1});f.advance(15000);await f.call('session-tick',{id:'tf',mid:'fast'});f.advance(10000);
+ assert.equal((await f.call('match',{id:'pay-fast',mid:'fast',score:[5,0],st:[500,5,0,0,5,0]})).status,422);
+ f.advance(30000);await f.call('session-start',{id:'s-close',mid:'close',mut:[0,0,0,0,0,0,0],rk:1,pl:1});for(let i=0;i<9;i++){f.advance(10000);await f.call('session-tick',{id:'tc'+i,mid:'close'});}
+ assert.equal((await f.call('match',{id:'pay-close',mid:'close',score:[4,0],st:[400,4,0,0,4,0]})).status,422);
+});
+test('painted car colours: a painted car you own shows its paint, anything else is team colour',async()=>{
+ const f=await fixture({dlv:1,pp:['body:0:14']});await f.call('load');
+ let v=await f.call('save',{profile:{body:0,paint:0xf4f6f8}});assert.equal(v.profile.paint,0xf4f6f8);
+ v=await f.call('save',{profile:{body:0,paint:0x123456}});assert.equal(v.profile.paint,0xf4f6f8);       // a free pick is ignored
+ v=await f.call('save',{profile:{body:0,paint:0xc8202f}});assert.equal(v.profile.paint,0xf4f6f8);       // Crimson Octane isn't owned
+ v=await f.call('save',{profile:{body:0,paint:-1}});assert.equal(v.profile.paint,-1);                     // team colour is always fine
+ assert.equal((await f.call('shop')).status,400);                                                          // no shop any more
+});
+test('drops: about one in four opens as a painted car and never repeats a paint you own',async()=>{
+ const f=await fixture({drops:Array(60).fill(3),dlv:1});let r=await f.call('load');let painted=0;
+ for(let k=0;k<60;k++){r=await f.call('drop',{id:'d'+k,index:0,rev:r.rev});assert.equal(r.status,200);if(r.got.paint){painted++;assert.equal(r.got.kind,'body');assert(r.profile.own.body.includes(r.got.i));}}
+ const pp=r.profile.pp;assert.equal(new Set(pp).size,pp.length);assert(painted>=4&&painted<=30,'painted '+painted);
 });

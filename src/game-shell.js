@@ -12,6 +12,7 @@ import seasonUpdate from "./season-update.txt";
 import seasonRewards from "./season-rewards.txt";
 import seasonTools from "./season-tools.txt";
 import snowdrift from "./snowdrift.txt";
+import paintsUi from "./paints.txt";
 import sideswipe from "./sideswipe.txt";
 import sideswipeMenu from "./sideswipe-menu.txt";
 // The original game is a single prebuilt HTML asset. Keep the small, reviewed
@@ -24,7 +25,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111030;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111035;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -55,6 +56,26 @@ const patches = [
     "after": "      } else match.sc = lastTouch.name ? lastTouch.name + \" (own goal)\" : \"\";\n      match.ph = \"goal\"; match.pt = 2.2;\n    } else if (!match.ot && match.tl === 0 && ballGrounded()) {\n      if (match.s[0] !== match.s[1]) match.ph = \"over\"; else match.ot = true;\n    }\n  } else if (match.ph === \"goal\") {\n"
   },
   {
+    "before": "  if (clanPageBusy) return;\n  clanPageBusy = true;\n  try { clan.members = await A.clans.members(clan.id); } catch { clan.members = null; } finally { clanPageBusy = false; }\n  ml.innerHTML = \"\";\n",
+    "after": "  // The clan page redraws whenever the clan, its join requests or the lobby change. A redraw during the members\n  // request used to return early and leave the new page on \"Loading members…\" for good (the list went to the old,\n  // removed page). Every redraw now waits for the same request and fills its own list.\n  const memId = clan.id;\n  if (!clan.memReq || clan.memReq.id !== memId) { const req = { id: memId }; req.p = A.clans.members(memId).catch(() => null).finally(() => { if (clan.memReq === req) clan.memReq = null; }); clan.memReq = req; }\n  const memList = await clan.memReq.p;\n  if (!ml.isConnected || clan.id !== memId) return;\n  clan.members = memList;\n  ml.innerHTML = \"\";\n  if (!memList) { ml.append(h(\"div\", \"note\", \"Members could not be loaded.\"), sbtn(\"Retry\", \"xs pri\", () => renderClanPage())); return; }\n"
+  },
+  {
+    "before": "  hitSeen.clear(); dmSeen.clear(); qcSeen.clear(); me.kick = -1; me.hitN = 0; me.hit = null; me.dms = []; me.qc = null;",
+    "after": "  // the ball-hit counter never goes back to 0: a host who saw this tab before (it left and joined the same private\n  // match again) ignores hits numbered at or below the last one it applied, so a reset made every hit snap back\n  hitSeen.clear(); dmSeen.clear(); qcSeen.clear(); me.kick = -1; me.hit = null; me.dms = []; me.qc = null;"
+  },
+  {
+    "before": "    for (const p of ch.left) { remotes.delete(p.peer); if (fin(p.presence && p.presence.j)) feed(-1, cleanName(p.presence.nm), \"left the match\"); }",
+    "after": "    for (const p of ch.left) { remotes.delete(p.peer); hitSeen.delete(p.peer); dmSeen.delete(p.peer); qcSeen.delete(p.peer); if (fin(p.presence && p.presence.j)) feed(-1, cleanName(p.presence.nm), \"left the match\"); }"
+  },
+  {
+    "before": "    match.pt -= dt; kickBallPos(ball.p); ball.v.set(0, 0, 0); ball.hsT = -1; ball.hoop = -1;\n    if (match.pt <= 0) { match.ph = \"play\"; match.pt = 0; }\n",
+    "after": "    match.pt -= dt; kickBallPos(ball.p); ball.v.set(0, 0, 0); ball.hsT = -1; ball.hoop = -1;\n    if (match.pt <= 0 || freePlay) { match.ph = \"play\"; match.pt = 0; }     // free play has no 3-2-1 countdown\n"
+  },
+  {
+    "before": "      else { match.k++; match.ph = \"countdown\"; match.pt = 3; match.kt = 0; }",
+    "after": "      else if (freePlay) { match.k++; match.ph = \"play\"; match.pt = 0; match.kt = 0; }   // free play: straight back to the kickoff spot, no countdown\n      else { match.k++; match.ph = \"countdown\"; match.pt = 3; match.kt = 0; }"
+  },
+  {
     "before": "let jpLatch = false;\nfunction simulate(dt, now) {\n  const inp = readInput();\n  if (paused && mode !== \"online\") { sfx.engine(0, false, false, false); return; }\n",
     "after": "let jpLatch = false;\nfunction simulate(dt, now) {\n  ball.floorFrame = false;\n  const inp = readInput();\n  if (paused && mode !== \"online\") { sfx.engine(0, false, false, false); return; }\n"
   },
@@ -76,7 +97,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.32\",\n  \"title\": \"Update 5.32: Ranked wins count again\",\n  \"notes\": [\n    \"Fixed: wins in normal 3-minute matches weren't counting toward your rank, XP or quests. Ranked, casual and bot matches all count again.\",\n    \"Matches played before this fix can't be recovered, sorry! Every match from now on counts.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.37\",\n  \"title\": \"Update 5.37: Painted cars come from drops\",\n  \"notes\": [\n    \"The Item Shop is gone. Painted cars now only come from drops: one drop in four opens as a painted car.\",\n    \"Painted cars keep your team colour on the body and put the paint on the trim. Titanium White is the rarest.\",\n    \"Painted cars you already have stay yours. Pick a colour in the Garage, Paint tab.\",\n    \"The Drops tab no longer counts how many items are left to find.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -181,10 +202,6 @@ const patches = [
   {
     "before": "() => { if (rerollQuest(i)) { toast(\"New quest: \" + questText(profile.qs.dq[i])); renderPass(); }",
     "after": "async () => { if (await rerollQuest(i)) { toast(\"New quest: \" + questText(profile.qs.dq[i])); renderPass(); }"
-  },
-  {
-    "before": "function startLocalMatch(m) { startOfflineMatch(matchCfg(m), m.team === 1 ? 1 : 0); }",
-    "after": "function startLocalMatch(m) { const cfg=matchCfg(m); cfg.rk=0; cfg.mm=0; startOfflineMatch(cfg, m.team === 1 ? 1 : 0); toast(\"Practice match against bots: earn XP, rank unchanged\"); }"
   },
   {
     "before": "function pickHost(now) {\n  let best = null;",
@@ -432,5 +449,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools, snowdrift, "/* NP2D-START (website only: the CrazyGames build removes this block) */", sideswipe, sideswipeMenu, "/* NP2D-END */"].join("\n"));
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools, snowdrift, paintsUi, "/* NP2D-START (website only: the CrazyGames build removes this block) */", sideswipe, sideswipeMenu, "/* NP2D-END */"].join("\n"));
 }

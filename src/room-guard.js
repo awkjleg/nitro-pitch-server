@@ -35,11 +35,13 @@ export function resultEvidence(record,uid,now=Date.now()){
  const winner=g.s[0]===g.s[1]?-1:g.s[0]>g.s[1]?0:1;
  const stats=g.st[member.id]||[0,0,0,0,0,0];
  if(stats[1]>g.s[member.team]||stats[0]>elapsed*25+500||stats.slice(1).some(x=>x>elapsed/2+10))throw new Error('Match statistics failed validation');
- const bothTeams=[0,1].every(t=>record.roster.some(x=>x.team===t));
- // One acknowledgement from each team (an account, or a guest from the CrazyGames version) prevents a lone host
- // inventing a ranked result. Without one after 90 s the match still pays its rewards, but not rank.
+ // One acknowledgement from each team with players in it (an account, or a guest from the CrazyGames version)
+ // prevents a lone host inventing a result for real opponents. A team made only of bots (a bot-filled ranked match,
+ // when not enough players are online) has nobody to confirm: like an offline bot-filled match, it counts for rank
+ // against bots at the players' own MMR. Without the confirmations after 90 s the match still pays, but not rank.
+ const teams=[0,1].filter(t=>record.roster.some(x=>x.team===t));
  const said=x=>{const k=x.uid||'g:'+x.id;return record.acks?.includes(k)||record.departed?.includes(k);};
- const confirmed=bothTeams&&[0,1].every(t=>record.roster.some(x=>x.team===t&&said(x)));
- if(rankedRules(g,record.room)&&bothTeams&&!confirmed&&now-record.ended<90000)throw new Error('Waiting for both teams to confirm the result');
+ const confirmed=teams.length>0&&teams.every(t=>record.roster.some(x=>x.team===t&&said(x)));
+ if(rankedRules(g,record.room)&&!confirmed&&now-record.ended<90000)throw new Error('Waiting for both teams to confirm the result');
  return {mid:record.mid,score:g.s,st:stats,won:winner===member.team,mvp:Object.entries(g.st).sort((a,b)=>b[1][0]-a[1][0]||a[0].localeCompare(b[0]))[0]?.[0]===member.id,kind:g.mm?(g.rk?'ranked':g.x>=0&&!is2D(g.mut)?'extra':'casual'):'private',ranked:rankedRules(g,record.room)&&confirmed,playlist:g.pl,roster:record.roster,team:member.team,extra:g.mut[6]>0&&!is2D(g.mut),d2:is2D(g.mut),elapsed,online:true};
 }

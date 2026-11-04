@@ -3,6 +3,7 @@ import {ApiError,reply,identify,readJson,firebaseDoc,ADMIN_UID} from './firebase
 import {catalog,Ranked,Ranked2D,economy,levelInfo} from './reward-rules.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent} from './snowdrift.js';
 import {matchSeconds,PLAYLISTS,playlistFits,is2D} from './room-guard.js';
+import {cleanPainted,allowedPaint,paintedDrop,PAINTED_DROP_CHANCE} from './paints.js';
 const ID=/^[A-Za-z0-9_-]{1,128}$/, midOK=/^[A-Za-z0-9_-]{1,80}$/;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const n=(v,max=1e9)=>Number.isFinite(v)?clamp(Math.trunc(v),0,max):0;
@@ -14,7 +15,7 @@ const ladderOf=pl=>pl>=4?Ranked2D:Ranked,placed=(pl,r)=>r[1]>=ladderOf(pl).PLACE
 const sharedTier=(pl,mmr)=>pl>=4?Ranked2D.sharedTier(Ranked2D.info(mmr).tier):Ranked.info(mmr).tier;
 const cosmetics={body:'body',decal:'decal',wheel:'wheel',trail:'boost',boom:'boom',finish:'paint',topper:'topper',antenna:'antenna',title:'title',banner:'banner'};
 export function cleanProfile(raw={}){
- const p={xp:0,pxp:0,pxc:0,qn:0,games:0,wins:0,goals:0,saves:0,mvps:0,dlv:0,cm:500,cm2:500,rt:-1,rk:PLAYLISTS.map(()=>[...RK_DEFAULT]),s2:{games:0,wins:0,goals:0,saves:0,mvps:0},own:{},drops:[],qs:null,ab:null,cv:2,paint:-1,name:'',fr:[]};
+ const p={xp:0,pxp:0,pxc:0,qn:0,games:0,wins:0,goals:0,saves:0,mvps:0,dlv:0,cm:500,cm2:500,rt:-1,rk:PLAYLISTS.map(()=>[...RK_DEFAULT]),s2:{games:0,wins:0,goals:0,saves:0,mvps:0},own:{},drops:[],qs:null,ab:null,cv:2,paint:-1,name:'',fr:[],pp:[]};
  for(const key of ['xp','pxp','pxc','qn','games','wins','goals','saves','mvps','dlv'])p[key]=n(raw[key]);
  p.cm=Number.isFinite(raw.cm)?n(raw.cm,4000):500;p.cm2=Number.isFinite(raw.cm2)?n(raw.cm2,4000):500;p.rt=Number.isFinite(raw.rt)?clamp(Math.trunc(raw.rt),-1,7):-1;
  // rk[0..2]: Duel/Doubles/Standard (3D); rk[3..5]: Nitro 2D Duel/Doubles/Standard. Older profiles get default 2D entries.
@@ -29,6 +30,7 @@ export function cleanProfile(raw={}){
  if(Number.isInteger(raw.paint))p.paint=clamp(raw.paint,-1,0xffffff);
  p.fr=Array.isArray(raw.fr)?raw.fr.filter(x=>typeof x==='string').slice(0,50):[];
  p.ev=cleanEv(raw.ev);
+ p.pp=cleanPainted(raw.pp,catalog);if(!allowedPaint(p,p.paint))p.paint=-1;
  return p;
 }
 // stored profiles from before Nitro 2D: add the 2D rank entries, stats and casual MMR in place (true when changed)
@@ -97,7 +99,9 @@ export class Progress extends DurableObject{
   if(b.action==='load'){const E=economy(p);if(E.ensureQuests())await this.save(uid,p);return response();}
   if(b.action==='save'){
    const d=b.profile||{};for(const[field,k]of Object.entries(cosmetics))if(Number.isInteger(d[field])&&permission(p,k,d[field],uid))p[field]=d[field];
-   if(Number.isInteger(d.paint))p.paint=clamp(d.paint,-1,0xffffff);
+   // the car colour is a painted car you own (Titanium White Octane, ...) or your team colour
+   if(Number.isInteger(d.paint)&&allowedPaint(p,d.paint))p.paint=d.paint;
+   if(!allowedPaint(p,p.paint))p.paint=-1;
    if(typeof d.name==='string')p.name=d.name.replace(/[^\p{L}\p{N} _.\-]/gu,'').slice(0,14);
    if(typeof d.settings==='string'&&d.settings.length<=20000){try{const v=JSON.parse(d.settings);if(v&&typeof v==='object'&&!Array.isArray(v))p.settings=d.settings;}catch{}}
    await this.save(uid,p);return response();
@@ -141,7 +145,9 @@ export class Progress extends DurableObject{
     const s=p.session;if(!s||s.mid!==b.mid||now-s.started>7200000)throw new ApiError('Practice session was not registered',409);
     const elapsed=(s.active+Math.min(20000,now-s.last))/1000,score=b.score,st=b.st;
     if(elapsed<20||!Array.isArray(score)||score.length!==2||!score.every(x=>Number.isInteger(x)&&x>=0&&x<=99)||!Array.isArray(st)||st.length!==6||!st.every(x=>Number.isInteger(x)&&x>=0)||st[0]>elapsed*25+500||st[1]>Math.max(...score)||st.slice(1).some(x=>x>elapsed/2+10))throw new ApiError('Practice result failed validation',422);
-    const length=matchSeconds(s.mut);if(!length||elapsed+20<length)throw new ApiError('Finish the practice match to earn rewards',422);
+    // a ranked match ends early when a team leads by 5 (the mercy rule): every goal takes a kickoff, the goal and its replay
+    const mercy=!!s.rk&&Math.abs(score[0]-score[1])>=5&&elapsed>=20+6*(score[0]+score[1]);
+    const length=matchSeconds(s.mut);if(!length||elapsed+20<length&&!mercy)throw new ApiError('Finish the practice match to earn rewards',422);
     // a ranked match filled with bots (not enough players online) still counts for rank, against bots at your own MMR
     e={mid:b.mid,st,score,won:score[0]>score[1],mvp:!!b.mvp,online:false,extra:!!s.mut[6]&&!is2D(s.mut),d2:is2D(s.mut),kind:s.rk?'ranked':'exhibition',ranked:!!s.rk,playlist:s.rk||0,team:0,elapsed};p.session=null;
    }
@@ -154,7 +160,11 @@ export class Progress extends DurableObject{
   }else if(b.action==='drop'||b.action==='trade-in'){
    if(b.rev!==p.rev)throw new ApiError('Your inventory changed in another tab. Try again.',409);
    const E=economy(p,now);
-   if(b.action==='drop'){if(!Number.isInteger(b.index))throw new ApiError('Invalid drop');const got=E.openDrop(b.index);if(!got)throw new ApiError('That drop is no longer available',409);E.grantLevelDrops();result={got};}
+   if(b.action==='drop'){if(!Number.isInteger(b.index))throw new ApiError('Invalid drop');
+    // one drop in four is a painted car instead (Crimson Breakout ... Titanium White Octane)
+    const roll=()=>crypto.getRandomValues(new Uint32Array(1))[0]/4294967296;
+    let got=null;if(b.index in p.drops&&roll()<PAINTED_DROP_CHANCE){const painted=paintedDrop(p,catalog,roll);if(painted){p.drops.splice(b.index,1);got=painted;}}
+    if(!got)got=E.openDrop(b.index);if(!got)throw new ApiError('That drop is no longer available',409);E.grantLevelDrops();result={got};}
    else{
     const keys=b.keys,r=b.rarity;if(!Array.isArray(keys)||keys.length!==5||new Set(keys).size!==5||!Number.isInteger(r)||r<2||r>=6)throw new ApiError('Pick five different items of the same rarity');
     const picked=keys.map(key=>{const [kind,v]=String(key).split(':'),i=Number(v);if(!Number.isInteger(i)||i<0)throw new ApiError('Invalid item');if(kind==='drop'){if(p.drops[i]!==r)throw new ApiError('Drop is no longer available',409);return {key,drop:true,k:i,name:r+' Drop'};}const it=catalog[kind]?.[i];if(!it?.drop||it.admin||it.rar!==r||!p.own[kind]?.includes(i))throw new ApiError('Item is no longer available',409);return {key,kind,i,name:it.name};});

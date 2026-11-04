@@ -1,0 +1,123 @@
+// Painted cars from drops. Runs inside the game closure, after secure-progress (which applies server profiles).
+// The server owns the painted cars a player has (profile.pp, "body:<car>:<paint>").
+const NPPaints = (() => {
+  // must match src/paints.js PAINTS (a test checks)
+  const PAINTS = [null,
+    { name: "Crimson", hex: 0xc8202f, tier: 0 }, { name: "Sky Blue", hex: 0x5fc3f2, tier: 0 }, { name: "Lime", hex: 0x93e23a, tier: 0 },
+    { name: "Orange", hex: 0xff8a1e, tier: 0 }, { name: "Grey", hex: 0x8f98a8, tier: 0 }, { name: "Cobalt", hex: 0x2a4fd6, tier: 0 },
+    { name: "Forest Green", hex: 0x2f7d3b, tier: 0 }, { name: "Burnt Sienna", hex: 0x9a4a24, tier: 1 }, { name: "Saffron", hex: 0xf2c321, tier: 1 },
+    { name: "Pink", hex: 0xff6fb5, tier: 1 }, { name: "Purple", hex: 0x7b3fd1, tier: 2 }, { name: "Gold", hex: 0xd9a520, tier: 3 },
+    { name: "Black", hex: 0x15161a, tier: 3 }, { name: "Titanium White", hex: 0xf4f6f8, tier: 4 }];
+  const TIER = [["Common", "#9fd0ff"], ["Uncommon", "#78b4ff"], ["Rare", "#b48cff"], ["Very rare", "#ffd451"], ["Rarest", "#ff6fe0"]];
+  const paintOf = hex => PAINTS.findIndex(p => p && p.hex === hex);
+  const ownedPaints = body => (profile.pp || []).map(s => s.split(":")).filter(([k, i]) => k === "body" && +i === body).map(x => +x[2]).filter(id => PAINTS[id]).sort((a, b) => PAINTS[b].tier - PAINTS[a].tier || a - b);
+  const allowed = (body, hex) => hex === -1 || ownedPaints(body).includes(paintOf(hex));
+
+  // ---- keep the painted cars when the server's profile is applied
+  const sp = sanitizeProfile;
+  sanitizeProfile = function (s) {
+    const o = sp(s);
+    if (s && typeof s === "object") {
+      if (Array.isArray(s.pp)) o.pp = s.pp.filter(x => typeof x === "string" && /^body:\d+:\d+$/.test(x)).slice(0, 2000);
+    }
+    return o;
+  };
+  // ---- the car colour is a painted car you own, or your team colour
+  function fixPaint() {
+    if (!allowed(profile.body | 0, okPaint(profile.paint))) { profile.paint = -1; me.paint = -1; if (typeof gPrev === "object") gPrev.paint = -1; }
+  }
+  // ---- painted cars paint the trim and accents (bumpers, skirts, spoiler, mirrors, edges); the body keeps its team colour.
+  // The paint colour still travels as profile.paint / look.paint, so every player sees it without a new network field.
+  // Atlas cells (CarLib CELL_DEF order, 16 px each in a 512 px atlas): black trim (bumpers, skirts, spoiler, frames),
+  // plastic, carbon, and the team0/1 and teamDark0/1 accents.
+  const TRIM_CELLS = [[0, 1], [1, 0.85], [6, 0.72], [28, 1], [29, 1], [30, 0.72], [31, 0.72]];
+  const trimMats = new Map();
+  function trimMat(base, colour) {
+    const k = base.uuid + ":" + colour; if (trimMats.has(k)) return trimMats.get(k);
+    const src = base.map && base.map.image; if (!src) return base;
+    const cv = document.createElement("canvas"); cv.width = src.width; cv.height = src.height;
+    const g = cv.getContext("2d"), s = src.width / 512; g.drawImage(src, 0, 0);
+    for (const [i, f] of TRIM_CELLS) { g.fillStyle = "#" + new THREE.Color(colour).multiplyScalar(f).getHexString(); g.fillRect((i % 32) * 16 * s, Math.floor(i / 32) * 16 * s, 16 * s, 16 * s); }
+    const t = base.map.clone(); t.image = cv; t.needsUpdate = true;
+    const m = base.clone(); m.map = t; m.name = "carlib-multi-trim"; trimMats.set(k, m); return m;
+  }
+  const applyTrim = (group, colour) => group.traverse(o => { if (o.isMesh && o.material && o.material.name === "carlib-multi") o.material = trimMat(o.material, colour); });
+  const bcm = buildCarMesh;
+  buildCarMesh = function (team, bodyI, trailI, label, look) {
+    const id = look ? paintOf(okPaint(look.paint)) : -1;
+    if (id <= 0) return bcm(team, bodyI, trailI, label, look);
+    const m = bcm(team, bodyI, trailI, label, { ...look, paint: -1 });
+    applyTrim(m.g, PAINTS[id].hex);
+    return m;
+  };
+  // garage and drop tiles: the same trim paint (CarLib.thumb builds internally, so painted tiles render here)
+  const th0 = CarLib.thumb; let TR = null;
+  CarLib.thumb = function (bi, o = {}) {
+    const id = o && o.paint != null ? paintOf(o.paint) : -1;
+    if (id <= 0) return th0.call(this, bi, o);
+    if (!TR) {
+      const cv = document.createElement("canvas"); cv.width = 512; cv.height = 288;
+      const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, preserveDrawingBuffer: true });
+      r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05;
+      const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xcfe0ff, 0x223344, 2.0));
+      const d = new THREE.DirectionalLight(0xffffff, 2.8); d.position.set(4, 6, 3); sc.add(d);
+      const rl = new THREE.DirectionalLight(0x8fb4ff, 1.6); rl.position.set(-4, 2, -5); sc.add(rl);
+      TR = { r, sc, cam: new THREE.PerspectiveCamera(26, 16 / 9, 0.05, 50) };
+    }
+    const car = CarLib.build(bi, { ...o, paint: null }); applyTrim(car.g, PAINTS[id].hex);
+    car.g.rotation.y = o.yaw == null ? -0.65 : o.yaw; TR.sc.add(car.g);
+    const dist = o.dist || 6.4; TR.cam.position.set(Math.sin(0.35) * dist * 0.3, 1.25, dist); TR.cam.lookAt(0, 0.08, 0.05);
+    TR.r.setClearColor(0x000000, 0); TR.r.render(TR.sc, TR.cam);
+    const out = document.createElement("canvas"); out.width = 256; out.height = 144; out.getContext("2d").drawImage(TR.r.domElement, 0, 0, 256, 144);
+    car.dispose();
+    return out;
+  };
+  const save = saveProfile;
+  saveProfile = function (...a) { fixPaint(); return save(...a); };
+  const ap = applyProfileToMe;
+  applyProfileToMe = function (...a) { fixPaint(); return ap(...a); };
+  renderPaintBar = function () {
+    const box = $("gPaint"); box.hidden = gTab !== "paint"; if (box.hidden) return;
+    const body = profile.body | 0, cur = okPaint(profile.paint), mine = ownedPaints(body);
+    box.innerHTML = "";
+    const tb = h("button", "gp-team", "Team colour"); tb.type = "button"; tb.title = "Blue or orange, whichever team you're on"; tb.onclick = () => setPaint(-1, true);
+    tb.setAttribute("aria-pressed", String(cur < 0)); box.append(tb);
+    const sw = h("div", "gp-sw");
+    for (const id of mine) {
+      const P = PAINTS[id], b = h("button", "gp-c shp-sw"); b.type = "button"; b.style.background = hex(P.hex); b.title = P.name + " " + (CARS[body] ? CARS[body].name : "");
+      b.setAttribute("aria-label", "Paint: " + P.name); b.setAttribute("aria-pressed", String(P.hex === cur)); b.onclick = () => setPaint(P.hex, true); sw.append(b);
+    }
+    box.append(sw, h("span", "shp-note", mine.length ? "Painted " + (CARS[body] ? CARS[body].name : "car") + " colours you own" : "Painted cars come from drops: open drops to get this car in new colours"));
+  };
+
+  // ---- painted drops: show the colour when the drop opens, and equip it in that colour
+  const odu = openDropUI;
+  openDropUI = async function (k) {
+    await odu(k);
+    const g = dpGot;
+    if (g && g.paint && PAINTS[g.paint]) setTimeout(() => {
+      if (dpGot !== g) return;
+      const P = PAINTS[g.paint], th = $("dpTh");
+      th.innerHTML = ""; th.append(thumbs.car(g.i, 0, { paint: P.hex }));
+      setTxt("dpName", P.name + " " + (CARS[g.i] ? CARS[g.i].name : g.name)); setTxt("dpRar", "Painted · " + TIER[P.tier][0]);
+      $("dpCard").style.setProperty("--rar", TIER[P.tier][1]);
+    }, 1160);
+  };
+  const de = $("dpEquip").onclick;
+  $("dpEquip").onclick = () => {
+    const g = dpGot;
+    if (g && g.paint && PAINTS[g.paint]) { profile.body = g.i; profile.paint = PAINTS[g.paint].hex; applyProfileToMe(); saveProfile(); }
+    de();
+  };
+
+  const css = document.createElement("style");
+  css.textContent = `.shp-note{font-size:12px;color:#9fb0d4;margin-left:8px}\n.gp-c.shp-sw[aria-pressed="true"]{outline:3px solid #fff;outline-offset:2px}`;
+  document.head.append(css);
+  // car pictures are drawn a couple per frame, normally only in the garage: draw them for the drop reveal too
+  (function pump() { try { if (mode === "menu" && !$("dropPop").hidden && thumbs.pending) thumbs.pump(); } catch {} requestAnimationFrame(pump); })();
+
+  // ---- the drops tab no longer counts how many items are left to find
+  const rd = renderDrops;
+  renderDrops = function (...a) { rd(...a); for (const n of $("npDrops").querySelectorAll(".note")) if (/^(Items still to find in drops|You own every drop item)/.test(n.textContent)) n.remove(); };
+  return { PAINTS, ownedPaints };
+})();

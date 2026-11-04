@@ -13,12 +13,21 @@ const NPSecure = (() => {
  api?.listen((data,rev,owner)=>{if(owner===uid()&&dbOk&&appliedUid===owner)apply(data);});
  const adopt=adoptStore;adoptStore=async function(st,merge){appliedUid='';await adopt(st,merge);appliedUid=uid()||'';if(active())recover();};
  const leave=leaveToMenu;leaveToMenu=function(...args){const wasRanked=active()&&mode==='online'&&match.rk&&match.ph!=='over';leave(...args);if(wasRanked)setTimeout(()=>api.call('load').then(r=>apply(r.profile)).catch(()=>{}),800);};
- const begin=beginMatch;beginMatch=function(){begin();if(active()&&mode==='offline'){const mid=match.mid;practiceMid=mid;api.call('session-start',{id:'start-'+mid,mid,mut:match.mut,rk:match.rk&&match.mm?1:0,pl:match.pl|0}).catch(()=>{if(practiceMid===mid)practiceMid='';});}};
+ // A match that can't be saved says why (and the reason reaches the error reports) instead of failing silently.
+ function noteFailure(where,e){const why=String(e?.message||'unknown error').slice(0,160);try{window.npReportError?.('Match not saved ('+where+'): '+why,'kind '+matchKind()+' room '+(gameCode||'offline')+' status '+(e?.status||0));}catch{}if(where!=='claim'||screen!=='post')toast("Couldn't save this match: "+why);}
+ // The server times offline matches from session-start. Free play, training and replays (they set their flags just
+ // after beginMatch) earn nothing and must not start one: a session started moments earlier blocks the next for 20 s
+ // ("A match is already starting"), which lost the rewards of a bot-filled match found during free play.
+ function startSession(mid,tries=0){
+  if(!active()||mode!=='offline'||match.mid!==mid||['free','training','viewer'].includes(matchKind()))return;practiceMid=mid;
+  api.call('session-start',{id:'start-'+mid,mid,mut:match.mut,rk:match.rk&&match.mm?1:0,pl:match.pl|0}).catch(e=>{if(practiceMid!==mid||match.mid!==mid)return;if(tries<4&&(e.status===429||!e.status||e.status>=500)){setTimeout(()=>startSession(mid,tries+1),e.status===429?6000:2500);return;}practiceMid='';noteFailure('start',e);});
+ }
+ const begin=beginMatch;beginMatch=function(){begin();const mid=match.mid;if(active()&&mode==='offline')setTimeout(()=>startSession(mid));};
  setInterval(()=>{if(!active()||!dbOk||mode!=='offline'||paused||freePlay||training||viewer||!['play','countdown','goal','replay'].includes(match.ph)||practiceMid!==match.mid||tickBusy)return;tickBusy=true;api.call('session-tick',{id:crypto.randomUUID(),mid:match.mid}).catch(()=>{}).finally(()=>{tickBusy=false;});},10000);
  const oldOver=onMatchOver;
  async function claim(row){const result=await api.call('match',row);apply(result.profile);pendingWrite(pendingRead().filter(x=>x.id!==row.id));return result;}
  let recovering=false;
- async function recover(){if(recovering)return;recovering=true;try{for(const row of pendingRead()){try{const r=await claim(row);toast('Match rewards saved: +'+r.result.xpGain+' XP');}catch(e){if([409,422].includes(e.status)&&!String(e.message).includes('Waiting'))pendingWrite(pendingRead().filter(x=>x.id!==row.id));}}}finally{recovering=false;}}
+ async function recover(){if(recovering)return;recovering=true;try{for(const row of pendingRead()){try{const r=await claim(row);toast('Match rewards saved: +'+r.result.xpGain+' XP');}catch(e){if([409,422].includes(e.status)&&!String(e.message).includes('Waiting')){pendingWrite(pendingRead().filter(x=>x.id!==row.id));if(!/already been saved/.test(e.message))noteFailure('recover',e);}}}}finally{recovering=false;}}
  onMatchOver=async function(){
   if(!active()||['free','training','viewer'].includes(matchKind())||![0,1].includes(me.team)||spec)return oldOver();
   const mid=match.mid,kind=matchKind(),win=match.s[0]===match.s[1]?-1:match.s[0]>match.s[1]?0:1;
@@ -29,17 +38,27 @@ const NPSecure = (() => {
   const row=old||{id:crypto.randomUUID(),mid,room:mode==='online'?gameCode:null,clanId:clan.id||null,score:[match.s[me.team],match.s[1-me.team]],st:match.st[myKey()]||[0,0,0,0,0,0],mvp:mvp===myKey()};
   if(!old)pendingWrite([...pendingRead(),row]);
   const room=game,score=match.s.slice();let error;
-  for(let attempt=0;attempt<8;attempt++){
+  // An online result needs a confirmation from each team: keep trying while the room waits for one (after 90 s the
+  // match pays without rank), and a few times through connection errors. It used to stop after ~10 s.
+  const started=Date.now();
+  for(let attempt=0;;attempt++){
    try{
     room?.send?.({t:'result-ack',mid,score});
     const r=await claim(row);awardedMid=mid;lastResult=r.result;
     if(match.mid===mid&&screen==='post')showPost(win);else toast('Match rewards saved: +'+r.result.xpGain+' XP');
     if(row.clanId&&row.clanId===clan.id&&r.result.clanContribution)queueClan(r.result.clanContribution);
     lobbyPresence();return;
-   }catch(e){error=e;if(e.status===422)break;if(attempt<7)await new Promise(resolve=>setTimeout(resolve,1200));}
+   }catch(e){
+    error=e;if(e.status===422)break;
+    const waiting=/Waiting/.test(e.message||'');
+    if(waiting?Date.now()-started>100000:attempt>=7)break;
+    if(waiting&&match.mid===mid&&screen==='post')$('postXp').textContent='Waiting for the other team to confirm the result…';
+    await new Promise(resolve=>setTimeout(resolve,waiting?3000:1200));
+   }
   }
+  noteFailure('claim',error);
   if(match.mid!==mid||screen!=='post')return;
-  $('postXpTotal').textContent='Rewards not saved yet';$('postXp').replaceChildren(h('p','note',error?.message||'Try again when your connection is back.'));
+  $('postXpTotal').textContent='Rewards not saved yet';$('postXp').replaceChildren(h('p','note',"Couldn't save this match: "+(error?.message||'Try again when your connection is back.')));
   const retry=sbtn('Retry saving rewards','sm pri',()=>{retry.disabled=true;onMatchOver();});$('postXp').append(retry);
  };
  const open=openDrop;openDrop=async function(index){if(!active())return open(index);if(busyDrop)return null;busyDrop=true;try{const r=await api.call('drop',{id:crypto.randomUUID(),index,rev:api.revision()});apply(r.profile);return r.got;}catch(e){toast(e.message);try{apply((await api.call('load')).profile);}catch{}return null;}finally{busyDrop=false;}};

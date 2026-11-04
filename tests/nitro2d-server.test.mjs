@@ -7,6 +7,7 @@ import {readFile} from 'node:fs/promises';
 import {catalog,Ranked,Ranked2D,economy,levelInfo} from '../src/reward-rules.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent} from '../src/snowdrift.js';
 import {ApiError,reply} from '../src/firebase-auth.js';
+import * as Paints from '../src/paints.js';
 import {validGame,resultEvidence,rankedRules,playlistFits,is2D,MATCH_SECONDS,matchSeconds,PLAYLISTS} from '../src/room-guard.js';
 const source=(await readFile(new URL('../src/progress.js',import.meta.url),'utf8')).replace(/^import .*;$/gm,'').replaceAll('export ','');
 const MUT3=[0,0,0,0,0,0,0],MUT2=[0,0,0,0,0,0,6];
@@ -16,7 +17,7 @@ async function fixture(raw={}){
  const clone=v=>v===undefined?undefined:structuredClone(v);
  const storage={get:async k=>clone(data.get(k)),put:async(k,v)=>data.set(k,clone(v)),list:async({prefix})=>new Map([...data].filter(([k])=>k.startsWith(prefix)).sort(([a],[b])=>a<b?-1:1)),transaction:async fn=>{const snapshot=clone(data);try{return await fn(storage);}catch(e){data.clear();for(const[k,v]of snapshot)data.set(k,v);throw e;}}};
  const env={ROOMS:{idFromName:x=>x,get:()=>({fetch:async()=>evidence?Response.json(evidence):Response.json({error:'Match result is not ready'},{status:409})})}};
- const c=vm.createContext({MATCH_SECONDS,matchSeconds,PLAYLISTS,playlistFits,is2D,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,Ranked2D,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
+ const c=vm.createContext({...Paints,MATCH_SECONDS,matchSeconds,PLAYLISTS,playlistFits,is2D,cleanEv,snowQuests,openChristmasDrop,claimAdvent,catalog,Ranked,Ranked2D,economy,levelInfo,ApiError,reply,ADMIN_UID:'admin',crypto,URL,Response,Request,structuredClone,AbortSignal,console,Map,Set,Date:class extends Date{static now(){return now;}},DurableObject:class{constructor(ctx,env){this.ctx=ctx;this.env=env;}},firebaseDoc:async path=>clone(docs.get(path)||null)});
  vm.runInContext(source+'\nglobalThis.Progress=Progress;globalThis.cleanProfile=cleanProfile;',c);const ledger=new c.Progress({storage},env);
  const f={data,docs,ledger,clean:c.cleanProfile,advance:ms=>now+=ms,setEvidence:e=>{evidence=e;},
   async call(action,b={},uid='a'){const response=await ledger.fetch(new Request('https://progress/action',{method:'POST',body:JSON.stringify({body:{action,...b},user:{uid,username:uid},token:'test'})}));return {status:response.status,...await response.json()};},
