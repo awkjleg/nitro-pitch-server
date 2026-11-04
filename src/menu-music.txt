@@ -19,3 +19,19 @@ function npMenuTracks(ctx, dest, playing) {
   else if (!npTrackEl.paused && !npTrackEl.stopT) npTrackEl.stopT = setTimeout(() => { npTrackEl.pause(); npTrackEl.stopT = 0; }, 1500);
   return true;
 }
+
+// ---- goal speed and goal time: "87 MPH · 1:12 into the game" under every GOAL! (worked out on each screen when the goal
+// is shown: ball speed in uu/s is 50x the game's units, 1 uu/s = 0.0223694 mph; the time is the match length minus the clock)
+let npGoalKey = "", npGoalText = "";
+function npGoalLine(sub) {
+  const key = match.mid + ":" + match.s[0] + ":" + match.s[1];
+  if (key !== npGoalKey) {
+    npGoalKey = key;
+    const mph = Math.round(ball.v.length() * 50 * 0.0223694), total = LENGTHS[match.mut[0] | 0];
+    let when = "";
+    if (match.ot) when = "in overtime";
+    else if (Number.isFinite(total) && !freePlay && fin(match.tl)) { const t = Math.max(0, Math.round(total - match.tl)); when = Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0") + " into the game"; }
+    npGoalText = mph + " MPH" + (when ? " · " + when : "");
+  }
+  return (sub ? sub + " · " : "") + npGoalText;
+}

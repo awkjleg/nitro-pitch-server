@@ -1,0 +1,99 @@
+// Moderation on the game page: the jail cell for banned accounts, offensive names refused, admin-locked names, and the
+// admin's Ban / Set name rows in the player menu (next to Give XP). window.NPModeration (badName, safeName) is the same
+// code the server uses (src/moderation.js).
+(() => {
+  const api = window.NPProgressAPI, M = window.NPModeration;
+  const css = document.createElement("style");
+  css.textContent = `
+#npJail{position:fixed;inset:0;z-index:9000;display:grid;place-items:center;overflow:hidden;color:#e8eeff;pointer-events:auto}
+#npJail[hidden]{display:none}
+#npJail .jw{position:absolute;inset:0;background:linear-gradient(rgba(5,8,18,.15),rgba(5,8,18,.55)),linear-gradient(0deg,transparent 0 46px,rgba(0,0,0,.55) 46px 50px) 0 0/100% 50px,linear-gradient(90deg,transparent 0 96px,rgba(0,0,0,.55) 96px 100px) 0 0/100px 100px,linear-gradient(90deg,transparent 0 46px,rgba(0,0,0,.55) 46px 50px) 50px 50px/100px 100px,linear-gradient(160deg,#2a3350,#161c30 55%,#0d1222)}
+#npJail .jl{position:absolute;inset:0;background:radial-gradient(ellipse 55% 45% at 50% 30%,rgba(255,212,81,.14),transparent 70%);pointer-events:none}
+#npJail .jcar{position:absolute;left:50%;top:50%;transform:translate(-50%,-44%);width:min(60vw,520px);max-width:100%}
+#npJail .jb{position:absolute;left:50%;top:50%;width:min(76vw,860px);height:min(66vh,560px);transform:translate(-50%,-48%);border:10px solid #3b4566;border-radius:10px;box-shadow:inset 0 0 0 3px #59648c,0 0 0 3px #1a2033,0 30px 80px rgba(0,0,0,.6);background:repeating-linear-gradient(90deg,transparent 0 calc(12.5% - 14px),#6f7aa0 calc(12.5% - 14px),#d6dcf0 calc(12.5% - 9px),#8a94b8 calc(12.5% - 5px),#2f3754 12.5%),linear-gradient(transparent 0 23%,#59648c 23% 26%,transparent 26% 74%,#59648c 74% 77%,transparent 77%)}
+#npJail .jb::after{content:"";position:absolute;right:-26px;top:44%;width:34px;height:64px;border-radius:6px;background:linear-gradient(#ffd451,#c9961c);box-shadow:0 4px 12px rgba(0,0,0,.5)}
+#npJail .jsign{position:absolute;top:max(18px,4vh);left:50%;transform:translateX(-50%) rotate(-2deg);padding:10px 34px 12px;background:linear-gradient(#ffd451,#ffb21e);color:#2a1600;border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.55),inset 0 -4px 0 rgba(0,0,0,.18);text-align:center;letter-spacing:.08em}
+#npJail .jsign b{display:block;font-size:clamp(26px,5vw,52px);line-height:1.05;text-transform:uppercase}
+#npJail .jsign small{display:block;font-size:13px;letter-spacing:.2em;text-transform:uppercase;opacity:.75}
+#npJail .jcard{position:absolute;bottom:max(16px,4vh);left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 32px));background:rgba(9,15,32,.94);border:1px solid rgba(150,180,255,.3);border-radius:14px;padding:16px 18px;display:grid;gap:8px;box-shadow:0 18px 44px rgba(0,0,0,.5)}
+#npJail .why{font-size:17px;line-height:1.4;overflow-wrap:anywhere}#npJail .when{color:#9fb0d4;font-size:13px}
+body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed #annBar{visibility:hidden!important}
+#nick.np-locked{opacity:.75;cursor:not-allowed}`;
+  document.head.append(css);
+
+  // ---------- the jail cell ----------
+  let jail = null;
+  function showJail(info) {
+    if (!jail) {
+      jail = document.createElement("div"); jail.id = "npJail"; jail.setAttribute("role", "alertdialog"); jail.setAttribute("aria-modal", "true"); jail.setAttribute("aria-labelledby", "npJailTitle");
+      jail.innerHTML = '<div class="jw"></div><div class="jl"></div><div class="jcar" id="npJailCar"></div><div class="jb" aria-hidden="true"></div><div class="jsign"><small>Nitro Pitch</small><b id="npJailTitle">You’re banned</b></div><div class="jcard"><div class="why" id="npJailWhy"></div><div class="when" id="npJailWhen"></div></div>';
+      document.body.append(jail);
+      try { const c = thumbs.car(CARS[profile.body] ? profile.body : 0, 0, okPaint(profile.paint) >= 0 ? { paint: okPaint(profile.paint) } : undefined); c.style.width = "100%"; $("npJailCar").append(c); } catch {}
+    }
+    const why = String(info.reason || "").trim();
+    setTxt("npJailWhy", why ? "Reason: " + why : "The admin banned this account.");
+    setTxt("npJailWhen", (info.at ? "Banned on " + new Date(info.at).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) + ". " : "") + "You can’t play, chat or trade with this account.");
+    jail.hidden = false; document.body.classList.add("np-jailed");
+    try { if (mode !== "menu") leaveToMenu(true); } catch {}
+  }
+  addEventListener("keydown", e => { if (jail && !jail.hidden && e.key !== "Tab") { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  // the car pictures need drawing while the jail is up
+  (function pump() { try { if (jail && !jail.hidden && thumbs.pending) thumbs.pump(); } catch {} requestAnimationFrame(pump); })();
+  let checked = "";
+  async function checkBan() {
+    const u = window.npAccounts && window.npAccounts.user();
+    if (!u || !isBanned) { if (jail && !jail.hidden && !isBanned) { jail.hidden = true; document.body.classList.remove("np-jailed"); } return; }
+    if (checked === u.uid && jail && !jail.hidden) return;
+    checked = u.uid;
+    let info = {};
+    try { const d = await firebase.firestore().collection("bans").doc(u.uid).get(); const x = d.exists ? d.data() : {}; info = { reason: x.reason || "", at: x.at && x.at.toMillis ? x.at.toMillis() : 0 }; } catch {}
+    if (!info.reason && api) { try { await api.call("load"); } catch (e) { const m = /banned: (.+)$/.exec(e && e.message || ""); if (m) info.reason = m[1]; } }
+    showJail(info);
+  }
+  setInterval(checkBan, 2000);
+
+  // ---------- names: offensive names refused, admin-locked names can't be changed ----------
+  const np = nameProblem;
+  nameProblem = function (raw) {
+    if (profile.nameLock) return [profile.nameLock, "Your name was set by the admin and can't be changed."];
+    const r = np(raw);
+    if (!r[1] && M && M.badName(r[0])) return [r[0], "That name isn't allowed. Pick a different one."];
+    return r;
+  };
+  const sp = sanitizeProfile;
+  sanitizeProfile = function (s) { const o = sp(s); if (s && typeof s === "object") { if (typeof s.nameLock === "string" && s.nameLock) o.nameLock = s.nameLock.slice(0, 24); else if ("name" in s) o.nameLock = ""; } return o; };
+  setInterval(() => { const n = $("nick"); if (!n) return; const lock = !!profile.nameLock; n.readOnly = lock; n.classList.toggle("np-locked", lock); n.title = lock ? "Your name was set by the admin" : ""; }, 1500);
+
+  // ---------- admin: Ban (with a reason) and Set name, next to Give XP ----------
+  const xg = xpGiver;
+  xpGiver = function (uid, name) {
+    const box = xg(uid, name), A = adA();
+    const row = h("div", "xp-give mod-give");
+    const reason = document.createElement("input"); reason.type = "text"; reason.maxLength = 200; reason.placeholder = "Ban reason (shown to them)"; reason.className = "t note";
+    const ban = adBtn("Ban", async () => {
+      const why = reason.value.trim(); if (!why) { adMsg("Write a reason for the ban."); return; }
+      if (!confirm("Ban " + name + "? They'll see a jail screen with this reason:\n\n" + why)) return;
+      try {
+        await api.call("admin-ban", { id: crypto.randomUUID(), uid, on: true, reason: why });
+        await A.admin.ban(uid, name);
+        try { await firebase.firestore().collection("bans").doc(String(uid)).set({ reason: why }, { merge: true }); } catch {}
+        toast("Banned " + name); adMsg("Banned " + name + ": " + why); reason.value = "";
+      } catch (e) { adMsg((e && e.message) || "Couldn't ban them"); }
+    }, true);
+    const unban = adBtn("Unban", async () => {
+      if (!confirm("Unban " + name + "?")) return;
+      try { await A.admin.unban(uid); await api.call("admin-ban", { id: crypto.randomUUID(), uid, on: false }); toast("Unbanned " + name); adMsg("Unbanned " + name + "."); } catch (e) { adMsg((e && e.message) || "Couldn't unban them"); }
+    });
+    const nm = document.createElement("input"); nm.type = "text"; nm.maxLength = 14; nm.placeholder = "New name (locked)"; nm.className = "t";
+    const setName = adBtn("Set name", async () => {
+      const v = nm.value.trim(); if (!v) { adMsg("Type the new name."); return; }
+      if (!confirm("Change " + name + "'s name to \"" + v + "\" for good? They won't be able to change it back.")) return;
+      try { const r = await api.call("admin-name", { id: crypto.randomUUID(), uid, name: v }); toast("Name set to " + r.name); adMsg(name + " is now " + r.name + " (locked)."); nm.value = ""; } catch (e) { adMsg((e && e.message) || "Couldn't change the name"); }
+    }, true);
+    const unlock = adBtn("Unlock name", async () => { try { await api.call("admin-name", { id: crypto.randomUUID(), uid, name: null }); toast("Name unlocked"); adMsg(name + " can change their name again."); } catch (e) { adMsg((e && e.message) || "Couldn't unlock the name"); } });
+    row.append(h("b", "", "Moderate:"), reason, ban, unban, nm, setName, unlock);
+    const wrap = h("div", ""); wrap.append(box, row);
+    Object.defineProperty(wrap, "hidden", { get: () => box.hidden, set: v => { box.hidden = v; row.hidden = v; } });
+    return wrap;
+  };
+})();

@@ -3,6 +3,7 @@ import {ApiError,reply,identify,readJson,firebaseDoc,ADMIN_UID} from './firebase
 import {catalog,Ranked,economy,levelInfo} from './reward-rules.js';
 import {cleanEv,snowQuests,openChristmasDrop,claimAdvent} from './snowdrift.js';
 import {paintedDrop,PAINTED_DROP_CHANCE,migratePainted} from './paints.js';
+import {badName,safeName} from './moderation.js';
 import {MATCH_SECONDS} from './room-guard.js';
 const ID=/^[A-Za-z0-9_-]{1,128}$/, midOK=/^[A-Za-z0-9_-]{1,80}$/;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -63,9 +64,11 @@ export class Progress extends DurableObject{
  async fetch(req){const run=this.tail.then(()=>this.run(req));this.tail=run.catch(()=>{});try{return await run;}catch(e){return reply({error:e instanceof ApiError?e.message:'Could not save progress. Please retry.'},e.status||503);}}
  async load(user,token){
   const {uid}=user,key='p:'+uid;
-  const until=this.banCache.get(uid)||0;if(until<Date.now()){if(await firebaseDoc('bans/'+uid,token))throw new ApiError('This account is banned',403);this.banCache.set(uid,Date.now()+60000);}
+  const until=this.banCache.get(uid)||0;if(until<Date.now()){if(await firebaseDoc('bans/'+uid,token)){const rec=await this.ctx.storage.get('ban:'+uid);throw new ApiError('This account is banned'+(rec?.reason?': '+rec.reason:''),403);};this.banCache.set(uid,Date.now()+60000);}
   let p=await this.ctx.storage.get(key);
   if(p&&migratePainted(p,catalog))await this.ctx.storage.put(key,p);
+  // an admin-locked name always applies; an offensive saved name becomes a neutral Player1234
+  if(p&&(p.nameLock&&p.name!==p.nameLock||!p.nameLock&&p.name&&badName(p.name))){p.name=p.nameLock||safeName(p.name);await this.ctx.storage.put(key,p);}
   if(!p){const raw=await firebaseDoc('players/'+uid,token);p=cleanProfile(raw||{});p.username=user.username;p.rev=1;p.migratedAt=Date.now();p.imported=!!raw;p.adminItems=(await firebaseDoc('adminItems/'+uid,token))?.items||[];const E=economy(p);E.ensureQuests();E.payPassXp();E.grantLevelDrops();await this.ctx.storage.put(key,p);await this.ctx.storage.put('lb:'+uid,publicRow(p,uid));}
   if(!p.clanChecked||Date.now()-p.clanChecked>60000){const membership=await firebaseDoc('clanMembers/'+uid,token);p.clanId=membership?.clanId||'';p.clanRole=membership?.role||'';p.clanChecked=Date.now();await this.ctx.storage.put(key,p);}
   return p;
@@ -85,7 +88,7 @@ export class Progress extends DurableObject{
   if(b.action==='save'){
    const d=b.profile||{};for(const[field,k]of Object.entries(cosmetics))if(Number.isInteger(d[field])&&permission(p,k,d[field],uid))p[field]=d[field];
    if(Number.isInteger(d.paint))p.paint=clamp(d.paint,-1,0xffffff);
-   if(typeof d.name==='string')p.name=d.name.replace(/[^\p{L}\p{N} _.\-]/gu,'').slice(0,14);
+   if(typeof d.name==='string'&&!p.nameLock){const nm=d.name.replace(/[^\p{L}\p{N} _.\-]/gu,'').slice(0,14);if(!badName(nm))p.name=nm;}
    if(typeof d.settings==='string'&&d.settings.length<=20000){try{const v=JSON.parse(d.settings);if(v&&typeof v==='object'&&!Array.isArray(v))p.settings=d.settings;}catch{}}
    await this.save(uid,p);return response();
   }
@@ -152,6 +155,21 @@ export class Progress extends DurableObject{
     for(const x of picked.filter(x=>!x.drop))p.own[x.kind]=p.own[x.kind].filter(i=>i!==x.i);
     const pool=E.dropPool(r+1);let got;if(pool.length){got={...pool[crypto.getRandomValues(new Uint32Array(1))[0]%pool.length],rar:r+1};p.own[got.kind].push(got.i);}else{E.addDrop(r+1);got={drop:r+1};}result={got,picked};
    }
+  }else if(b.action==='admin-ban'||b.action==='admin-name'){
+   if(uid!==ADMIN_UID)throw new ApiError('Only the admin can do that',403);
+   const to=String(b.uid||'');if(!ID.test(to))throw new ApiError('Invalid player');
+   if(b.action==='admin-ban'){
+    // the reason is shown to the player in the jail screen; Firebase's bans list is what actually blocks them
+    if(b.on){const reason=String(b.reason||'').trim().slice(0,200);if(!reason)throw new ApiError('Write a reason for the ban');await this.ctx.storage.put('ban:'+to,{reason,at:now,by:uid});this.banCache.delete(to);}
+    else{await this.ctx.storage.delete('ban:'+to);this.banCache.delete(to);}
+    return response({ok:true});
+   }
+   // a permanent name: the admin sets it and the player can't change it back (null unlocks)
+   const q=to===uid?p:await this.ctx.storage.get('p:'+to);if(!q)throw new ApiError("That player hasn't opened the game since accounts moved to the new server",404);
+   if(b.name==null){delete q.nameLock;}
+   else{const nm=String(b.name).replace(/[^\p{L}\p{N} _.\-]/gu,'').trim().slice(0,14);if(nm.length<3)throw new ApiError('Names are 3 to 14 letters or numbers');if(badName(nm))throw new ApiError("That name isn't allowed");q.nameLock=nm;q.name=nm;}
+   if(q!==p){q.rev=(q.rev||0)+1;await this.ctx.storage.transaction(async tx=>{await tx.put('p:'+to,q);await tx.put('lb:'+to,publicRow(q,to));await tx.put(receiptKey,{action:b.action,result:{name:q.name},at:now});});return response({name:q.name,locked:!!q.nameLock});}
+   result={name:q.name,locked:!!q.nameLock};
   }else if(b.action==='admin-mmr'){
    // the admin gives (or takes away) MMR in one ranked playlist; it lands in that player's account straight away
    if(uid!==ADMIN_UID)throw new ApiError('Only the admin can change MMR',403);

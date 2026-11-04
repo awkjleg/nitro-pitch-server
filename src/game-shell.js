@@ -15,6 +15,8 @@ import snowdrift from "./snowdrift.txt";
 import paintsUi from "./paints.txt";
 import adminMmr from "./admin-mmr.txt";
 import menuMusic from "./menu-music.txt";
+import moderationUi from "./moderation.txt";
+import {moderationScript} from "./moderation.js";
 import sideswipe from "./sideswipe.txt";
 import sideswipeMenu from "./sideswipe-menu.txt";
 // The original game is a single prebuilt HTML asset. Keep the small, reviewed
@@ -27,7 +29,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111037;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111038;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -99,7 +101,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.39\",\n  \"title\": \"Update 5.39: New menu music\",\n  \"notes\": [\n    \"New menu music: two original tracks play in the menus and fade out when a match starts.\",\n    \"Change the music volume in Settings, or mute it with the sound button.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.40\",\n  \"title\": \"Update 5.40: Goal speed and fair play\",\n  \"notes\": [\n    \"Every goal now shows how fast the ball was going in MPH, and how far into the game it was scored.\",\n    \"Offensive names are no longer allowed.\",\n    \"Banned accounts see the ban reason.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -188,6 +190,10 @@ const patches = [
   {
     "before": "  function musicTick() {\n    if (!ctx || !musicOn || muted || musicVol <= 0 || ctx.state !== \"running\") { if (ctx) musicNext = ctx.currentTime + 0.05; return; }",
     "after": "  function musicTick() {\n    if (typeof npMenuTracks === \"function\" && ctx && musicGain && npMenuTracks(ctx, musicGain, musicOn && !muted && musicVol > 0 && ctx.state === \"running\")) return;\n    if (!ctx || !musicOn || muted || musicVol <= 0 || ctx.state !== \"running\") { if (ctx) musicNext = ctx.currentTime + 0.05; return; }"
+  },
+  {
+    "before": "  else if (match.ph === \"goal\") showMsg(\"GOAL!\", match.sc ? match.sc + \" scores for \" + (match.lg ? \"orange\" : \"blue\") + (match.as ? \", assist from \" + match.as : \"\") : \"\", match.lg ? \"var(--orange)\" : \"var(--blue)\");",
+    "after": "  else if (match.ph === \"goal\") showMsg(\"GOAL!\", npGoalLine(match.sc ? match.sc + \" scores for \" + (match.lg ? \"orange\" : \"blue\") + (match.as ? \", assist from \" + match.as : \"\") : \"\"), match.lg ? \"var(--orange)\" : \"var(--blue)\");"
   },
   {
     "before": "function openDropUI(k) {",
@@ -455,5 +461,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools, snowdrift, paintsUi, adminMmr, menuMusic, "/* NP2D-START (website only: the CrazyGames build removes this block) */", sideswipe, sideswipeMenu, "/* NP2D-END */"].join("\n"));
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools, snowdrift, paintsUi, adminMmr, menuMusic, moderationScript, moderationUi, "/* NP2D-START (website only: the CrazyGames build removes this block) */", sideswipe, sideswipeMenu, "/* NP2D-END */"].join("\n"));
 }
