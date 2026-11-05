@@ -106,7 +106,7 @@
     nav.id = 'np-policy-links';
     nav.setAttribute('aria-label', 'Policies');
     nav.style.cssText = 'position:absolute;bottom:8px;left:20px;z-index:5;display:flex;flex-wrap:wrap;gap:16px;padding:10px;background:rgba(6,10,20,.92);border-radius:6px;font:14px/1.5 Segoe UI,sans-serif';
-    for (const [label, href] of [['Terms', '/terms-and-conditions.html'], ['Privacy', '/privacy-policy.html'], ['Cookies', '/cookies.html']]) {
+    for (const [label, href] of [['About', '/about'], ['How to play', '/how-to-play'], ['FAQ', '/faq'], ['Terms', '/terms-and-conditions.html'], ['Privacy', '/privacy-policy.html'], ['Cookies', '/cookies.html']]) {
       const link = document.createElement('a');
       link.textContent = label; link.href = href;
       link.target = '_blank'; link.rel = 'noopener';
