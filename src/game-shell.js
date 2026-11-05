@@ -31,7 +31,7 @@ const patches = [
   },
   {
     "before": "s.tag.position.y = entries.length > 1 ? 2.45 : 2.2;",
-    "after": "s.tag.position.y = entries.length > 1 ? 2.45 + (e.z < -1 ? 0.95 : 0) : 2.2;"
+    "after": "s.tag.position.y = (entries.length > 1 ? 2.95 + (e.z < -1 ? 0.95 : 0) : 2.75) + (CARS[e.body] && (CARS[e.body].tung || CARS[e.body].turtle) ? 0.35 : 0);"
   },
   {
     "before": "  if (jump < 3 * BR) ball.off.add(_t.subVectors(ball.p, np)); else ball.off.set(0, 0, 0);\n  if (ball.off.length() > BR) ball.off.setLength(BR);",
@@ -95,7 +95,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111054;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111055;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -167,7 +167,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.56\",\n  \"title\": \"Update 5.56: Kickoffs and parties\",\n  \"notes\": [\n    \"Kickoffs online: when two players hit the ball at the same time, the hits now combine instead of the ball jumping to a different spot.\",\n    \"Small differences between your screen and the host's now glide smoothly instead of the ball teleporting.\",\n    \"Whoever in your party starts a private match, the rest of the party follows them in automatically with no password.\",\n    \"Bigger cars on the main menu, a closer camera for big parties, and a slightly smaller menu on computers.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.57\",\n  \"title\": \"Update 5.57: Kickoffs and parties\",\n  \"notes\": [\n    \"Kickoffs online: when two players hit the ball at the same time, the hits now combine instead of the ball jumping to a different spot.\",\n    \"Small differences between your screen and the host's now glide smoothly instead of the ball teleporting.\",\n    \"Whoever in your party starts a private match, the rest of the party follows them in automatically with no password.\",\n    \"Bigger cars on the main menu with the player names higher above them, a closer camera for big parties, and a slightly smaller menu on computers.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
