@@ -141,6 +141,8 @@ body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed #a
       if (live) toast("The admin changed your name to " + lock);
     } else if (!lock && was && live) toast("You can change your name again");
   };
+  // other players' ADMIN items are re-checked every couple of minutes (a gift shows on them without a refresh)
+  setInterval(() => { try { for (const k of [...adminVet.keys()]) if (k !== nlUid) adminVet.delete(k); } catch {} }, 120000);
   setInterval(() => {
     let id = ""; try { const u = window.npAccounts && window.npAccounts.user(); id = u && u.uid ? String(u.uid) : ""; } catch {}
     if (id === nlUid) return;
@@ -149,6 +151,9 @@ body.np-jailed #menu,body.np-jailed #hud,body.np-jailed #toast,body.np-jailed #a
     try {
       nlOff = firebase.firestore().collection("adminItems").doc(id).onSnapshot(d => {
         const x = d && d.exists ? d.data() : null; if (!x) return;
+        // the admin items this account was given: kept up to date, so a newly gifted ADMIN item can be equipped at once
+        if (Array.isArray(x.items)) { const vid = (typeof myUid === "function" && myUid()) || id, had = adminVet.get(vid), next = new Set(x.items.filter(v => typeof v === "string"));
+          if (!(had instanceof Set) || had.size !== next.size || [...next].some(v => !had.has(v))) { adminVet.set(vid, next); try { enforceUnlocks(); applyProfileToMe(); lobbyPresence(); if (screen === "garage") renderGarage(); } catch {} } }
         if (x.poke) { if (pokeLast !== undefined && x.poke !== pokeLast) reloadMe(); pokeLast = x.poke; } else if (pokeLast === undefined) pokeLast = 0;
         if (typeof x.nameLock !== "string") return;
         const lock = x.nameLock.slice(0, 24), first = nlLast === undefined, changed = lock !== nlLast; nlLast = lock;

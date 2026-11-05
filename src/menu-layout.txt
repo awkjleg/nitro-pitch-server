@@ -1,0 +1,34 @@
+// Main menu layout: on computer screens the menu panels are drawn a bit smaller (the whole menu UI at 85%), which
+// leaves more room in the middle for the cars on the turntables.
+(() => {
+  const css = document.createElement("style");
+  css.textContent = "@media (min-width: 900px) and (min-height: 560px) { #menu { zoom: .85 } }";
+  document.head.append(css);
+})();
+// Party: when anyone in your party (not only the leader) starts a private match, the rest of the party follows them
+// in automatically, from the menus or party free play, with no match name or password to type. (The game itself
+// already follows the leader; this covers everyone else.) Each start is tried every 6 seconds until you're in.
+(() => {
+  const tries = new Map();
+  setInterval(() => {
+    try {
+      if (!(mode === "menu" || freePlay) || (typeof isBanned !== "undefined" && isBanned)) return;
+      const ps = partyState(); if (!ps || ps.size < 2) return;
+      const players = lobbyPlayers();
+      for (const m of ps.members) {
+        if (m.me || (!ps.isLeader && m.peer === ps.leader)) continue;
+        const P = players.find(x => x.peer === m.peer), pf = P && P.pr && P.pr.pf;
+        if (!pf || typeof pf.rm !== "string" || !/^np-p-[a-z0-9]{1,16}$/.test(pf.rm) || !fin(pf.t)) continue;
+        if (mode === "online" && gameCode === pf.rm) continue;
+        const key = pf.rm + ":" + pf.t, tr = tries.get(key) || { n: 0, at: 0 };
+        if (tr.n >= 5 || Date.now() - tr.at < 6000) continue;
+        tr.n++; tr.at = Date.now(); tries.set(key, tr);
+        privInfo = { name: cleanName(typeof pf.nm === "string" ? pf.nm : "Private match").slice(0, 24) || "Private match", creator: false };
+        toast("Following " + m.name + " into " + privInfo.name);
+        if (mode !== "menu") leaveToMenu(true);
+        joinRoom(pf.rm, { joiner: true });
+        return;
+      }
+    } catch {}
+  }, 1500);
+})();

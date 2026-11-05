@@ -17,6 +17,7 @@ import adminMmr from "./admin-mmr.txt";
 import menuMusic from "./menu-music.txt";
 import moderationUi from "./moderation.txt";
 import privateMessages from "./messages.txt";
+import menuLayout from "./menu-layout.txt";
 import {moderationScript} from "./moderation.js";
 import sideswipe from "./sideswipe.txt";
 import sideswipeMenu from "./sideswipe-menu.txt";
@@ -25,12 +26,32 @@ import sideswipeMenu from "./sideswipe-menu.txt";
 // whenever replacing public/index.html with a new game build.
 const patches = [
   {
+    "before": "  partyFollowInfo = /^np-[pf]-/.test(room) && isPartyLeader() ? {",
+    "after": "  partyFollowInfo = /^np-[pf]-/.test(room) && (isPartyLeader() || partyState().size > 1) ? {"
+  },
+  {
+    "before": "s.tag.position.y = entries.length > 1 ? 2.45 : 2.2;",
+    "after": "s.tag.position.y = entries.length > 1 ? 2.45 + (e.z < -1 ? 0.95 : 0) : 2.2;"
+  },
+  {
+    "before": "  if (jump < 3 * BR) ball.off.add(_t.subVectors(ball.p, np)); else ball.off.set(0, 0, 0);\n  if (ball.off.length() > BR) ball.off.setLength(BR);",
+    "after": "  // corrections from the host glide in over a moment instead of the ball jumping (only a real teleport snaps)\n  if (jump < 10 * BR) ball.off.add(_t.subVectors(ball.p, np)); else ball.off.set(0, 0, 0);\n  if (ball.off.length() > 4 * BR) ball.off.setLength(4 * BR);"
+  },
+  {
+    "before": "        moveBallTo(new V3(pr.h.p[0], pr.h.p[1], pr.h.p[2]).addScaledVector(nv, age), nv);",
+    "after": "        // a 50/50 (both touch at once, kickoffs especially): mix the two hits where the ball is, instead of the later\n        // message replacing the earlier touch and the ball jumping to where the other player sent it\n        const lt = touches.length ? touches[touches.length - 1] : null;\n        if (lt && lt.key !== p.peer && nowS() - lt.t < 0.25) { const diff = _t.subVectors(nv, ball.v).length(); nv.add(ball.v).multiplyScalar(0.5); nv.y += Math.min(diff * 0.2, 12); moveBallTo(ball.p.clone(), nv); }\n        else moveBallTo(new V3(pr.h.p[0], pr.h.p[1], pr.h.p[2]).addScaledVector(nv, age), nv);"
+  },
+  {
+    "before": "        s.car.g.position.y = 0.24 + RIDE + (e.garage ? 0 : Math.sin(now * 2 + n) * 0.03);",
+    "after": "        s.car.g.position.y = 0.24 + RIDE + (e.garage ? 0 : Math.sin(now * 2 + n) * 0.03);\n        s.car.g.scale.setScalar(e.garage ? 1 : 1.3);   // the main menu shows the cars bigger"
+  },
+  {
     "before": "        if (s.tag) { const k = entries.length > 1 ? 3.1 : 2.3;",
     "after": "        if (s.tag) { const k = entries.length > 1 ? 2.45 : 2.3;"
   },
   {
     "before": "  entries.forEach((e, k) => { const side = k === 0 ? 0 : (k % 2 ? 1 : -1), step = Math.ceil(k / 2); e.x = side * step * 3.7; e.z = -step * 0.9; e.face = -side * 0.5; if (e.me) e.yaw = 0.5 + t * 0.35; });",
-    "after": "  entries.forEach((e, k) => { const side = k === 0 ? 0 : (k % 2 ? 1 : -1), step = Math.ceil(k / 2); e.x = side * step * 2.6; e.z = -step * 0.7; e.face = -side * 0.5; if (e.me) e.yaw = 0.5 + t * 0.35; });"
+    "after": "  entries.forEach((e, k) => { const side = k === 0 ? 0 : (k % 2 ? 1 : -1), step = Math.ceil(k / 2); const S = [[0, 0], [2.4, -0.5], [-2.4, -0.5], [1.2, -2.3], [-1.2, -2.3], [3.6, -2.3]][k] || [side * step * 2.4, -2.3]; e.x = S[0]; e.z = S[1]; e.face = -side * 0.5; if (e.me) e.yaw = 0.5 + t * 0.35; });"
   },
   {
     "before": "          toast(\"Following \" + L.name + \" into \" + privInfo.name);\n          joinRoom(pf.rm, { joiner: true });",
@@ -74,7 +95,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111053;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111054;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -146,7 +167,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.55\",\n  \"title\": \"Update 5.55: Party fixes\",\n  \"notes\": [\n    \"Your party's cars now stand closer together on the main menu.\",\n    \"When your party leader starts a private match, you follow them in automatically, even from party free play, with no password to type.\",\n    \"New guides on the website: How to play, Game modes, Ranks, Garage and items, Tips, FAQ, Updates and Contact.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.56\",\n  \"title\": \"Update 5.56: Kickoffs and parties\",\n  \"notes\": [\n    \"Kickoffs online: when two players hit the ball at the same time, the hits now combine instead of the ball jumping to a different spot.\",\n    \"Small differences between your screen and the host's now glide smoothly instead of the ball teleporting.\",\n    \"Whoever in your party starts a private match, the rest of the party follows them in automatically with no password.\",\n    \"Bigger cars on the main menu, a closer camera for big parties, and a slightly smaller menu on computers.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",
@@ -506,5 +527,5 @@ export function applyGameFixes(html) {
     }
     html = html.slice(0,index)+after+html.slice(index+before.length);
   }
-  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools, snowdrift, paintsUi, adminMmr, menuMusic, moderationScript, moderationUi, privateMessages, "/* NP2D-START (website only: the CrazyGames build removes this block) */", sideswipe, sideswipeMenu, "/* NP2D-END */"].join("\n"));
+  return html.replace("/* NP_DRIVING_UPDATES */", () => drivingUpdates).replace("/* NP_SECURE_PROGRESS */", () => secureProgress).replace("/* NP_PLAYER_FEATURES */", () => playerFeatures).replace("/* NP_GAME_POLISH */", () => gamePolish).replace("/* NP_MATCH_EXPERIENCE */", () => matchExperience).replace("/* NP_PHONE_CONTROLS */", () => phoneControls).replace("/* NP_TOUCH_INPUT */", () => touchInput).replace("/* NP_CLAN_EMBLEMS */", () => clanEmblems).replace("/* NP_MOBILE_MENUS */", () => mobileMenus).replace("/* NP_INVITE_ALERTS */", () => inviteAlerts).replace("/* NP_SEASON_UPDATE */", () => [seasonUpdate, seasonRewards, seasonTools, snowdrift, paintsUi, adminMmr, menuMusic, moderationScript, moderationUi, privateMessages, menuLayout, "/* NP2D-START (website only: the CrazyGames build removes this block) */", sideswipe, sideswipeMenu, "/* NP2D-END */"].join("\n"));
 }
