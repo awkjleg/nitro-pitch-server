@@ -25,6 +25,22 @@ import sideswipeMenu from "./sideswipe-menu.txt";
 // whenever replacing public/index.html with a new game build.
 const patches = [
   {
+    "before": "        if (s.tag) { const k = entries.length > 1 ? 3.1 : 2.3;",
+    "after": "        if (s.tag) { const k = entries.length > 1 ? 2.45 : 2.3;"
+  },
+  {
+    "before": "  entries.forEach((e, k) => { const side = k === 0 ? 0 : (k % 2 ? 1 : -1), step = Math.ceil(k / 2); e.x = side * step * 3.7; e.z = -step * 0.9; e.face = -side * 0.5; if (e.me) e.yaw = 0.5 + t * 0.35; });",
+    "after": "  entries.forEach((e, k) => { const side = k === 0 ? 0 : (k % 2 ? 1 : -1), step = Math.ceil(k / 2); e.x = side * step * 2.6; e.z = -step * 0.7; e.face = -side * 0.5; if (e.me) e.yaw = 0.5 + t * 0.35; });"
+  },
+  {
+    "before": "          toast(\"Following \" + L.name + \" into \" + privInfo.name);\n          joinRoom(pf.rm, { joiner: true });",
+    "after": "          toast(\"Following \" + L.name + \" into \" + privInfo.name);\n          if (mode !== \"menu\") leaveToMenu(true);\n          joinRoom(pf.rm, { joiner: true });"
+  },
+  {
+    "before": "      } else if (pf && typeof pf.rm === \"string\" && /^np-p-[a-z0-9]{1,16}$/.test(pf.rm) && fin(pf.t) && mode === \"menu\") {",
+    "after": "      } else if (pf && typeof pf.rm === \"string\" && /^np-p-[a-z0-9]{1,16}$/.test(pf.rm) && fin(pf.t) && (mode === \"menu\" || freePlay)) {   // (from the menus or from party free play: no password needed, you follow your leader)"
+  },
+  {
     "before": "\"You have nothing to trade yet. Drop items (from drops) can be traded.\"",
     "after": "\"You have nothing to trade yet. Drop items, painted cars and items the admin gave you can be traded.\""
   },
@@ -58,7 +74,7 @@ const patches = [
   },
   {
     "before": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111001;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n",
-    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111052;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
+    "after": "const $ = id => document.getElementById(id);\n// release number: goes up with every update (the website also serves it in version.txt)\nconst BUILD = 2026111053;\n// patch notes: a pop-up on the main menu, shown once per player per version (v), after each update (see showPatchNotes)\nconst PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n"
   },
   {
     "before": "// RLUtilities-style bounce: restitution 0.6 on the normal part, friction that trades sliding for spin\nfunction ballContact(b, n, r) {\n  if (n.y > 0.7 && b === ball && b.p.y < r + 1) ball.floorT = nowS();     // touched the floor (the 0:00 rule)\n  const vn = b.v.dot(n);\n  if (vn >= 0) return;\n",
@@ -130,7 +146,7 @@ const patches = [
   },
   {
     "before": "const PATCH_NOTES = { v: \"5.4\", title: \"Update 5.4: ADMIN items are the admin's\", notes: [\n  \"ADMIN items (car, decal, wheels, topper, antenna, title, banner) only show for the admin and players he gifted them to. Copies anyone gave themselves are gone\",\n] };\n",
-    "after": "const PATCH_NOTES = {\n  \"v\": \"5.54\",\n  \"title\": \"Update 5.54: New player guides\",\n  \"notes\": [\n    \"New guides on the website: How to play, Game modes, Ranks, Garage and items, Tips, FAQ, Updates and Contact. Find them from the links at the bottom of the main menu.\",\n    \"Another ADMIN car has been spotted in the shadows...\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
+    "after": "const PATCH_NOTES = {\n  \"v\": \"5.55\",\n  \"title\": \"Update 5.55: Party fixes\",\n  \"notes\": [\n    \"Your party's cars now stand closer together on the main menu.\",\n    \"When your party leader starts a private match, you follow them in automatically, even from party free play, with no password to type.\",\n    \"New guides on the website: How to play, Game modes, Ranks, Garage and items, Tips, FAQ, Updates and Contact.\",\n    \"Refresh from the menu when prompted to load this update.\"\n  ]\n};\n"
   },
   {
     "before": "<title>Nitro Pitch</title>",

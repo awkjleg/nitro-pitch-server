@@ -142,44 +142,49 @@ const NPPaints = (() => {
   let SS = null;
   function turtleParts() {
     if (SS) return SS;
-    const cv = (w, h, draw) => { const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
-    // the head: blue hood all round, an opening at the front (u = 0.25) with green skin and the eyes
-    const head = cv(1024, 512, (g, w, h) => {
-      g.fillStyle = "#1f5fd6"; g.fillRect(0, 0, w, h);
-      g.strokeStyle = "rgba(10,30,90,.35)"; g.lineWidth = 6; for (let i = 0; i < 18; i++) { const x = i * 60 + 20; g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + 30, h / 2, x - 10, h); g.stroke(); }
-      const cx = w * 0.25, cy = h * 0.5;
-      g.fillStyle = "#6fbf3a"; g.beginPath(); g.ellipse(cx, cy, 150, 52, 0, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = "#123d8f"; g.lineWidth = 10; g.stroke();
-      for (const dx of [-62, 62]) {
-        g.fillStyle = "#fff"; g.beginPath(); g.ellipse(cx + dx, cy + 2, 34, 28, 0, 0, Math.PI * 2); g.fill();
-        g.fillStyle = "#1b1b1b"; g.beginPath(); g.arc(cx + dx + (dx < 0 ? 6 : -6), cy + 4, 13, 0, Math.PI * 2); g.fill();
-        g.fillStyle = "#fff"; g.beginPath(); g.arc(cx + dx + (dx < 0 ? 10 : -2), cy - 2, 4, 0, Math.PI * 2); g.fill();
-        g.strokeStyle = "#2f5e14"; g.lineWidth = 7; g.lineCap = "round"; g.beginPath(); g.moveTo(cx + dx - 32, cy - 30 + (dx < 0 ? 8 : 0)); g.lineTo(cx + dx + 30, cy - 30 + (dx < 0 ? 0 : 8)); g.stroke();
-      }
+    const tex = (w, h, draw, rep) => { const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); } return t; };
+    // skin: green with small scales and darker blotches
+    const skinTex = tex(256, 256, (g, w, h) => {
+      g.fillStyle = "#6cbb39"; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 40; i++) { g.fillStyle = "rgba(40,90,20," + (0.08 + Math.random() * 0.12) + ")"; g.beginPath(); g.arc(Math.random() * w, Math.random() * h, 8 + Math.random() * 22, 0, Math.PI * 2); g.fill(); }
+      g.strokeStyle = "rgba(30,70,15,.25)"; g.lineWidth = 1.5;
+      for (let y = 0; y < h; y += 12) for (let x = (y / 12 % 2) * 6; x < w; x += 12) { g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2); g.stroke(); }
+    }, 2);
+    // hood: blue cloth with folds and a stitched seam; an opening at the front (u = 0.25) for the eyes
+    const hood = tex(1024, 512, (g, w, h) => {
+      const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "#2c6fe8"); gr.addColorStop(1, "#1a4fb8"); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      g.strokeStyle = "rgba(8,25,80,.35)"; g.lineWidth = 7; for (let i = 0; i < 22; i++) { const x = i * 48 + 10; g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + 30, h * 0.3, x - 20, h * 0.7, x + 10, h); g.stroke(); }
+      g.strokeStyle = "rgba(255,255,255,.18)"; g.lineWidth = 3; for (let i = 0; i < 22; i++) { const x = i * 48 + 22; g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + 30, h * 0.3, x - 20, h * 0.7, x + 10, h); g.stroke(); }
+      g.setLineDash([10, 8]); g.strokeStyle = "rgba(200,220,255,.5)"; g.lineWidth = 3; g.beginPath(); g.moveTo(w * 0.75, 0); g.lineTo(w * 0.75, h); g.stroke(); g.setLineDash([]);
+      const cx = w * 0.25, cy = h * 0.47;
+      g.fillStyle = "#6cbb39"; g.beginPath(); g.ellipse(cx, cy, 170, 62, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = "rgba(40,90,20,.35)"; g.beginPath(); g.ellipse(cx, cy - 30, 170, 30, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = "#0f3a8f"; g.lineWidth = 14; g.beginPath(); g.ellipse(cx, cy, 172, 64, 0, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = "rgba(200,220,255,.45)"; g.lineWidth = 3; g.setLineDash([9, 7]); g.beginPath(); g.ellipse(cx, cy, 188, 78, 0, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
     });
-    // the shell: dark green plates with lighter edges
-    const shell = cv(512, 512, (g, w, h) => {
-      g.fillStyle = "#2f6b2a"; g.fillRect(0, 0, w, h);
-      g.strokeStyle = "#a4c95a"; g.lineWidth = 10;
-      const hex = (x, y, r) => { g.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 3 * k + Math.PI / 6; g.lineTo(x + r * Math.cos(a), y + r * Math.sin(a)); } g.closePath(); g.stroke(); };
-      for (let row = 0; row < 6; row++) for (let col = 0; col < 6; col++) hex(col * 92 + (row % 2) * 46, row * 80 + 40, 48);
+    // shell: dark green with lighter rims around each plate and growth lines
+    const shellTex = tex(512, 512, (g, w, h) => {
+      g.fillStyle = "#2f6a29"; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 300; i++) { g.strokeStyle = "rgba(15,45,12," + (0.15 + Math.random() * 0.2) + ")"; g.lineWidth = 1; const y = Math.random() * h; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y + Math.random() * 6 - 3); g.stroke(); }
+    }, 1);
+    const plateTex = tex(256, 256, (g, w, h) => {
+      const rg = g.createRadialGradient(128, 128, 10, 128, 128, 128); rg.addColorStop(0, "#4f8f3a"); rg.addColorStop(0.75, "#356f2b"); rg.addColorStop(1, "#9cc45a"); g.fillStyle = rg; g.fillRect(0, 0, w, h);
+      g.strokeStyle = "rgba(20,50,15,.45)"; g.lineWidth = 3; for (let r = 30; r < 120; r += 22) { g.beginPath(); for (let k = 0; k <= 6; k++) { const a = Math.PI / 3 * k + Math.PI / 6; g.lineTo(128 + r * Math.cos(a), 128 + r * Math.sin(a)); } g.stroke(); }
     });
-    // the front plates (plastron)
-    const belly = cv(256, 512, (g, w, h) => {
-      g.fillStyle = "#e8c15a"; g.fillRect(0, 0, w, h);
-      g.strokeStyle = "rgba(120,80,20,.55)"; g.lineWidth = 6;
-      for (let y = 80; y < h; y += 90) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
-      g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.stroke();
+    const bellyTex = tex(256, 256, (g, w, h) => {
+      const rg = g.createRadialGradient(128, 110, 10, 128, 128, 140); rg.addColorStop(0, "#f6d77a"); rg.addColorStop(1, "#d9a83f"); g.fillStyle = rg; g.fillRect(0, 0, w, h);
+      g.strokeStyle = "rgba(140,90,20,.35)"; g.lineWidth = 2; for (let y = 20; y < h; y += 16) { g.beginPath(); g.moveTo(10, y); g.lineTo(w - 10, y + 2); g.stroke(); }
     });
-    const skin = new THREE.MeshStandardMaterial({ color: 0x6fbf3a, roughness: 0.6, metalness: 0 });
+    const wood = tex(64, 512, (g, w, h) => { g.fillStyle = "#94622f"; g.fillRect(0, 0, w, h); for (let i = 0; i < 26; i++) { g.strokeStyle = ["#7a4f24", "#b07a42", "#6b431d"][i % 3]; g.globalAlpha = 0.5; g.lineWidth = 1 + Math.random() * 2; const x = Math.random() * w; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + Math.random() * 6 - 3, h); g.stroke(); } g.globalAlpha = 1; });
+    const M = (o) => new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.6, metalness: 0 }, o));
     SS = {
-      head: new THREE.MeshStandardMaterial({ map: head, roughness: 0.65, metalness: 0 }),
-      shell: new THREE.MeshStandardMaterial({ map: shell, roughness: 0.45, metalness: 0.05 }),
-      belly: new THREE.MeshStandardMaterial({ map: belly, roughness: 0.6, metalness: 0 }),
-      skin,
-      blue: new THREE.MeshStandardMaterial({ color: 0x1f5fd6, roughness: 0.6, metalness: 0 }),
-      sash: new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.7, metalness: 0 }),
-      staff: new THREE.MeshStandardMaterial({ color: 0x9a6a3a, roughness: 0.55, metalness: 0 })
+      skin: M({ map: skinTex, roughness: 0.55 }), skinDark: M({ color: 0x4f9a2b, roughness: 0.6 }),
+      hood: M({ map: hood, roughness: 0.7 }), blue: M({ color: 0x2462d8, roughness: 0.7 }), blueDark: M({ color: 0x163f9a, roughness: 0.75 }),
+      shell: M({ map: shellTex, roughness: 0.4, metalness: 0.05 }), plate: M({ map: plateTex, roughness: 0.35, metalness: 0.05 }), rim: M({ color: 0x9cc45a, roughness: 0.5 }),
+      belly: M({ map: bellyTex, roughness: 0.55 }), bellyLine: M({ color: 0xb98a2e, roughness: 0.6 }),
+      eye: M({ color: 0xffffff, roughness: 0.2 }), pupil: M({ color: 0x111111, roughness: 0.15 }), shine: M({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.6 }),
+      sash: M({ color: 0x6b4423, roughness: 0.75 }), strap: M({ color: 0x4a2f18, roughness: 0.7 }), metal: M({ color: 0xb8bcc4, roughness: 0.3, metalness: 0.8 }),
+      wood: M({ map: wood, roughness: 0.55 }), wrap: M({ color: 0x1d2b4a, roughness: 0.8 })
     };
     return SS;
   }
@@ -190,53 +195,101 @@ const NPPaints = (() => {
     for (const w of car.wheels) { const pv = w.userData && w.userData.pivot; (pv || w).traverse(m => { if (m.isMesh) m.visible = false; }); }
     const size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
     const fwd = car.flame && car.flame.position.z < 0 ? 1 : -1;
-    const H = size.z * 0.8, legL = H * 0.3, bodyH = H * 0.42, bw = H * 0.2, headR = H * 0.13;
+    const H = size.z * 0.8, U = H / 10;                     // the figure is 10 U tall
     const man = new THREE.Group(); man.position.set(0, 0, mid.z); man.rotation.y = fwd > 0 ? 0 : Math.PI; g.add(man);
     const add = (geo, mat, x, y, z, parent = man) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m; };
-    const bodyY = legL + bodyH / 2;
-    // body: a green egg, the yellow plastron on the front, the patterned shell on the back
-    add(new THREE.SphereGeometry(bw, 24, 16), T.skin, 0, bodyY, 0).scale.set(1, bodyH / (2 * bw), 0.8);
-    add(new THREE.SphereGeometry(bw * 0.92, 24, 16, Math.PI * 0.2, Math.PI * 0.6), T.belly, 0, bodyY, bw * 0.06).scale.set(1, bodyH / (2 * bw) * 0.95, 0.82);
-    add(new THREE.SphereGeometry(bw * 1.12, 28, 18, Math.PI * 1.08, Math.PI * 0.84), T.shell, 0, bodyY + bodyH * 0.04, -bw * 0.08).scale.set(1.04, bodyH / (2 * bw) * 1.05, 0.95);
-    // sash belt round the middle, knot at the side
-    const belt = add(new THREE.TorusGeometry(bw * 0.98, bw * 0.08, 8, 28), T.sash, 0, legL + bodyH * 0.36, 0); belt.rotation.x = Math.PI / 2; belt.scale.set(1, 0.82, 1);
-    add(new THREE.SphereGeometry(bw * 0.13, 10, 8), T.sash, bw * 0.92, legL + bodyH * 0.34, bw * 0.2);
-    // head in the hood, with two hood tails that flutter behind
-    const headY = legL + bodyH + headR * 0.75;
-    const hd = add(new THREE.SphereGeometry(headR, 32, 20), T.head, 0, headY, bw * 0.08); hd.scale.set(1.05, 0.95, 1.1);
-    const tails = [];
-    for (const s of [-1, 1]) {
-      const tg = new THREE.Group(); tg.position.set(s * headR * 0.25, headY + headR * 0.1, -headR * 0.85); man.add(tg);
-      add(new THREE.BoxGeometry(headR * 0.22, headR * 0.06, headR * 1.3), T.blue, 0, 0, -headR * 0.6, tg);
-      tg.rotation.set(-0.35, s * 0.35, 0); tails.push([tg, s]);
+    const cap = (r, len, mat, parent, y) => add(new THREE.CapsuleGeometry(r, len, 6, 14), mat, 0, y, 0, parent);
+    const hipY = 3.3 * U, waistY = 4.1 * U, chestY = 5.4 * U, neckY = 6.9 * U;
+    // ---- torso: green core, the plastron of plates on the front, the shell with raised plates on the back
+    const torso = new THREE.Group(); torso.position.y = 0; man.add(torso);
+    add(new THREE.SphereGeometry(1.6 * U, 28, 20), T.skin, 0, 5.0 * U, 0, torso).scale.set(1, 1.25, 0.85);
+    const bellyR = 1.45 * U;
+    const belly = add(new THREE.SphereGeometry(bellyR, 28, 20, Math.PI * 0.18, Math.PI * 0.64, Math.PI * 0.12, Math.PI * 0.78), T.belly, 0, 5.0 * U, 0.22 * U, torso); belly.scale.set(1, 1.3, 0.9);
+    for (const y of [4.3, 4.9, 5.5, 6.1]) { const b = add(new THREE.TorusGeometry(1.27 * U * Math.cos((y - 5.0) / 2.6), 0.035 * U, 6, 30, Math.PI * 0.62), T.bellyLine, 0, y * U, 0.2 * U, torso); b.rotation.set(Math.PI / 2, 0, Math.PI * 0.19 + Math.PI); b.scale.set(1, 0.92, 1); }
+    add(new THREE.BoxGeometry(0.06 * U, 2.6 * U, 0.06 * U), T.bellyLine, 0, 5.1 * U, 1.47 * U, torso);
+    // shell: a dome on the back, a light rim round its edge, and raised hexagon plates
+    const shellR = 1.85 * U, shellY = 5.15 * U;
+    const shell = add(new THREE.SphereGeometry(shellR, 32, 22, Math.PI * 1.02, Math.PI * 0.96), T.shell, 0, shellY, -0.25 * U, torso); shell.scale.set(1.02, 1.22, 0.78);
+    const rim = add(new THREE.TorusGeometry(1.84 * U, 0.12 * U, 8, 40), T.rim, 0, shellY, -0.22 * U, torso); rim.scale.set(1.02, 1.22, 1);
+    const plates = [[0, 0.55], [0, 0], [0, -0.55], [0.62, 0.3], [-0.62, 0.3], [0.62, -0.3], [-0.62, -0.3], [0.95, 0], [-0.95, 0]];
+    for (const [px, py] of plates) {
+      const r = (Math.abs(px) > 0.9 ? 0.32 : 0.42) * U, a = Math.asin(Math.max(-0.95, Math.min(0.95, px * 0.9)));
+      const x = Math.sin(a) * shellR * 1.0, z = -0.25 * U - Math.cos(a) * shellR * 0.78 - 0.02 * U, y = shellY + py * shellR * 1.1;
+      const pl = add(new THREE.CylinderGeometry(r, r * 1.1, 0.12 * U, 6), T.plate, x, y, z, torso);
+      pl.rotation.x = Math.PI / 2; pl.rotation.z = Math.PI / 6; pl.rotation.y = 0; pl.lookAt(new THREE.Vector3(x * 3, y + py * U * 0.6, z * 3 - 0.2 * U).applyMatrix4(torso.matrixWorld)); pl.rotateX(Math.PI / 2);
     }
-    // legs: thick green, blue knee pads, wide three-toed feet
+    // ---- belt: a wide brown sash, a knot at the front-left with two tails, and a strap across the chest for the staff
+    const belt = add(new THREE.TorusGeometry(1.42 * U, 0.17 * U, 10, 40), T.sash, 0, waistY, -0.05 * U, torso); belt.rotation.x = Math.PI / 2; belt.scale.set(1.05, 0.86, 1);
+    add(new THREE.SphereGeometry(0.28 * U, 12, 10), T.sash, -0.55 * U, waistY, 1.22 * U, torso).scale.set(1.2, 0.9, 0.7);
+    const sashTails = [];
+    for (const s of [-1, 1]) { const tg = new THREE.Group(); tg.position.set(-0.55 * U + s * 0.12 * U, waistY - 0.1 * U, 1.28 * U); torso.add(tg); add(new THREE.BoxGeometry(0.22 * U, 1.0 * U, 0.05 * U), T.sash, 0, -0.5 * U, 0, tg); tg.rotation.z = s * 0.25; sashTails.push(tg); }
+    const strap = add(new THREE.TorusGeometry(1.62 * U, 0.08 * U, 6, 40), T.strap, 0, chestY + 0.2 * U, -0.1 * U, torso); strap.rotation.set(0, Math.PI / 2, 0.75); strap.scale.set(1, 1, 0.62);
+    add(new THREE.CylinderGeometry(0.16 * U, 0.16 * U, 0.06 * U, 14), T.metal, 0.55 * U, chestY + 0.75 * U, 1.12 * U, torso).rotation.x = Math.PI / 2;
+    // ---- staff across the back: wood with dark grip wraps and metal end caps
+    const staff = new THREE.Group(); staff.position.set(0, chestY + 0.3 * U, -1.75 * U); staff.rotation.z = 0.75; torso.add(staff);
+    add(new THREE.CylinderGeometry(0.12 * U, 0.12 * U, 8.4 * U, 12), T.wood, 0, 0, 0, staff);
+    for (const y of [-1.4, -1.1, -0.8, 0.8, 1.1, 1.4]) add(new THREE.CylinderGeometry(0.135 * U, 0.135 * U, 0.18 * U, 12), T.wrap, 0, y * U, 0, staff);
+    for (const y of [-4.2, 4.2]) add(new THREE.CylinderGeometry(0.15 * U, 0.15 * U, 0.25 * U, 12), T.metal, 0, y * U, 0, staff);
+    // ---- head: a rounded turtle head in the hood, real eyes in the opening, a brow, hood knot and two tails behind
+    const head = new THREE.Group(); head.position.set(0, neckY, 0.35 * U); man.add(head);
+    cap(0.42 * U, 0.4 * U, T.skin, head, -0.55 * U);                               // neck
+    const hd = add(new THREE.SphereGeometry(1.05 * U, 36, 24), T.hood, 0, 0.55 * U, 0.05 * U, head); hd.scale.set(1.0, 0.92, 1.12);
+    add(new THREE.SphereGeometry(0.75 * U, 24, 16, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5), T.skin, 0, 0.32 * U, 0.55 * U, head).scale.set(1.05, 0.9, 1.0);   // snout under the hood
+    const eyes = [];
+    for (const s of [-1, 1]) {
+      const e = add(new THREE.SphereGeometry(0.27 * U, 20, 14), T.eye, s * 0.4 * U, 0.6 * U, 1.0 * U, head); e.scale.set(1, 0.85, 0.6);
+      const p = add(new THREE.SphereGeometry(0.12 * U, 14, 10), T.pupil, s * 0.36 * U, 0.58 * U, 1.15 * U, head);
+      add(new THREE.SphereGeometry(0.04 * U, 8, 6), T.shine, s * 0.32 * U, 0.66 * U, 1.22 * U, head);
+      const brow = add(new THREE.CapsuleGeometry(0.06 * U, 0.4 * U, 4, 8), T.skinDark, s * 0.4 * U, 0.92 * U, 1.0 * U, head); brow.rotation.z = Math.PI / 2 + s * 0.25;
+      eyes.push(p);
+    }
+    add(new THREE.TorusGeometry(0.55 * U, 0.06 * U, 6, 20, Math.PI), T.skinDark, 0, 0.05 * U, 1.05 * U, head).rotation.set(0, 0, Math.PI);   // mouth line under the hood edge
+    add(new THREE.SphereGeometry(0.28 * U, 12, 10), T.blueDark, 0, 0.75 * U, -1.05 * U, head).scale.set(1.2, 0.9, 0.8);   // hood knot
+    const hoodTails = [];
+    for (const s of [-1, 1]) {
+      const tg = new THREE.Group(); tg.position.set(s * 0.15 * U, 0.7 * U, -1.15 * U); head.add(tg);
+      add(new THREE.BoxGeometry(0.3 * U, 0.05 * U, 1.6 * U), T.blue, 0, 0, -0.8 * U, tg);
+      add(new THREE.BoxGeometry(0.32 * U, 0.06 * U, 0.12 * U), T.blueDark, 0, 0, -1.55 * U, tg);
+      tg.rotation.set(-0.4, s * 0.3, 0); hoodTails.push([tg, s]);
+    }
+    // ---- legs: thigh and shin with a knee joint, blue knee pads, wide three-toed feet
     const legs = [];
     for (const s of [-1, 1]) {
-      const hip = new THREE.Group(); hip.position.set(s * bw * 0.45, legL + bodyH * 0.1, 0); man.add(hip);
-      add(new THREE.CylinderGeometry(bw * 0.2, bw * 0.17, legL, 12), T.skin, 0, -legL / 2, 0, hip);
-      add(new THREE.SphereGeometry(bw * 0.22, 12, 8), T.blue, 0, -legL * 0.45, bw * 0.06, hip).scale.set(1, 0.7, 0.9);
-      const foot = add(new THREE.SphereGeometry(bw * 0.28, 12, 8), T.skin, 0, -legL - bodyH * 0.06 + bw * 0.06, bw * 0.15, hip); foot.scale.set(1, 0.4, 1.5);
-      legs.push([hip, s]);
+      const hip = new THREE.Group(); hip.position.set(s * 0.75 * U, hipY, 0); man.add(hip);
+      cap(0.42 * U, 0.9 * U, T.skin, hip, -0.75 * U);
+      const knee = new THREE.Group(); knee.position.y = -1.55 * U; hip.add(knee);
+      const pad = add(new THREE.SphereGeometry(0.42 * U, 16, 12), T.blue, 0, 0, 0.12 * U, knee); pad.scale.set(1.05, 0.85, 0.8);
+      add(new THREE.TorusGeometry(0.37 * U, 0.05 * U, 6, 18), T.blueDark, 0, 0, 0.1 * U, knee).rotation.x = Math.PI / 2;
+      cap(0.36 * U, 0.75 * U, T.skin, knee, -0.7 * U);
+      const foot = add(new THREE.SphereGeometry(0.5 * U, 16, 10), T.skin, 0, -1.55 * U, 0.3 * U, knee); foot.scale.set(1, 0.45, 1.25);
+      for (const t of [-1, 0, 1]) { const toe = add(new THREE.SphereGeometry(0.17 * U, 10, 8), T.skinDark, t * 0.28 * U, -1.6 * U, 0.85 * U, knee); toe.scale.set(1, 0.7, 1.3); }
+      legs.push([hip, knee, s]);
     }
-    // arms: green with blue wrist wraps; the staff slung across the back
+    // ---- arms: shoulder, upper arm, elbow pad, forearm, blue wrist wrap, a hand with three fingers and a thumb
     const arms = [];
     for (const s of [-1, 1]) {
-      const sh = new THREE.Group(); sh.position.set(s * bw * 1.02, legL + bodyH * 0.78, 0); sh.rotation.z = s * 0.25; man.add(sh);
-      add(new THREE.CylinderGeometry(bw * 0.16, bw * 0.14, bodyH * 0.72, 12), T.skin, 0, -bodyH * 0.36, 0, sh);
-      add(new THREE.CylinderGeometry(bw * 0.17, bw * 0.17, bodyH * 0.1, 12), T.blue, 0, -bodyH * 0.62, 0, sh);
-      add(new THREE.SphereGeometry(bw * 0.17, 10, 8), T.skin, 0, -bodyH * 0.76, 0, sh);
-      arms.push([sh, s]);
+      const sh = new THREE.Group(); sh.position.set(s * 1.75 * U, 6.2 * U, 0); sh.rotation.z = s * 0.22; man.add(sh);
+      add(new THREE.SphereGeometry(0.45 * U, 16, 12), T.skin, 0, 0, 0, sh);
+      cap(0.34 * U, 0.8 * U, T.skin, sh, -0.7 * U);
+      const elbow = new THREE.Group(); elbow.position.y = -1.45 * U; sh.add(elbow);
+      add(new THREE.SphereGeometry(0.34 * U, 14, 10), T.blue, 0, 0, -0.08 * U, elbow).scale.set(1, 0.85, 0.9);
+      cap(0.3 * U, 0.65 * U, T.skin, elbow, -0.62 * U);
+      add(new THREE.CylinderGeometry(0.34 * U, 0.34 * U, 0.35 * U, 14), T.blue, 0, -1.05 * U, 0, elbow);
+      const hand = new THREE.Group(); hand.position.y = -1.42 * U; elbow.add(hand);
+      add(new THREE.SphereGeometry(0.33 * U, 14, 10), T.skin, 0, 0, 0, hand).scale.set(1, 0.9, 0.8);
+      for (const f of [-1, 0, 1]) { const fg = add(new THREE.CapsuleGeometry(0.09 * U, 0.3 * U, 4, 8), T.skin, f * 0.17 * U, -0.38 * U, 0.08 * U, hand); fg.rotation.x = 0.25; }
+      const th = add(new THREE.CapsuleGeometry(0.09 * U, 0.22 * U, 4, 8), T.skin, -s * 0.28 * U, -0.12 * U, 0.2 * U, hand); th.rotation.z = -s * 0.8;
+      arms.push([sh, elbow, s]);
     }
-    const staff = add(new THREE.CylinderGeometry(bw * 0.06, bw * 0.06, H * 0.95, 10), T.staff, 0, bodyY + bodyH * 0.1, -bw * 1.12); staff.rotation.z = 0.75;
-    // run cycle from the wheel spin
+    // ---- motion: the legs and arms run with the wheel spin, the hood and sash tails flutter, the eyes glance about
     const spin = car.wheels[0];
     hd.onBeforeRender = () => {
-      const a = spin ? spin.rotation.x : 0, sw = Math.sin(a * 0.9) * 0.55;
-      for (const [hip, s] of legs) hip.rotation.x = sw * s;
-      for (const [sh, s] of arms) sh.rotation.x = -sw * s * 0.7;
-      const t = performance.now() / 1000;
-      for (const [tg, s] of tails) tg.rotation.x = -0.35 + Math.sin(t * 9 + s) * 0.18;
+      const a = spin ? spin.rotation.x : 0, sw = Math.sin(a * 0.9) * 0.6, t = performance.now() / 1000;
+      for (const [hip, knee, s] of legs) { hip.rotation.x = sw * s; knee.rotation.x = Math.max(0, -sw * s) * 0.9; }
+      for (const [sh, elbow, s] of arms) { sh.rotation.x = -sw * s * 0.7; elbow.rotation.x = -0.35 - Math.max(0, sw * s) * 0.4; }
+      for (const [tg, s] of hoodTails) { tg.rotation.x = -0.4 + Math.sin(t * 9 + s) * 0.2; tg.rotation.y = s * 0.3 + Math.sin(t * 7 + s * 2) * 0.12; }
+      for (const tg of sashTails) tg.rotation.x = Math.sin(t * 6) * 0.12;
+      const look = Math.sin(t * 0.7) * 0.03 * U; for (const p of eyes) p.position.x = Math.sign(p.position.x) * 0.36 * U + look;
     };
     g.name = "car:Shell Shock";
     return car;
