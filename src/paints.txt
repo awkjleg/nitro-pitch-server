@@ -40,62 +40,100 @@ const NPPaints = (() => {
   }
   const applyTrim = (group, colour) => group.traverse(o => { if (o.isMesh && o.material && o.material.name === "carlib-multi") o.material = trimMat(o.material, colour); });
   // every car the game builds (yours, other players', replays) goes through CarLib.build
+  // ---- Tung Tung Sahur: a standing wooden log with a face, thin arms holding a bat, and legs that run as the car drives
+  // (the car underneath is an Octane, so it drives and hits exactly like one; only the look changes)
   let TT = null;
   function tungParts() {
     if (TT) return TT;
     const cv = (w, h, draw) => { const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
-    // bark: warm brown grain running along the log
-    const bark = cv(512, 128, (g, w, h) => {
-      g.fillStyle = "#b8743a"; g.fillRect(0, 0, w, h);
-      for (let i = 0; i < 70; i++) { const y = Math.random() * h, c = ["#9c5f2c", "#c98a4b", "#8a5226", "#d39a5c"][i % 4]; g.strokeStyle = c; g.globalAlpha = 0.35 + Math.random() * 0.4; g.lineWidth = 1 + Math.random() * 3; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= w; x += 32) g.lineTo(x, y + Math.sin(x / 40 + i) * 3); g.stroke(); }
+    const grain = (g, w, h, base) => {
+      g.fillStyle = base; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 140; i++) { const x = Math.random() * w; g.strokeStyle = ["#a8642e", "#c98a4b", "#93562a", "#d9a066", "#b7763c"][i % 5]; g.globalAlpha = 0.18 + Math.random() * 0.3; g.lineWidth = 1 + Math.random() * 4; g.beginPath(); g.moveTo(x, 0); for (let y = 0; y <= h; y += 24) g.lineTo(x + Math.sin(y / 60 + i) * 4, y); g.stroke(); }
       g.globalAlpha = 1;
-    });
-    // the face, on the front end of the log
-    const face = cv(256, 256, (g, w, h) => {
-      const rg = g.createRadialGradient(128, 128, 20, 128, 128, 128); rg.addColorStop(0, "#e0a96a"); rg.addColorStop(1, "#b8743a"); g.fillStyle = rg; g.fillRect(0, 0, w, h);
-      g.strokeStyle = "rgba(120,70,30,.35)"; g.lineWidth = 2; for (let r = 30; r < 128; r += 18) { g.beginPath(); g.arc(128, 128, r, 0, Math.PI * 2); g.stroke(); }
-      for (const x of [84, 172]) {
-        g.fillStyle = "#fff"; g.beginPath(); g.ellipse(x, 96, 34, 38, 0, 0, Math.PI * 2); g.fill(); g.strokeStyle = "#5a3416"; g.lineWidth = 4; g.stroke();
-        g.fillStyle = "#6b3e1c"; g.beginPath(); g.arc(x + 4, 100, 19, 0, Math.PI * 2); g.fill();
-        g.fillStyle = "#111"; g.beginPath(); g.arc(x + 5, 101, 10, 0, Math.PI * 2); g.fill();
-        g.fillStyle = "#fff"; g.beginPath(); g.arc(x + 10, 94, 5, 0, Math.PI * 2); g.fill();
-        g.strokeStyle = "#4a2a10"; g.lineWidth = 7; g.lineCap = "round"; g.beginPath(); g.moveTo(x - 30, 50); g.quadraticCurveTo(x, 36, x + 28, 52); g.stroke();
+    };
+    // the log's skin all the way round, with the face in the middle (u = 0.5 faces forward)
+    const body = cv(1024, 512, (g, w, h) => {
+      grain(g, w, h, "#c47f42");
+      const sh = g.createLinearGradient(0, 0, w, 0); sh.addColorStop(0, "rgba(60,30,10,.35)"); sh.addColorStop(0.5, "rgba(255,220,170,.12)"); sh.addColorStop(1, "rgba(60,30,10,.35)"); g.fillStyle = sh; g.fillRect(0, 0, w, h);
+      const cx = 512;
+      g.save(); g.translate(cx, 60); g.scale(1.45, 1.12); g.translate(-cx, -60);
+      // eyes: big and round, looking slightly to the side
+      for (const dx of [-62, 62]) {
+        const x = cx + dx, y = 150;
+        g.fillStyle = "rgba(70,35,12,.35)"; g.beginPath(); g.ellipse(x, y + 4, 54, 58, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "#f7f2ea"; g.beginPath(); g.ellipse(x, y, 46, 50, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "#5b3a1e"; g.beginPath(); g.arc(x + 10, y + 4, 25, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "#2a1608"; g.beginPath(); g.arc(x + 11, y + 5, 14, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "#fff"; g.beginPath(); g.arc(x + 19, y - 5, 7, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = "#7a4520"; g.lineWidth = 6; g.beginPath(); g.ellipse(x, y, 47, 51, 0, Math.PI * 1.05, Math.PI * 1.95); g.stroke();
+        g.strokeStyle = "#5a3416"; g.lineWidth = 9; g.lineCap = "round"; g.beginPath(); g.moveTo(x - 40, y - 74); g.quadraticCurveTo(x, y - 92, x + 40, y - 76); g.stroke();
       }
-      g.fillStyle = "#c98a4b"; g.strokeStyle = "#7a4520"; g.lineWidth = 3; g.beginPath(); g.moveTo(122, 108); g.quadraticCurveTo(112, 160, 116, 168); g.quadraticCurveTo(128, 178, 142, 168); g.quadraticCurveTo(140, 150, 134, 108); g.closePath(); g.fill(); g.stroke();
-      g.fillStyle = "#5a3416"; g.beginPath(); g.ellipse(122, 168, 4, 3, 0, 0, Math.PI * 2); g.ellipse(136, 168, 4, 3, 0, 0, Math.PI * 2); g.fill();
-      g.fillStyle = "#5a1d10"; g.beginPath(); g.moveTo(80, 196); g.quadraticCurveTo(128, 236, 178, 194); g.quadraticCurveTo(128, 212, 80, 196); g.fill();
-      g.strokeStyle = "#4a2a10"; g.lineWidth = 4; g.beginPath(); g.moveTo(76, 194); g.quadraticCurveTo(128, 232, 182, 192); g.stroke();
+      // a long nose with a shadow, then the wide closed-mouth smile and a chin crease
+      g.fillStyle = "rgba(70,35,12,.4)"; g.beginPath(); g.moveTo(cx + 6, 170); g.quadraticCurveTo(cx + 26, 250, cx + 22, 282); g.quadraticCurveTo(cx + 4, 292, cx - 6, 284); g.closePath(); g.fill();
+      g.fillStyle = "#d0904f"; g.beginPath(); g.moveTo(cx - 10, 168); g.quadraticCurveTo(cx - 26, 248, cx - 20, 278); g.quadraticCurveTo(cx, 296, cx + 20, 278); g.quadraticCurveTo(cx + 18, 230, cx + 8, 168); g.closePath(); g.fill();
+      g.fillStyle = "#4a2610"; g.beginPath(); g.ellipse(cx - 11, 280, 6, 4, 0.3, 0, Math.PI * 2); g.ellipse(cx + 11, 280, 6, 4, -0.3, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = "#4a2610"; g.lineWidth = 8; g.lineCap = "round"; g.beginPath(); g.moveTo(cx - 74, 318); g.quadraticCurveTo(cx, 368, cx + 78, 314); g.stroke();
+      g.strokeStyle = "rgba(255,225,180,.5)"; g.lineWidth = 4; g.beginPath(); g.moveTo(cx - 60, 330); g.quadraticCurveTo(cx, 372, cx + 64, 326); g.stroke();
+      g.strokeStyle = "rgba(70,35,12,.45)"; g.lineWidth = 5; for (const dx of [-80, 84]) { g.beginPath(); g.arc(cx + dx, 312, 14, Math.PI * 0.6, Math.PI * 1.4); g.stroke(); }
+      g.beginPath(); g.moveTo(cx - 24, 404); g.quadraticCurveTo(cx, 414, cx + 24, 404); g.stroke();
+      g.restore();
     });
-    const ring = cv(256, 256, (g, w, h) => { g.fillStyle = "#d9a066"; g.fillRect(0, 0, w, h); g.strokeStyle = "rgba(120,70,30,.45)"; g.lineWidth = 3; for (let r = 12; r < 128; r += 14) { g.beginPath(); g.arc(128, 128, r, 0, Math.PI * 2); g.stroke(); } });
+    const skin = cv(256, 256, (g, w, h) => grain(g, w, h, "#c47f42"));
+    const top = cv(256, 256, (g, w, h) => { g.fillStyle = "#dca46a"; g.fillRect(0, 0, w, h); g.strokeStyle = "rgba(120,70,30,.45)"; g.lineWidth = 3; for (let r = 10; r < 128; r += 13) { g.beginPath(); g.arc(128, 128, r, 0, Math.PI * 2); g.stroke(); } });
     TT = {
-      bark: new THREE.MeshStandardMaterial({ map: bark, roughness: 0.85, metalness: 0 }),
-      face: new THREE.MeshStandardMaterial({ map: face, roughness: 0.8, metalness: 0 }),
-      ring: new THREE.MeshStandardMaterial({ map: ring, roughness: 0.85, metalness: 0 }),
-      bat: new THREE.MeshStandardMaterial({ color: 0x9a5a28, roughness: 0.55, metalness: 0 }),
-      grip: new THREE.MeshStandardMaterial({ color: 0x3a2414, roughness: 0.7, metalness: 0 })
+      body: new THREE.MeshStandardMaterial({ map: body, roughness: 0.78, metalness: 0 }),
+      skin: new THREE.MeshStandardMaterial({ map: skin, roughness: 0.8, metalness: 0 }),
+      top: new THREE.MeshStandardMaterial({ map: top, roughness: 0.85, metalness: 0 }),
+      bat: new THREE.MeshStandardMaterial({ color: 0x8a4f22, roughness: 0.5, metalness: 0 }),
+      foot: new THREE.MeshStandardMaterial({ color: 0xc98a52, roughness: 0.75, metalness: 0 })
     };
     return TT;
   }
   function buildTung(o) {
     const car = b0.call(CarLib, 0, o), g = car.g, T = tungParts();
-    // hide the Octane's shell (paint, trim, glass: the meshes before the first wheel pivot); keep wheels and boost
+    // hide the Octane: its shell (the meshes before the first wheel pivot) and its wheels; keep the boost flame
     const box = new THREE.Box3();
     for (const c of [...g.children]) { if (!c.isMesh) break; if (c === car.flame) continue; box.expandByObject(c); c.visible = false; }
+    for (const w of car.wheels) { const pv = w.userData && w.userData.pivot; (pv || w).traverse(m => { if (m.isMesh) m.visible = false; }); }
     const size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
     const fwd = car.flame && car.flame.position.z < 0 ? 1 : -1;      // the boost is at the back
-    const len = size.z * 0.92, r = Math.min(size.x * 0.34, size.y * 0.46), y = Math.max(mid.y + r * 0.05, r * 0.95);
-    const log = new THREE.Group(); log.position.set(0, y, mid.z);
-    const geo = new THREE.CylinderGeometry(r, r * 1.04, len, 28, 1, true); geo.rotateX(Math.PI / 2);
-    log.add(new THREE.Mesh(geo, T.bark));
-    const cap = new THREE.CircleGeometry(r, 28);
-    const front = new THREE.Mesh(cap, T.face); front.position.z = fwd * len / 2; if (fwd < 0) front.rotation.y = Math.PI; log.add(front);
-    const back = new THREE.Mesh(cap, T.ring); back.position.z = -fwd * len / 2; if (fwd > 0) back.rotation.y = Math.PI; log.add(back);
-    // the bat, resting on top
-    const batLen = len * 0.95, batGeo = new THREE.CylinderGeometry(r * 0.24, r * 0.1, batLen, 14); batGeo.rotateX(Math.PI / 2);
-    const bat = new THREE.Mesh(batGeo, T.bat); bat.position.set(r * 0.3, r * 1.16, 0); bat.rotation.y = 0.18 * fwd; bat.rotation.x = 0.06; log.add(bat);
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(r * 0.13, 10, 8), T.grip); knob.position.set(r * 0.3 - Math.sin(0.18 * fwd) * batLen / 2, r * 1.16, -fwd * batLen / 2 * Math.cos(0.18)); log.add(knob);
-    for (const m of log.children) { m.castShadow = true; m.receiveShadow = true; }
-    g.add(log); g.name = "car:Tung Tung Sahur";
+    const H = size.z * 0.8, legL = H * 0.34, logH = H * 0.62, r = H * 0.16;
+    const man = new THREE.Group(); man.position.set(0, 0, mid.z); man.rotation.y = fwd > 0 ? 0 : Math.PI; g.add(man);
+    const add = (geo, mat, x, y, z, parent = man) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m; };
+    // the log: slightly narrower at the top, rounded crown with tree rings
+    const logGeo = new THREE.CylinderGeometry(r * 0.94, r, logH, 32, 1, true);
+    const log = add(logGeo, T.body, 0, legL + logH / 2, 0); log.rotation.y = Math.PI;   // u = 0.5 (the face) toward +z
+    // (a sphere cap whose rim sits exactly on the top edge of the log)
+    const CAP = Math.PI * 0.3, capR = r * 0.94 / Math.sin(CAP);
+    add(new THREE.SphereGeometry(capR, 32, 10, 0, Math.PI * 2, 0, CAP), T.top, 0, legL + logH - capR * Math.cos(CAP), 0);
+    add(new THREE.CircleGeometry(r, 28), T.skin, 0, legL, 0).rotation.x = Math.PI / 2;
+    // legs (thin, hips at the bottom of the log) with flat bare feet; they swing with the wheels
+    const legs = [];
+    for (const s of [-1, 1]) {
+      const hip = new THREE.Group(); hip.position.set(s * r * 0.42, legL, 0); man.add(hip);
+      const leg = add(new THREE.CylinderGeometry(r * 0.12, r * 0.1, legL, 10), T.skin, 0, -legL / 2, 0, hip);
+      const foot = add(new THREE.SphereGeometry(r * 0.2, 12, 8), T.foot, 0, -legL + r * 0.06, r * 0.14, hip); foot.scale.set(0.9, 0.42, 1.7);
+      legs.push([hip, s]);
+    }
+    // arms: the left hangs down, the right holds the bat resting on the ground in front
+    const shoulderY = legL + logH * 0.55;
+    const armL = new THREE.Group(); armL.position.set(-r * 1.02, shoulderY, 0); armL.rotation.z = -0.12; man.add(armL);
+    add(new THREE.CylinderGeometry(r * 0.09, r * 0.08, logH * 0.62, 10), T.skin, 0, -logH * 0.31, 0, armL);
+    add(new THREE.SphereGeometry(r * 0.13, 10, 8), T.skin, 0, -logH * 0.64, 0, armL);
+    const armR = new THREE.Group(); armR.position.set(r * 1.02, shoulderY, 0); armR.rotation.set(-0.5, 0, 0.18); man.add(armR);
+    add(new THREE.CylinderGeometry(r * 0.09, r * 0.08, logH * 0.6, 10), T.skin, 0, -logH * 0.3, 0, armR);
+    const hand = add(new THREE.SphereGeometry(r * 0.14, 10, 8), T.skin, 0, -logH * 0.62, 0, armR);
+    const batLen = H * 0.42, bat = new THREE.Group(); bat.position.copy(hand.position); bat.rotation.set(0.35, 0, -0.25); armR.add(bat);
+    add(new THREE.CylinderGeometry(r * 0.2, r * 0.07, batLen, 14), T.bat, 0, -batLen * 0.42, 0, bat);
+    add(new THREE.CylinderGeometry(r * 0.1, r * 0.1, r * 0.06, 12), T.bat, 0, batLen * 0.1, 0, bat);
+    // run cycle: the legs and arms swing with the wheel spin (the game turns the wheels as the car moves)
+    const spin = car.wheels[0];
+    log.onBeforeRender = () => {
+      const a = spin ? spin.rotation.x : 0, sw = Math.sin(a * 0.9) * 0.55;
+      for (const [hip, s] of legs) hip.rotation.x = sw * s;
+      armL.rotation.x = -sw * 0.6;
+    };
+    g.name = "car:Tung Tung Sahur";
     return car;
   }
   const b0 = CarLib.build;
@@ -107,7 +145,8 @@ const NPPaints = (() => {
   // garage and drop tiles (CarLib.thumb builds internally, so painted tiles render here)
   const th0 = CarLib.thumb; let TR = null;
   CarLib.thumb = function (bi, o = {}) {
-    if (!painted(bi) && !(CARS[bi] && CARS[bi].tung)) return th0.call(this, bi, o);
+    const isT = !!(CARS[bi] && CARS[bi].tung);
+    if (!painted(bi) && !isT) return th0.call(this, bi, o);
     if (!TR) {
       const cv = document.createElement("canvas"); cv.width = 512; cv.height = 288;
       const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -118,8 +157,9 @@ const NPPaints = (() => {
       TR = { r, sc, cam: new THREE.PerspectiveCamera(26, 16 / 9, 0.05, 50) };
     }
     const car = CarLib.build(bi, o);
+    if (isT) car.g.scale.setScalar(0.72);
     car.g.rotation.y = o.yaw == null ? -0.65 : o.yaw; TR.sc.add(car.g);
-    const dist = o.dist || 6.4; TR.cam.position.set(Math.sin(0.35) * dist * 0.3, 1.25, dist); TR.cam.lookAt(0, 0.08, 0.05);
+    const dist = o.dist || 6.4; TR.cam.position.set(Math.sin(0.35) * dist * 0.3, isT ? 1.0 : 1.25, dist); TR.cam.lookAt(0, isT ? 0.42 : 0.08, 0.05);
     TR.r.setClearColor(0x000000, 0); TR.r.render(TR.sc, TR.cam);
     const out = document.createElement("canvas"); out.width = 256; out.height = 144; out.getContext("2d").drawImage(TR.r.domElement, 0, 0, 256, 144);
     car.dispose();
