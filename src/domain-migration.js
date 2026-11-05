@@ -61,13 +61,8 @@ export async function migrationFetch(request, env) {
   if (path === '/__migration/export' && old) return shell('export');
   if (path === '/__migration/finish' && current) return shell('finish');
   if (path.startsWith('/__migration/')) return json({error:'Not found'},404);
-  // Keep the old WebSocket endpoint working for existing tabs and the game's default room URL.
-  if (old && path !== '/ws') {
-    if (request.method !== 'GET' && request.method !== 'HEAD') return redirect(NEW_ORIGIN + path + url.search);
-    const isPage = request.headers.get('Sec-Fetch-Mode') === 'navigate' || request.headers.get('Accept')?.includes('text/html') || path === '/' || path.endsWith('.html');
-    if (isPage) return shell('entry',path + url.search);
-    return redirect(NEW_ORIGIN + path + url.search);
-  }
+  // The old workers.dev address is its own copy of the game again (no redirect to nitropitch.app): both addresses
+  // serve the same game, the same accounts and the same online matches. Only the /__migration/ save-move pages above remain.
   return null;
 }
 
